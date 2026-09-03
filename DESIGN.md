@@ -2,7 +2,9 @@
 
 ## 1. Goal
 
-This repository is an experiment to validate whether running the same analytical prompt through multiple models under Pi produces sufficiently diverse and useful results.
+The long-term goal is to collect genuinely different viewpoints on the same question from multiple harness/model instances.
+
+This repository is the short-term step: an experiment to validate whether varying only the models under a single harness (Pi) already produces sufficiently diverse and useful results, before harness diversity is added.
 
 It is intentionally not yet a gem or general-purpose framework.
 
@@ -258,19 +260,26 @@ Example:
 ```text
 reports/
   2026-09-02/
-    16-21-43_code-base-state/
-      prompt.md                      # copy of the prompt, as asked
-      pi_anthropic_claude-x.md
-      pi_openai_gpt-x.md
-      pi_opencode-go_kimi-x.md
-      pi_zai_glm-x.md
-  latest -> 2026-09-02/16-21-43_code-base-state
+    16-21-43/
+      codebase-review.md            # copy of the prompt, as asked
+      ensemble.yml                  # copy of the config used
+      2026-09-02-16-21-43_codebase-review_pi_anthropic_claude-x.md
+      2026-09-02-16-21-43_codebase-review_pi_openai_gpt-x.md
+      2026-09-02-16-21-43_codebase-review_pi_opencode-go_kimi-x.md
+      2026-09-02-16-21-43_codebase-review_pi_zai_glm-x.md
+  latest -> 2026-09-02/16-21-43
 ```
 
-Each run gets its own directory: day bucket / `hh-mm-ss_<query-slug>`.
-Second-resolution timestamps plus per-run dirs mean reports never overwrite
-each other, runs stay grouped for reading, and the tree stays navigable at
-volume. A relative `reports/latest` symlink points at the newest run.
+Each run gets its own directory: day bucket / `hh-mm-ss`. The directory
+name is pure time; report filenames carry the full timestamp, a slug of the
+prompt file name, harness, provider, and model, so reports stay
+self-describing when copied out of the tree. Prompt files conventionally
+end in `_prompt.md`; the suffix is stripped from the slug
+(`codebase-review_prompt.md` -> `codebase-review`). Copies of the prompt and
+the
+config make each run reproducible later (the orchestrator is versioned in
+git and deliberately not copied). A relative
+`reports/latest` symlink points at the newest run.
 
 The program should sanitize provider/model identifiers sufficiently to make safe filenames.
 
@@ -294,6 +303,10 @@ Before implementing the parser, inspect the installed Pi version and documentati
 Implement only enough parsing to reliably extract the final response.
 
 Do not build a generic Pi protocol library.
+
+The parser and the pi CLI invocation live in `PiHarness` (pi_harness.rb),
+the single home of harness-specific behavior; ensemble.rb stays
+harness-agnostic so a second harness can be added as another such module.
 
 ---
 
@@ -347,11 +360,17 @@ README.md
 DESIGN.md
 .gitignore
 ensemble.rb
+pi_harness.rb            # all pi-specific behavior (PiHarness module)
 ensemble.yml
-prompt.md
+spec/
+  ensemble_spec.rb       # RSpec; harness-agnostic logic
+  pi_harness_spec.rb     # RSpec; pi invocation + event-stream parsing
 
-reports/
-  .gitkeep
+examples/
+  smoke-test_prompt.md   # tiny plumbing-test prompt (prompts end in _prompt.md)
+  ensemble.smoke.yml     # one-model config for cheap setup checks
+
+reports/                 # created on demand; gitignored
 ```
 
 Do not create gem infrastructure yet.
@@ -364,7 +383,7 @@ A clean, disposable 100–300 line Ruby implementation is preferable to a specul
 
 ## 17. Dependencies
 
-Prefer the Ruby standard library.
+Prefer the Ruby standard library for the tool itself (tests use RSpec).
 
 Likely useful libraries include:
 
@@ -404,12 +423,13 @@ produces:
 ```text
 reports/
   2026-09-02/
-    16-21-43_codebase-review/
-      prompt.md
-      pi_anthropic_claude-x.md
-      pi_openai_gpt-x.md
-      pi_opencode-go_kimi-x.md
-      pi_zai_glm-x.md
+    16-21-43/
+      codebase-review.md
+      ensemble.yml
+      2026-09-02-16-21-43_codebase-review_pi_anthropic_claude-x.md
+      2026-09-02-16-21-43_codebase-review_pi_openai_gpt-x.md
+      2026-09-02-16-21-43_codebase-review_pi_opencode-go_kimi-x.md
+      2026-09-02-16-21-43_codebase-review_pi_zai_glm-x.md
 ```
 
 That is the first useful product.

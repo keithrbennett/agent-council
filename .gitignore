@@ -1,5 +1,4 @@
-.idea/
-reports/*
-!reports/.gitkeep
+reports/
 tmp/
 .DS_Store
+.idea/
