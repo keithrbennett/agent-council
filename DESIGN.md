@@ -257,11 +257,20 @@ Example:
 
 ```text
 reports/
-  pi__anthropic__claude-x.md
-  pi__openai__gpt-x.md
-  pi__opencode-go__kimi-x.md
-  pi__zai__glm-x.md
+  2026-09-02/
+    16-21-43_code-base-state/
+      prompt.md                      # copy of the prompt, as asked
+      pi_anthropic_claude-x.md
+      pi_openai_gpt-x.md
+      pi_opencode-go_kimi-x.md
+      pi_zai_glm-x.md
+  latest -> 2026-09-02/16-21-43_code-base-state
 ```
+
+Each run gets its own directory: day bucket / `hh-mm-ss_<query-slug>`.
+Second-resolution timestamps plus per-run dirs mean reports never overwrite
+each other, runs stay grouped for reading, and the tree stays navigable at
+volume. A relative `reports/latest` symlink points at the newest run.
 
 The program should sanitize provider/model identifiers sufficiently to make safe filenames.
 
@@ -296,9 +305,9 @@ For the MVP, reports can simply go into:
 reports/
 ```
 
-Repeated-run management is not yet needed.
-
-If this becomes inconvenient in actual use, timestamped run directories can be added later.
+Each run writes a timestamped, day-bucketed run directory (see §12), so
+repeated runs accumulate without overwriting; no further run management is
+implemented yet.
 
 ---
 
@@ -394,10 +403,13 @@ produces:
 
 ```text
 reports/
-  pi__anthropic__claude-x.md
-  pi__openai__gpt-x.md
-  pi__opencode-go__kimi-x.md
-  pi__zai__glm-x.md
+  2026-09-02/
+    16-21-43_codebase-review/
+      prompt.md
+      pi_anthropic_claude-x.md
+      pi_openai_gpt-x.md
+      pi_opencode-go_kimi-x.md
+      pi_zai_glm-x.md
 ```
 
 That is the first useful product.
