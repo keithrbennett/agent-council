@@ -3,7 +3,7 @@
 # Focused tests for the pi-specific behavior in pi_harness.rb (no model calls).
 # Run with: rspec
 
-require_relative '../pi_harness'
+require_relative '../lib/pi_harness'
 
 RSpec.describe PiHarness do
   # Captured shape of a pi --mode json event stream (pi 0.84.4), trimmed to

@@ -38,14 +38,18 @@ ruby /path/to/this/repo/ensemble.rb /path/to/prompt.md
 ```
 
 Pi analyzes its **own working directory**, so run the script from the
-repository under analysis. Reports always land in `reports/` inside *this*
-repository (where `ensemble.rb` lives), not in the analyzed repo.
+repository under analysis. Reports land in `./reports` under that working
+directory — each analyzed project gets its own reports tree (you'll likely
+want `reports/` in that project's `.gitignore`).
 
 ```bash
 ruby ensemble.rb my-analysis-prompt.md                        # uses ./ensemble.yml
 ruby ensemble.rb my-analysis-prompt.md other-config.yml       # alternate config
 rspec                                                         # unit tests (no model calls)
 ```
+
+(Paths are resolved from the working directory except the default config,
+which lives next to `ensemble.rb` in this repo.)
 
 `ensemble.rb` has a shebang and is executable, so `./ensemble.rb ...` (or an
 absolute path) works identically to `ruby ensemble.rb ...`.
@@ -122,10 +126,12 @@ succeeded.
 ## How it works (and what pi is told)
 
 - All pi-specific knowledge — CLI invocation, the read-only tool policy and
-  scaffolding, and event-stream parsing — is isolated in `pi_harness.rb`
-  (`PiHarness`). `ensemble.rb` is harness-agnostic orchestration and selects
-  the harness via the single `HARNESS` constant; a future second harness
-  would be another module shaped like `PiHarness`.
+  scaffolding, and event-stream parsing — is isolated in
+  `lib/pi_harness.rb` (`PiHarness`); harness-agnostic orchestration lives in
+  `lib/ensemble.rb` (`Ensemble`), which selects the harness via the single
+  `HARNESS` constant. Root `ensemble.rb` is just the executable entry
+  point. A future second harness would be another module shaped like
+  `PiHarness`.
 - Every agent receives the **byte-identical contents of the prompt file**,
   piped to pi on stdin (pi merges piped stdin into the initial prompt).
   No roles, no per-model customization.

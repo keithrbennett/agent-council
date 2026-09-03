@@ -312,7 +312,8 @@ harness-agnostic so a second harness can be added as another such module.
 
 ## 14. Output Directory
 
-For the MVP, reports can simply go into:
+Reports go into `reports/` under the current working directory — i.e. the
+repository being analyzed — so the tool can be run from any project:
 
 ```text
 reports/
@@ -359,9 +360,11 @@ Keep the experiment small.
 README.md
 DESIGN.md
 .gitignore
-ensemble.rb
-pi_harness.rb            # all pi-specific behavior (PiHarness module)
+ensemble.rb              # executable entry point; all code lives in lib/
 ensemble.yml
+lib/
+  ensemble.rb            # harness-agnostic orchestration (Ensemble)
+  pi_harness.rb          # all pi-specific behavior (PiHarness)
 spec/
   ensemble_spec.rb       # RSpec; harness-agnostic logic
   pi_harness_spec.rb     # RSpec; pi invocation + event-stream parsing
@@ -373,9 +376,9 @@ examples/
 reports/                 # created on demand; gitignored
 ```
 
-Do not create gem infrastructure yet.
-
-Do not introduce a large `lib/` hierarchy unless the experiment actually grows enough to require it.
+Do not create gem infrastructure yet. A flat `lib/` now holds the code;
+do not introduce deeper namespaces (`lib/ensemble/services/...`) unless
+the experiment actually grows enough to require them.
 
 A clean, disposable 100–300 line Ruby implementation is preferable to a speculative framework.
 

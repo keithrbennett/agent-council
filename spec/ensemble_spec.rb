@@ -4,7 +4,7 @@
 # calls). Pi-specific behavior is tested in pi_harness_spec.rb.
 # Run with: rspec
 
-require_relative '../ensemble'
+require_relative '../lib/ensemble'
 
 RSpec.describe Ensemble do
   describe '.sanitize' do
@@ -40,6 +40,12 @@ RSpec.describe Ensemble do
     it "falls back to 'prompt' when nothing usable remains" do
       expect(Ensemble.query_slug('!!!.md')).to eq('prompt')
       expect(Ensemble.query_slug('_prompt.md')).to eq('prompt')
+    end
+  end
+
+  describe '.reports_dir' do
+    it 'is ./reports under the current working directory (the analyzed repo)' do
+      expect(Ensemble.reports_dir).to eq(File.join(Dir.pwd, 'reports'))
     end
   end
 
