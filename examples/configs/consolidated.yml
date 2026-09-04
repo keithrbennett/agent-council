@@ -1,0 +1,9 @@
+agents:
+  - provider: opencode-go
+    model: kimi-k2.6
+  - provider: openai-codex
+    model: gpt-5.4
+
+consolidator:
+  provider: openai-codex
+  model: gpt-5.4

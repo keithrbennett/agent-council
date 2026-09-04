@@ -263,23 +263,36 @@ reports/
     16-21-43/
       codebase-review.md            # copy of the prompt, as asked
       ensemble.yml                  # copy of the config used
-      2026-09-02-16-21-43_codebase-review_pi_anthropic_claude-x.md
-      2026-09-02-16-21-43_codebase-review_pi_openai_gpt-x.md
-      2026-09-02-16-21-43_codebase-review_pi_opencode-go_kimi-x.md
-      2026-09-02-16-21-43_codebase-review_pi_zai_glm-x.md
+      answers/                      # analysts' reports
+        2026-09-02-16-21-43_codebase-review_pi_anthropic_claude-x.md
+        2026-09-02-16-21-43_codebase-review_pi_openai_gpt-x.md
+        2026-09-02-16-21-43_codebase-review_pi_opencode-go_kimi-x.md
+        2026-09-02-16-21-43_codebase-review_pi_zai_glm-x.md
+      consolidated/                 # consolidator output, if configured
+        2026-09-02-16-21-43_codebase-review_consolidated_pi_zai_glm-x.md
   latest -> 2026-09-02/16-21-43
 ```
 
-Each run gets its own directory: day bucket / `hh-mm-ss`. The directory
-name is pure time; report filenames carry the full timestamp, a slug of the
-prompt file name, harness, provider, and model, so reports stay
-self-describing when copied out of the tree. Prompt files conventionally
-end in `_prompt.md`; the suffix is stripped from the slug
-(`codebase-review_prompt.md` -> `codebase-review`). Copies of the prompt and
-the
-config make each run reproducible later (the orchestrator is versioned in
-git and deliberately not copied). A relative
-`reports/latest` symlink points at the newest run.
+Each run gets its own directory: day bucket / `hh-mm-ss`. Inputs (prompt
+and config copies) sit at the run dir root; analysts' reports go to
+`answers/`, consolidations to `consolidated/` — reports are identified by
+where they live, and their provider/model metadata comes from YAML front
+matter the orchestrator writes at the top of each file (the body below it
+is the model's verbatim response). Report filenames still carry the
+full timestamp, a slug of the prompt file name, harness, provider, and
+model, so they stay self-describing when copied out of the tree. Prompt
+files conventionally end in `_prompt.md`; the suffix is stripped from the
+slug (`codebase-review_prompt.md` -> `codebase-review`). Copies of the
+prompt and the config make each run reproducible later (the orchestrator is
+versioned in git and deliberately not copied). A relative `reports/latest`
+symlink points at the newest run.
+
+The front matter has keys: `role` (`analyst` or `consolidator`),
+`timestamp` (unquoted ISO 8601), `query` (slug), `harness`, `provider`,
+`model` — and, for consolidated reports, `sources: [...]` listing the
+analyst labels that were synthesized. Unquoted ISO timestamps parse
+directly as `Time` objects. Status printed to the user uses paths
+relative to the current working directory, not absolute.
 
 The program should sanitize provider/model identifiers sufficiently to make safe filenames.
 
@@ -369,6 +382,9 @@ spec/
   ensemble_spec.rb       # RSpec; harness-agnostic logic
   pi_harness_spec.rb     # RSpec; pi invocation + event-stream parsing
 
+prompts/
+  consolidate_prompt.md  # instructions template for the consolidator
+
 examples/
   smoke-test_prompt.md   # tiny plumbing-test prompt (prompts end in _prompt.md)
   ensemble.smoke.yml     # one-model config for cheap setup checks
@@ -452,7 +468,6 @@ The following are not part of this MVP:
 - generalized runner abstraction;
 - gem packaging;
 - RubyGems publishing;
-- synthesis;
 - report comparison UI;
 - report scoring;
 - report/process status taxonomy;

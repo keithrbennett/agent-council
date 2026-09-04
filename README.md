@@ -30,6 +30,16 @@ Edit `ensemble.yml` to choose the ensemble. Each entry becomes one
 `pi --provider <provider> --model <model>` invocation. No Ruby changes are
 needed to add, remove, or swap models.
 
+An optional top-level `consolidator:` entry (provider + model, same
+shape as an agent) runs after all agents finish: that model receives the
+original prompt plus all of the run's reports — each labeled with its
+source model — plus the instructions in
+`prompts/consolidate_prompt.md` (edit
+this file to tune the consolidation), and writes a
+`<stamp>_<slug>_consolidated_pi_<provider>_<model>.md` report into the
+same run dir. Remove the key to skip consolidation. A consolidation
+failure is reported but does not affect the run's exit status.
+
 ## Running
 
 ```bash
@@ -54,14 +64,27 @@ which lives next to `ensemble.rb` in this repo.)
 `ensemble.rb` has a shebang and is executable, so `./ensemble.rb ...` (or an
 absolute path) works identically to `ruby ensemble.rb ...`.
 
-`examples/` holds plumbing-test material: `smoke-test_prompt.md` is a tiny,
-cheap prompt (one multiplication question — enough to prove a real answer
-came back), and `ensemble.smoke.yml` is a one-model config. Use them to
-verify your setup end-to-end in seconds before a full run:
+`examples/` holds ready-to-run prompts and configs:
+
+- `examples/prompts/code-base-state_prompt.md` — a real codebase-analysis
+  prompt; with the default config this is the full ensemble:
 
 ```bash
-ruby ensemble.rb examples/smoke-test_prompt.md examples/ensemble.smoke.yml
+ruby ensemble.rb examples/prompts/code-base-state_prompt.md
 ```
+
+- `examples/prompts/smoke-test_prompt.md` +
+  `examples/configs/single.yml` — a tiny, cheap prompt (one multiplication
+  question — enough to prove a real answer came back) and a one-model
+  config, for verifying your setup in seconds:
+
+```bash
+ruby ensemble.rb examples/prompts/smoke-test_prompt.md examples/configs/single.yml
+```
+
+- `examples/prompts/project-name-prompt.md` + any one-model config —
+  a small creative-writing prompt useful for spotting prompt-sensitivity
+  differences across models.
 
 **Prompt naming convention:** end prompt files in `_prompt.md`
 (`code-base-state_prompt.md`, `security-review_prompt.md`). The file name
@@ -79,10 +102,13 @@ reports/
     16-21-43/
       codebase-review.md                                     # copy of the prompt, as asked
       ensemble.yml                                           # copy of the config used
-      2026-09-02-16-21-43_codebase-review_pi_openai-codex_gpt-5.4.md
-      2026-09-02-16-21-43_codebase-review_pi_github-copilot_claude-sonnet-5.md
-      2026-09-02-16-21-43_codebase-review_pi_opencode-go_kimi-k2.6.md
-      2026-09-02-16-21-43_codebase-review_pi_zai_glm-5.3.md
+      answers/                                               # analysts' reports
+        2026-09-02-16-21-43_codebase-review_pi_openai-codex_gpt-5.4.md
+        2026-09-02-16-21-43_codebase-review_pi_github-copilot_claude-sonnet-5.md
+        2026-09-02-16-21-43_codebase-review_pi_opencode-go_kimi-k2.6.md
+        2026-09-02-16-21-43_codebase-review_pi_zai_glm-5.3.md
+      consolidated/                                          # if consolidator configured
+        2026-09-02-16-21-43_codebase-review_consolidated_pi_zai_glm-5.3.md
     18-05-11/
       ...
   2026-09-03/
@@ -104,8 +130,16 @@ reports/
   of runs.
 - **`reports/latest`** is a relative symlink to the newest run, so the
   common case is always `open reports/latest/`.
-- Each report file contains exactly the final assistant message from that
-  run — written by the Ruby program, never by the model.
+- Each report file begins with a small **YAML front matter** block — `role`
+  (`analyst` or `consolidator`), `timestamp` (unquoted ISO 8601), `query`,
+  `harness`, `provider`, `model` (and, for consolidated reports, `sources`:
+  the analyst labels that were synthesized) — written by the orchestrator
+  (never by the model). It gives tools structured provenance, stays
+  readable in the terminal, and is how reports are identified:
+  consolidation labels come from front matter, not filename parsing, so
+  stray `.md` files in `answers/` are ignored. Below it is the model's
+  verbatim final message. Unquoted ISO timestamps parse cleanly as `Time`
+  objects.
 - The copied prompt and config make every run reproducible after the fact.
   (An alternate config keeps its own filename, e.g. `ensemble.smoke.yml`.)
   The orchestrator itself is deliberately not copied: it is versioned in
@@ -114,14 +148,17 @@ reports/
 Access patterns:
 
 ```bash
-open reports/latest/                      # newest run
-ls reports/$(date +%F)/                   # today's runs
-ls reports/*/*/*codebase-review*          # every report for one question, all runs
+open reports/latest/answers/               # newest run's analyst reports
+ls reports/$(date +%F)/                    # today's runs
+ls reports/*/*/answers/*codebase-review*   # every report for one question, all runs
 ```
 
 The summary printed at the end shows which models succeeded; one model's
 failure does not affect the others. Exit status is 0 only if every agent
-succeeded.
+succeeded. Output paths are printed relative to the current working
+directory (e.g. `reports/2026-09-04/21-39-01/answers`), regardless of
+where the tool was invoked from — the tool runs in any project, so paths
+are always in *your* tree.
 
 ## How it works (and what pi is told)
 

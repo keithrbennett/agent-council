@@ -30,3 +30,11 @@ agents:
   # Z-AI (ZAI_API_KEY)
   - provider: zai
     model: glm-5.3
+
+# Optional: when present, after all agents finish, this model consolidates
+# the run's reports (attribution-preserving; see consolidate_prompt.md) and
+# writes a <...>_consolidated_pi_<provider>_<model>.md report into the same
+# run dir. Its failure never affects the run's exit status.
+consolidator:
+  provider: openai-codex
+  model: gpt-5.4

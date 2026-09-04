@@ -15,6 +15,7 @@ require_relative 'pi_harness'
 module Ensemble
   PROJECT_ROOT = File.expand_path('..', __dir__)
   DEFAULT_CONFIG = File.join(PROJECT_ROOT, 'ensemble.yml')
+  CONSOLIDATE_PROMPT_PATH = File.join(PROJECT_ROOT, 'prompts', 'consolidate_prompt.md')
 
   # The harness every model runs through; the single swap point. A second
   # harness would be another module shaped like PiHarness, assigned here.
@@ -50,7 +51,8 @@ module Ensemble
   end
 
   # Returns [label, ok, detail]; never raises.
-  def run_agent(agent, prompt, run_dir, file_prefix)
+  # filename: overrides the output name; meta: becomes YAML front matter.
+  def run_agent(agent, prompt, run_dir, file_prefix, filename: nil, meta: {})
     provider = agent['provider'] if agent.is_a?(Hash)
     model = agent['model'] if agent.is_a?(Hash)
     label = "#{provider} / #{model}"
@@ -82,8 +84,11 @@ module Ensemble
         return [label, false, "#{HARNESS::NAME} exited 0 but #{detail}"]
       end
 
-      filename = report_filename(file_prefix, provider, model)
-      File.write(File.join(run_dir, filename), text)
+      filename ||= report_filename(file_prefix, provider, model)
+      content = with_front_matter(meta.merge('harness' => HARNESS::NAME,
+                                             'provider' => provider,
+                                             'model' => model), text)
+      File.write(File.join(run_dir, filename), content)
       [label, true, filename]
     end
   rescue => e
@@ -98,6 +103,120 @@ module Ensemble
     File.symlink(relative_run_dir, link)
   rescue SystemCallError => e
     warn "note: could not update reports/latest symlink: #{e.message}"
+  end
+
+  # A run's analyst reports as [source_label, body] pairs, sorted by
+  # filename. The dir is the run's answers/ subdir; provider/model labels
+  # come from the YAML front matter run_agent writes — not from filename
+  # parsing. Files without parseable front matter are not ours and are
+  # skipped.
+  def collect_reports(answers_dir)
+    Dir.glob(File.join(answers_dir, '*.md')).sort.filter_map do |path|
+      fields, body = parse_front_matter(File.read(path))
+      next unless fields && fields['provider'] && fields['model']
+
+      ["#{fields['provider']} / #{fields['model']}", body]
+    end
+  end
+
+  # --- report front matter ---
+
+  def with_front_matter(fields, body)
+    header = fields.flat_map do |key, value|
+      if value.is_a?(Array)
+        ["#{key}:", *value.map { |item| "  - #{item}" }]
+      else
+        ["#{key}: #{yaml_scalar(value)}"]
+      end
+    end.join("\n")
+    <<~TEXT
+      ---
+      #{header}
+      ---
+
+      #{body}
+    TEXT
+  end
+
+  def yaml_scalar(value)
+    value.to_s
+  end
+
+  # [fields, body] from a report file, or [nil, nil] if it has no YAML
+  # front matter block (or the block cannot be safe-loaded).
+  def parse_front_matter(text)
+    match = text.match(/\A---\n(.+?)\n---\n\n?/m)
+    return [nil, nil] unless match
+
+    fields =
+      begin
+        YAML.safe_load(match[1], permitted_classes: [Time])
+      rescue Psych::Exception, Psych::SyntaxError
+        nil
+      end
+    return [nil, nil] unless fields.is_a?(Hash)
+
+    [fields, match.post_match]
+  end
+
+  # The consolidator's substantive prompt: the instructions template, the
+  # original prompt every analyst answered, and all reports with their
+  # source labels.
+  def consolidation_prompt(original_prompt, reports)
+    template = File.read(CONSOLIDATE_PROMPT_PATH)
+    body = reports.map { |label, text| "## Report from #{label}\n\n#{text}" }.join("\n\n---\n\n")
+    <<~MARKDOWN
+      #{template}
+
+      ---
+
+      # Original prompt (given identically to every analyst)
+
+      #{original_prompt}
+
+      ---
+
+      # Analyst reports
+
+      #{body}
+    MARKDOWN
+  end
+
+  # The consolidator's output filename; lives in the run's consolidated/
+  # subdir, and stays self-describing when copied out of the tree.
+  def consolidated_filename(file_prefix, provider, model)
+    "#{file_prefix}_consolidated_#{HARNESS::NAME}_#{sanitize(provider)}_#{sanitize(model)}.md"
+  end
+
+  # Runs the configured consolidator model over a run's reports and writes
+  # its report into the same run dir. Returns [label, ok, detail].
+  def run_consolidation(consolidator, original_prompt, run_dir, file_prefix, meta: {})
+    provider = consolidator['provider'] if consolidator.is_a?(Hash)
+    model = consolidator['model'] if consolidator.is_a?(Hash)
+    return ['consolidator', false, "config entry needs 'provider' and 'model'"] if provider.nil? || model.nil?
+
+    reports = collect_reports(File.join(run_dir, 'answers'))
+    if reports.empty?
+      return ["#{provider} / #{model} (consolidator)", false,
+              "no reports found in #{relative_path(File.join(run_dir, 'answers'))}"]
+    end
+
+    consolidated_dir = File.join(run_dir, 'consolidated')
+    FileUtils.mkdir_p(consolidated_dir)
+    prompt = consolidation_prompt(original_prompt, reports)
+    label, ok, detail = run_agent(consolidator, prompt, consolidated_dir, file_prefix,
+                                  filename: consolidated_filename(file_prefix, provider, model),
+                                  meta: meta.merge('role' => 'consolidator',
+                                                   'sources' => reports.map(&:first)))
+    ["#{label} (consolidator)", ok, detail]
+  end
+
+  def relative_path(path)
+    path = File.expand_path(path)
+    cwd = File.expand_path(Dir.pwd)
+    return path unless path == cwd || path.start_with?(cwd + File::SEPARATOR)
+
+    path.delete_prefix(cwd + File::SEPARATOR)
   end
 
   def main(argv)
@@ -115,8 +234,13 @@ module Ensemble
     prompt = File.read(prompt_path)
     abort "Prompt file is empty: #{prompt_path}" if prompt.empty?
 
-    agents = YAML.load_file(config_path)['agents']
+    config = YAML.load_file(config_path)
+    agents = config['agents']
     abort "No agents defined in #{config_path}" unless agents.is_a?(Array) && !agents.empty?
+    consolidator = config['consolidator']
+    if consolidator && !File.file?(CONSOLIDATE_PROMPT_PATH)
+      abort "Consolidator configured but template missing: #{CONSOLIDATE_PROMPT_PATH}"
+    end
 
     # One run dir per invocation, day-bucketed so reports/ stays navigable at
     # volume: reports/<yyyy-mm-dd>/<hh-mm-ss>/. The dir name is pure time;
@@ -124,9 +248,14 @@ module Ensemble
     now = Time.now
     day = now.strftime('%Y-%m-%d')
     run_name = now.strftime('%H-%M-%S')
-    file_prefix = "#{day}-#{run_name}_#{query_slug(prompt_path)}"
+    run_stamp = "#{day}-#{run_name}"
+    iso_stamp = now.strftime('%Y-%m-%dT%H:%M:%S')
+    slug = query_slug(prompt_path)
+    file_prefix = "#{run_stamp}_#{slug}"
+    report_meta = { 'role' => 'analyst', 'timestamp' => iso_stamp, 'query' => slug }
     run_dir = File.join(reports_dir, day, run_name)
-    FileUtils.mkdir_p(run_dir)
+    answers_dir = File.join(run_dir, 'answers')
+    FileUtils.mkdir_p(answers_dir)
 
     # Self-contained run: preserve the exact inputs — prompt and config.
     # (The orchestrator is not copied: it is versioned in git.)
@@ -139,12 +268,18 @@ module Ensemble
     puts "Running #{agents.size} model(s) with prompt: #{prompt_path}"
     results = agents.map do |agent|
       Thread.new do
-        result = run_agent(agent, prompt, run_dir, file_prefix)
+        result = run_agent(agent, prompt, answers_dir, file_prefix, meta: report_meta)
         label, ok, detail = result
         puts(ok ? "  ✓ #{label} finished" : "  ✗ #{label} failed: #{detail}")
         result
       end
     end.map(&:value)
+
+    if consolidator
+      puts 'Consolidating reports...'
+      label, ok, detail = run_consolidation(consolidator, prompt, run_dir, file_prefix, meta: report_meta)
+      puts(ok ? "  ✓ #{label}  ->  #{detail}" : "  ✗ #{label}  (#{detail})")
+    end
 
     puts "\nSummary:"
     results.each do |label, ok, detail|
@@ -152,7 +287,7 @@ module Ensemble
     end
 
     failed = results.count { |_, ok, _| !ok }
-    puts "\n#{results.size - failed}/#{results.size} succeeded. Reports in: #{run_dir}"
+    puts "\n#{results.size - failed}/#{results.size} succeeded. Reports in: #{relative_path(answers_dir)}"
     exit(failed.zero? ? 0 : 1)
   end
 end
