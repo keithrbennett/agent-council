@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
-# Focused tests for the pi-specific behavior in pi_harness.rb (no model calls).
-# Run with: rspec
+# Focused tests for the pi-specific behavior in
+# lib/agent_council/harnesses/pi_harness.rb (no model calls). Run with: rspec
 
-require_relative '../lib/pi_harness'
+require_relative '../../lib/agent_council/harnesses/pi_harness'
 
-RSpec.describe PiHarness do
+RSpec.describe AgentCouncil::Harnesses::PiHarness do
   # Captured shape of a pi --mode json event stream (pi 0.84.4), trimmed to
   # the relevant events: a tool-use turn (first assistant message_end) and
   # the final turn (second assistant message_end).
@@ -26,7 +26,7 @@ RSpec.describe PiHarness do
   end
 
   describe '.argv' do
-    let(:argv) { PiHarness.argv('zai', 'glm-5.3', '/tmp/scratch-xyz') }
+    let(:argv) { AgentCouncil::Harnesses::PiHarness.argv('zai', 'glm-5.3', '/tmp/scratch-xyz') }
 
     it 'invokes pi non-interactively with a JSON event stream and no session' do
       expect(argv.first).to eq('pi')
@@ -47,7 +47,7 @@ RSpec.describe PiHarness do
   end
 
   describe '.scaffold_text' do
-    subject(:scaffold) { PiHarness.scaffold_text('/tmp/scratch-xyz') }
+    subject(:scaffold) { AgentCouncil::Harnesses::PiHarness.scaffold_text('/tmp/scratch-xyz') }
 
     it 'names the unique scratch dir' do
       expect(scaffold).to include('/tmp/scratch-xyz')
@@ -66,30 +66,30 @@ RSpec.describe PiHarness do
 
   describe '.assistant_messages' do
     it 'returns assistant messages from message_end events, in order' do
-      messages = PiHarness.assistant_messages(sample_stream)
+      messages = AgentCouncil::Harnesses::PiHarness.assistant_messages(sample_stream)
       expect(messages.size).to eq(2) # the user message is excluded
       expect(messages.map { |m| m['stopReason'] }).to eq(%w[toolUse stop])
     end
 
     it 'skips unparseable lines' do
-      expect(PiHarness.assistant_messages("garbage\n" + sample_stream).size).to eq(2)
+      expect(AgentCouncil::Harnesses::PiHarness.assistant_messages("garbage\n" + sample_stream).size).to eq(2)
     end
 
     it 'skips JSON lines that parse to non-objects' do
       stream = "123\n\"str\"\n[1,2]\nnull\n" + sample_stream
-      expect(PiHarness.assistant_messages(stream).size).to eq(2)
+      expect(AgentCouncil::Harnesses::PiHarness.assistant_messages(stream).size).to eq(2)
     end
   end
 
   describe '.final_response' do
     it 'takes the text blocks of the last assistant message' do
       # Multiple text blocks in one message are joined with "\n".
-      expect(PiHarness.final_response(sample_stream))
+      expect(AgentCouncil::Harnesses::PiHarness.final_response(sample_stream))
         .to eq("# Report\n\nFirst part.\n Second part.")
     end
 
     it 'ignores user messages and thinking blocks' do
-      text = PiHarness.final_response(sample_stream)
+      text = AgentCouncil::Harnesses::PiHarness.final_response(sample_stream)
       expect(text).not_to include('the prompt')
       expect(text).not_to include('now I know')
     end
@@ -101,7 +101,7 @@ RSpec.describe PiHarness do
         {"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"real report"}],"stopReason":"toolUse"}}
         {"type":"message_end","message":{"role":"assistant","content":[{"type":"thinking","thinking":"hmm"}],"stopReason":"stop"}}
       JSONL
-      expect(PiHarness.final_response(stream)).to eq('real report')
+      expect(AgentCouncil::Harnesses::PiHarness.final_response(stream)).to eq('real report')
     end
 
     it 'returns nil when there is no assistant text' do
@@ -109,14 +109,14 @@ RSpec.describe PiHarness do
         {"type":"session","version":3,"id":"x","timestamp":"t","cwd":"/repo"}
         {"type":"message_end","message":{"role":"user","content":[{"type":"text","text":"hi"}]}}
       JSONL
-      expect(PiHarness.final_response(stream)).to be_nil
+      expect(AgentCouncil::Harnesses::PiHarness.final_response(stream)).to be_nil
     end
 
     it 'skips unparseable lines' do
       stream = "not json\n" \
                '{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"ok"}]}}' \
                "\n"
-      expect(PiHarness.final_response(stream)).to eq('ok')
+      expect(AgentCouncil::Harnesses::PiHarness.final_response(stream)).to eq('ok')
     end
   end
 
@@ -126,7 +126,7 @@ RSpec.describe PiHarness do
         {"type":"message_end","message":{"role":"assistant","content":[],"stopReason":"error","errorMessage":"400 model_not_available_for_integrator"}}
         {"type":"agent_end","messages":[]}
       JSONL
-      expect(PiHarness.error_message(stream)).to eq('400 model_not_available_for_integrator')
+      expect(AgentCouncil::Harnesses::PiHarness.error_message(stream)).to eq('400 model_not_available_for_integrator')
     end
 
     it 'returns the last error when several occurred' do
@@ -134,11 +134,11 @@ RSpec.describe PiHarness do
         {"type":"message_end","message":{"role":"assistant","content":[],"stopReason":"error","errorMessage":"first"}}
         {"type":"message_end","message":{"role":"assistant","content":[],"stopReason":"error","errorMessage":"second"}}
       JSONL
-      expect(PiHarness.error_message(stream)).to eq('second')
+      expect(AgentCouncil::Harnesses::PiHarness.error_message(stream)).to eq('second')
     end
 
     it 'returns nil when there are no errors' do
-      expect(PiHarness.error_message(sample_stream)).to be_nil
+      expect(AgentCouncil::Harnesses::PiHarness.error_message(sample_stream)).to be_nil
     end
   end
 end

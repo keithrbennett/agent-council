@@ -1,25 +1,27 @@
 # frozen_string_literal: true
 
-# Ensemble — harness-agnostic orchestration: naming, run-directory layout,
-# per-agent subprocess execution, and the CLI entry point. Harness-specific
-# behavior lives in pi_harness.rb (PiHarness); HARNESS below is the single
-# swap point.
+# AgentCouncil — harness-agnostic orchestration: naming, run-directory
+# layout, per-agent subprocess execution, and the CLI entry point.
+# Harness-specific behavior lives under AgentCouncil::Harnesses (e.g.
+# AgentCouncil::Harnesses::PiHarness); HARNESS below is the single swap
+# point.
 
 require 'yaml'
 require 'open3'
 require 'fileutils'
 require 'tmpdir'
 
-require_relative 'pi_harness'
+require_relative 'agent_council/harnesses/pi_harness'
 
-module Ensemble
+module AgentCouncil
   PROJECT_ROOT = File.expand_path('..', __dir__)
   DEFAULT_CONFIG = File.join(PROJECT_ROOT, 'ensemble.yml')
   CONSOLIDATE_PROMPT_PATH = File.join(PROJECT_ROOT, 'prompts', 'consolidate_prompt.md')
 
   # The harness every model runs through; the single swap point. A second
-  # harness would be another module shaped like PiHarness, assigned here.
-  HARNESS = PiHarness
+  # harness would be another module under AgentCouncil::Harnesses,
+  # assigned here.
+  HARNESS = AgentCouncil::Harnesses::PiHarness
 
   module_function
 
@@ -58,7 +60,7 @@ module Ensemble
     label = "#{provider} / #{model}"
     return [label, false, "config entry needs 'provider' and 'model'"] if provider.nil? || model.nil?
 
-    Dir.mktmpdir('ensemble-') do |scratch_dir|
+    Dir.mktmpdir('agent-council-') do |scratch_dir|
       argv = HARNESS.argv(provider, model, scratch_dir)
       stdout, stderr, status = Open3.capture3({ 'TMPDIR' => scratch_dir }, *argv, stdin_data: prompt)
 
@@ -224,7 +226,7 @@ module Ensemble
     config_path = argv[1] || DEFAULT_CONFIG
 
     if prompt_path.nil? || argv.length > 2
-      warn 'Usage: ruby ensemble.rb PROMPT_FILE [CONFIG_FILE]'
+      warn 'Usage: ./agent-council PROMPT_FILE [CONFIG_FILE]'
       exit 1
     end
     abort "Prompt file not found: #{prompt_path}" unless File.file?(prompt_path)

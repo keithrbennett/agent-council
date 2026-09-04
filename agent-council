@@ -1,0 +1,16 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# agent-council — executable entry point. All code lives in lib/:
+#   lib/agent_council.rb                       orchestration (AgentCouncil)
+#   lib/agent_council/harnesses/pi_harness.rb  pi-specific behavior (AgentCouncil::Harnesses::PiHarness)
+#
+# Usage:
+#   ./agent-council PROMPT_FILE [CONFIG_FILE]
+#
+# CONFIG_FILE defaults to ensemble.yml next to this script. Run FROM the
+# repository you want analyzed: the harness analyzes its own cwd.
+
+require_relative 'lib/agent_council'
+
+AgentCouncil.main(ARGV) if __FILE__ == $PROGRAM_NAME

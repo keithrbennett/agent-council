@@ -44,7 +44,7 @@ failure is reported but does not affect the run's exit status.
 
 ```bash
 cd /path/to/the/repo/you/want/analyzed
-ruby /path/to/this/repo/ensemble.rb /path/to/prompt.md
+/path/to/this/repo/agent-council /path/to/prompt.md
 ```
 
 Pi analyzes its **own working directory**, so run the script from the
@@ -53,16 +53,16 @@ directory — each analyzed project gets its own reports tree (you'll likely
 want `reports/` in that project's `.gitignore`).
 
 ```bash
-ruby ensemble.rb my-analysis-prompt.md                        # uses ./ensemble.yml
-ruby ensemble.rb my-analysis-prompt.md other-config.yml       # alternate config
-rspec                                                         # unit tests (no model calls)
+./agent-council my-analysis-prompt.md                        # uses ensemble.yml next to the executable
+./agent-council my-analysis-prompt.md other-config.yml       # alternate config
+rspec                                                        # unit tests (no model calls)
 ```
 
 (Paths are resolved from the working directory except the default config,
-which lives next to `ensemble.rb` in this repo.)
+which lives next to `agent-council` in this repo.)
 
-`ensemble.rb` has a shebang and is executable, so `./ensemble.rb ...` (or an
-absolute path) works identically to `ruby ensemble.rb ...`.
+`agent-council` has a shebang and is executable, so `./agent-council ...`
+(or an absolute path) works identically to `ruby agent-council ...`.
 
 `examples/` holds ready-to-run prompts and configs:
 
@@ -70,7 +70,7 @@ absolute path) works identically to `ruby ensemble.rb ...`.
   prompt; with the default config this is the full ensemble:
 
 ```bash
-ruby ensemble.rb examples/prompts/code-base-state_prompt.md
+./agent-council examples/prompts/code-base-state_prompt.md
 ```
 
 - `examples/prompts/smoke-test_prompt.md` +
@@ -79,7 +79,7 @@ ruby ensemble.rb examples/prompts/code-base-state_prompt.md
   config, for verifying your setup in seconds:
 
 ```bash
-ruby ensemble.rb examples/prompts/smoke-test_prompt.md examples/configs/single.yml
+./agent-council examples/prompts/smoke-test_prompt.md examples/configs/single.yml
 ```
 
 - `examples/prompts/project-name-prompt.md` + any one-model config —
@@ -164,11 +164,12 @@ are always in *your* tree.
 
 - All pi-specific knowledge — CLI invocation, the read-only tool policy and
   scaffolding, and event-stream parsing — is isolated in
-  `lib/pi_harness.rb` (`PiHarness`); harness-agnostic orchestration lives in
-  `lib/ensemble.rb` (`Ensemble`), which selects the harness via the single
-  `HARNESS` constant. Root `ensemble.rb` is just the executable entry
-  point. A future second harness would be another module shaped like
-  `PiHarness`.
+  `lib/agent_council/harnesses/pi_harness.rb`
+  (`AgentCouncil::Harnesses::PiHarness`); harness-agnostic orchestration
+  lives in `lib/agent_council.rb` (`AgentCouncil`), which selects the
+  harness via the single `HARNESS` constant. Root `agent-council` is
+  just the executable entry point. A future second harness would be
+  another module under `AgentCouncil::Harnesses`.
 - Every agent receives the **byte-identical contents of the prompt file**,
   piped to pi on stdin (pi merges piped stdin into the initial prompt).
   No roles, no per-model customization.
@@ -191,7 +192,7 @@ are always in *your* tree.
   pi never shows a project-trust prompt; untrusted project-local resources
   are ignored per pi's security model.)
 - The final response is parsed from pi's JSONL event stream (by
-  `PiHarness.final_response`): the last `message_end` event with
+  `AgentCouncil::Harnesses::PiHarness.final_response`): the last `message_end` event with
   `role: "assistant"` — pi documents `message_end` as the authoritative
   final message of a turn. Note that pi exits 0 even
   when the provider rejects the request (e.g. Copilot's

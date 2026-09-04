@@ -15,7 +15,7 @@ The immediate objective is utility, not completeness.
 We want to be able to run something like:
 
 ```bash
-ruby ensemble.rb prompt.md
+./agent-council prompt.md
 ```
 
 and quickly get independent reports from several models.
@@ -116,7 +116,7 @@ They belong in configuration because available models and names change frequentl
 Initial command:
 
 ```bash
-ruby ensemble.rb prompt.md
+./agent-council prompt.md
 ```
 
 The command should:
@@ -317,9 +317,10 @@ Implement only enough parsing to reliably extract the final response.
 
 Do not build a generic Pi protocol library.
 
-The parser and the pi CLI invocation live in `PiHarness` (pi_harness.rb),
-the single home of harness-specific behavior; ensemble.rb stays
-harness-agnostic so a second harness can be added as another such module.
+The parser and the pi CLI invocation live in `AgentCouncil::Harnesses::PiHarness`
+(`lib/agent_council/harnesses/pi_harness.rb`), the single home of harness-
+specific behavior; `agent-council` stays harness-agnostic so a second
+harness can be added as another such module under `AgentCouncil::Harnesses`.
 
 ---
 
@@ -373,21 +374,29 @@ Keep the experiment small.
 README.md
 DESIGN.md
 .gitignore
-ensemble.rb              # executable entry point; all code lives in lib/
+agent-council            # executable entry point; all code lives in lib/
 ensemble.yml
 lib/
-  ensemble.rb            # harness-agnostic orchestration (Ensemble)
-  pi_harness.rb          # all pi-specific behavior (PiHarness)
+  agent_council.rb       # harness-agnostic orchestration (AgentCouncil)
+  agent_council/
+    harnesses/
+      pi_harness.rb      # pi-specific behavior (AgentCouncil::Harnesses::PiHarness)
 spec/
-  ensemble_spec.rb       # RSpec; harness-agnostic logic
-  pi_harness_spec.rb     # RSpec; pi invocation + event-stream parsing
+  agent_council_spec.rb       # RSpec; harness-agnostic logic
+  agent_council/
+    pi_spec.rb               # RSpec; pi invocation + event-stream parsing
 
 prompts/
   consolidate_prompt.md  # instructions template for the consolidator
 
 examples/
-  smoke-test_prompt.md   # tiny plumbing-test prompt (prompts end in _prompt.md)
-  ensemble.smoke.yml     # one-model config for cheap setup checks
+  prompts/
+    smoke-test_prompt.md
+    code-base-state_prompt.md
+    project-name-prompt.md
+  configs/
+    single.yml
+    consolidated.yml
 
 reports/                 # created on demand; gitignored
 ```
@@ -434,7 +443,7 @@ The experiment is successful when we can:
 Example:
 
 ```bash
-ruby ensemble.rb prompts/codebase-review.md
+./agent-council prompts/codebase-review.md
 ```
 
 produces:
