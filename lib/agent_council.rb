@@ -15,7 +15,7 @@ require_relative 'agent_council/harnesses/pi_harness'
 
 module AgentCouncil
   PROJECT_ROOT = File.expand_path('..', __dir__)
-  DEFAULT_CONFIG = File.join(PROJECT_ROOT, 'ensemble.yml')
+  DEFAULT_CONFIG = File.join(PROJECT_ROOT, 'examples/configs/consolidated.yml')
   CONSOLIDATE_PROMPT_PATH = File.join(PROJECT_ROOT, 'prompts', 'consolidate_prompt.md')
 
   # The harness every model runs through; the single swap point. A second
