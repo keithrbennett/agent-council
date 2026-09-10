@@ -6,11 +6,11 @@
 #   lib/agent_council/harnesses/pi_harness.rb  pi-specific behavior (AgentCouncil::Harnesses::PiHarness)
 #
 # Usage:
-#   ./agent-council PROMPT_FILE [CONFIG_FILE]
+#   ./exe/agent-council PROMPT_FILE [CONFIG_FILE]
 #
-# CONFIG_FILE defaults to ensemble.yml next to this script. Run FROM the
+# CONFIG_FILE defaults to ensemble.yml at the repository root. Run FROM the
 # repository you want analyzed: the harness analyzes its own cwd.
 
-require_relative 'lib/agent_council'
+require_relative '../lib/agent_council'
 
 AgentCouncil.main(ARGV) if __FILE__ == $PROGRAM_NAME

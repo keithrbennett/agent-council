@@ -15,7 +15,7 @@ The immediate objective is utility, not completeness.
 We want to be able to run something like:
 
 ```bash
-./agent-council prompt.md
+./exe/agent-council prompt.md
 ```
 
 and quickly get independent reports from several models.
@@ -116,7 +116,7 @@ They belong in configuration because available models and names change frequentl
 Initial command:
 
 ```bash
-./agent-council prompt.md
+./exe/agent-council prompt.md
 ```
 
 The command should:
@@ -319,7 +319,7 @@ Do not build a generic Pi protocol library.
 
 The parser and the pi CLI invocation live in `AgentCouncil::Harnesses::PiHarness`
 (`lib/agent_council/harnesses/pi_harness.rb`), the single home of harness-
-specific behavior; `agent-council` stays harness-agnostic so a second
+specific behavior; `exe/agent-council` stays harness-agnostic so a second
 harness can be added as another such module under `AgentCouncil::Harnesses`.
 
 ---
@@ -374,7 +374,8 @@ Keep the experiment small.
 README.md
 DESIGN.md
 .gitignore
-agent-council            # executable entry point; all code lives in lib/
+exe/
+  agent-council          # executable entry point; all code lives in lib/
 ensemble.yml
 lib/
   agent_council.rb       # harness-agnostic orchestration (AgentCouncil)
@@ -384,7 +385,7 @@ lib/
 spec/
   agent_council_spec.rb       # RSpec; harness-agnostic logic
   agent_council/
-    pi_spec.rb               # RSpec; pi invocation + event-stream parsing
+    pi_harness_spec.rb        # RSpec; pi invocation + event-stream parsing
 
 prompts/
   consolidate_prompt.md  # instructions template for the consolidator
@@ -443,7 +444,7 @@ The experiment is successful when we can:
 Example:
 
 ```bash
-./agent-council prompts/codebase-review.md
+./exe/agent-council prompts/codebase-review.md
 ```
 
 produces:

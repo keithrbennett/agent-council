@@ -44,7 +44,7 @@ failure is reported but does not affect the run's exit status.
 
 ```bash
 cd /path/to/the/repo/you/want/analyzed
-/path/to/this/repo/agent-council /path/to/prompt.md
+/path/to/this/repo/exe/agent-council /path/to/prompt.md
 ```
 
 Pi analyzes its **own working directory**, so run the script from the
@@ -53,16 +53,16 @@ directory — each analyzed project gets its own reports tree (you'll likely
 want `reports/` in that project's `.gitignore`).
 
 ```bash
-./agent-council my-analysis-prompt.md                        # uses ensemble.yml next to the executable
-./agent-council my-analysis-prompt.md other-config.yml       # alternate config
+./exe/agent-council my-analysis-prompt.md                    # uses ensemble.yml at the repo root
+./exe/agent-council my-analysis-prompt.md other-config.yml  # alternate config
 rspec                                                        # unit tests (no model calls)
 ```
 
 (Paths are resolved from the working directory except the default config,
-which lives next to `agent-council` in this repo.)
+which lives at the root of this repo.)
 
-`agent-council` has a shebang and is executable, so `./agent-council ...`
-(or an absolute path) works identically to `ruby agent-council ...`.
+`exe/agent-council` has a shebang and is executable, so `./exe/agent-council ...`
+(or an absolute path) works identically to `ruby exe/agent-council ...`.
 
 `examples/` holds ready-to-run prompts and configs:
 
@@ -70,7 +70,7 @@ which lives next to `agent-council` in this repo.)
   prompt; with the default config this is the full ensemble:
 
 ```bash
-./agent-council examples/prompts/code-base-state_prompt.md
+./exe/agent-council examples/prompts/code-base-state_prompt.md
 ```
 
 - `examples/prompts/smoke-test_prompt.md` +
@@ -79,7 +79,7 @@ which lives next to `agent-council` in this repo.)
   config, for verifying your setup in seconds:
 
 ```bash
-./agent-council examples/prompts/smoke-test_prompt.md examples/configs/single.yml
+./exe/agent-council examples/prompts/smoke-test_prompt.md examples/configs/single.yml
 ```
 
 - `examples/prompts/project-name-prompt.md` + any one-model config —
@@ -167,7 +167,7 @@ are always in *your* tree.
   `lib/agent_council/harnesses/pi_harness.rb`
   (`AgentCouncil::Harnesses::PiHarness`); harness-agnostic orchestration
   lives in `lib/agent_council.rb` (`AgentCouncil`), which selects the
-  harness via the single `HARNESS` constant. Root `agent-council` is
+  harness via the single `HARNESS` constant. `exe/agent-council` is
   just the executable entry point. A future second harness would be
   another module under `AgentCouncil::Harnesses`.
 - Every agent receives the **byte-identical contents of the prompt file**,
