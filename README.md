@@ -1,4 +1,4 @@
-# multiagent-pi-experiment
+# agent-council
 
 A small experiment: run the **same analytical prompt** through several
 models using the [Pi](https://github.com/earendil-works/pi-mono) coding-agent
