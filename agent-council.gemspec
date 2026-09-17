@@ -20,6 +20,8 @@ Gem::Specification.new do |spec|
   spec.license       = 'MIT'
 
   spec.homepage      = 'https://github.com/keithrbennett/agent-council'
+  spec.metadata['source_code_uri'] = 'https://github.com/keithrbennett/agent-council'
+  spec.metadata['changelog_uri'] = 'https://github.com/keithrbennett/agent-council/blob/main/CHANGELOG.md'
   spec.required_ruby_version = '>= 3.2'
 
   spec.files = Dir.chdir(File.expand_path(__dir__)) do

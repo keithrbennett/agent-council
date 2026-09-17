@@ -226,7 +226,7 @@ module AgentCouncil
     config_path = argv[1] || DEFAULT_CONFIG
 
     if prompt_path.nil? || argv.length > 2
-      warn 'Usage: ./exe/agent-council PROMPT_FILE [CONFIG_FILE]'
+      warn 'Usage: agent-council PROMPT_FILE [CONFIG_FILE]'
       exit 1
     end
     abort "Prompt file not found: #{prompt_path}" unless File.file?(prompt_path)

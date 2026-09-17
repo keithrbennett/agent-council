@@ -2,3 +2,6 @@ reports/
 tmp/
 .DS_Store
 .idea/
+*.gem
+*.log
+untracked/
