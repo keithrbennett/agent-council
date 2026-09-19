@@ -334,6 +334,11 @@ repository being analyzed — so the tool can be run from any project:
 reports/
 ```
 
+If the working directory contains an `untracked/` directory (a conventional
+home for git-ignored scratch files), reports go into `untracked/reports/`
+instead. The check is made at run time and only the base directory changes;
+everything beneath it (day buckets, `latest` symlink) is the same.
+
 Each run writes a timestamped, day-bucketed run directory (see §12), so
 repeated runs accumulate without overwriting; no further run management is
 implemented yet.

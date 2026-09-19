@@ -4,6 +4,7 @@
 # (no model calls). Pi-specific behavior is tested in
 # spec/agent_council/pi_spec.rb. Run with: rspec
 
+require 'tmpdir'
 require_relative '../lib/agent_council'
 
 RSpec.describe AgentCouncil do
@@ -60,7 +61,21 @@ RSpec.describe AgentCouncil do
   end
 
   describe '.reports_dir' do
+    around do |example|
+      Dir.mktmpdir { |dir| Dir.chdir(dir) { example.run } }
+    end
+
     it 'is ./reports under the current working directory (the analyzed repo)' do
+      expect(AgentCouncil.reports_dir).to eq(File.join(Dir.pwd, 'reports'))
+    end
+
+    it 'is ./untracked/reports when the working directory has an untracked/ directory' do
+      Dir.mkdir('untracked')
+      expect(AgentCouncil.reports_dir).to eq(File.join(Dir.pwd, 'untracked', 'reports'))
+    end
+
+    it 'ignores a plain file named untracked' do
+      File.write('untracked', '')
       expect(AgentCouncil.reports_dir).to eq(File.join(Dir.pwd, 'reports'))
     end
   end

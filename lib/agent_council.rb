@@ -27,8 +27,12 @@ module AgentCouncil
 
   # Reports go under the current working directory — i.e. alongside the
   # repository being analyzed — so the tool can be run from any project.
+  # If the working directory has an untracked/ directory (a conventional
+  # home for git-ignored scratch files), reports go in untracked/reports
+  # instead of reports, so they don't clutter the project root.
   def reports_dir
-    File.join(Dir.pwd, 'reports')
+    base = File.directory?(File.join(Dir.pwd, 'untracked')) ? File.join(Dir.pwd, 'untracked') : Dir.pwd
+    File.join(base, 'reports')
   end
 
   # Make an identifier safe for a filename component.

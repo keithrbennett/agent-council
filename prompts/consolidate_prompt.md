@@ -7,9 +7,10 @@ model that produced it.
 
 Produce a consolidated report with exactly these sections:
 
-## Provilder / Model List
+## Agent Conultants
 
-Output a list of provider/model agents, with a heading "Agent Consultants".
+A list of provider/model agents consulted; for any that failed to run properly,
+say so and say why
 
 ## Consensus findings
 

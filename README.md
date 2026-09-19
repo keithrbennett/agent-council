@@ -50,7 +50,8 @@ cd /path/to/the/repo/you/want/analyzed
 Pi analyzes its **own working directory**, so run the script from the
 repository under analysis. Reports land in `./reports` under that working
 directory — each analyzed project gets its own reports tree (you'll likely
-want `reports/` in that project's `.gitignore`).
+want `reports/` in that project's `.gitignore`). If that directory has an
+`untracked/` subdirectory, reports go in `untracked/reports` instead.
 
 ```bash
 ./exe/agent-council my-analysis-prompt.md                    # uses ensemble.yml at the repo root
