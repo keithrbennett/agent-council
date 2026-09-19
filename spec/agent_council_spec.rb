@@ -27,9 +27,24 @@ RSpec.describe AgentCouncil do
   end
 
   describe '.query_slug' do
-    it 'comes from the prompt filename, stripping the conventional _prompt suffix' do
-      expect(AgentCouncil.query_slug('prompts/code-base-state_prompt.md')).to eq('code-base-state')
+    [
+      ['-', 'prompts/code-base-state-prompt.md', 'code-base-state'],
+      ['_', 'prompts/code-base-state_prompt.md', 'code-base-state']
+    ].each do |separator, path, expected_slug|
+      it "strips the #{separator}prompt suffix" do
+        expect(AgentCouncil.query_slug(path)).to eq(expected_slug)
+      end
+    end
+
+    it 'strips the suffix case-insensitively' do
       expect(AgentCouncil.query_slug('/tmp/Security-Review_Prompt.md')).to eq('security-review')
+      expect(AgentCouncil.query_slug('/tmp/Security-Review-PROMPT.md')).to eq('security-review')
+    end
+
+    it 'strips only a trailing suffix' do
+      expect(AgentCouncil.query_slug('prompt-tuning.md')).to eq('prompt-tuning')
+      expect(AgentCouncil.query_slug('my-prompts.md')).to eq('my-prompts')
+      expect(AgentCouncil.query_slug('a-prompt-prompt.md')).to eq('a-prompt')
     end
 
     it 'works for prompt files not following the convention' do
@@ -40,6 +55,7 @@ RSpec.describe AgentCouncil do
     it "falls back to 'prompt' when nothing usable remains" do
       expect(AgentCouncil.query_slug('!!!.md')).to eq('prompt')
       expect(AgentCouncil.query_slug('_prompt.md')).to eq('prompt')
+      expect(AgentCouncil.query_slug('-prompt.md')).to eq('prompt')
     end
   end
 

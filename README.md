@@ -86,11 +86,10 @@ which lives at the root of this repo.)
   a small creative-writing prompt useful for spotting prompt-sensitivity
   differences across models.
 
-**Prompt naming convention:** end prompt files in `_prompt.md`
-(`code-base-state_prompt.md`, `security-review_prompt.md`). The file name
-becomes the query slug in report filenames, with the `_prompt` suffix
-stripped — so `code-base-state_prompt.md` yields the slug
-`code-base-state`, not `code-base-state-prompt`.
+Prompt filenames may end in `-prompt.md` or `_prompt.md`. The file name
+becomes the query slug in report filenames, with either suffix stripped — so
+`code-base-state-prompt.md` and `code-base-state_prompt.md` both yield the
+slug `code-base-state`.
 
 ## What you get
 
@@ -123,9 +122,9 @@ reports/
 - **Report filenames** carry everything else:
   `<yyyy-mm-dd>-<hh-mm-ss>_<query-slug>_pi_<provider>_<model>.md`, so a
   report stays self-describing when you copy or attach it outside the tree.
-  The query slug comes from the prompt file name, with any conventional
-  `_prompt` suffix stripped (`codebase-review_prompt.md` →
-  `codebase-review`).
+  The query slug comes from the prompt file name, with either `-prompt` or
+  `_prompt` suffix stripped (`codebase-review-prompt.md` and
+  `codebase-review_prompt.md` both become `codebase-review`).
 - **Day buckets** keep `reports/` itself navigable when you have hundreds
   of runs.
 - **`reports/latest`** is a relative symlink to the newest run, so the

@@ -281,8 +281,9 @@ matter the orchestrator writes at the top of each file (the body below it
 is the model's verbatim response). Report filenames still carry the
 full timestamp, a slug of the prompt file name, harness, provider, and
 model, so they stay self-describing when copied out of the tree. Prompt
-files conventionally end in `_prompt.md`; the suffix is stripped from the
-slug (`codebase-review_prompt.md` -> `codebase-review`). Copies of the
+files may end in `-prompt.md` or `_prompt.md`; either suffix is stripped from
+the slug (`codebase-review-prompt.md` and `codebase-review_prompt.md` both
+become `codebase-review`). Copies of the
 prompt and the config make each run reproducible later (the orchestrator is
 versioned in git and deliberately not copied). A relative `reports/latest`
 symlink points at the newest run.

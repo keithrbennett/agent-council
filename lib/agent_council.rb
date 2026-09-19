@@ -36,11 +36,10 @@ module AgentCouncil
     part.to_s.gsub(/[^A-Za-z0-9._-]+/, '-').gsub(/\A[-.]+|[-.]+\z/, '')
   end
 
-  # Meaningful query slug, derived from the prompt file name. Convention:
-  # prompt files end in _prompt.md; the suffix is stripped from the slug.
-  # 'prompts/code-base-state_prompt.md' -> 'code-base-state'
+  # Meaningful query slug, derived from the prompt file name. A trailing
+  # -prompt or _prompt suffix is stripped from the slug.
   def query_slug(prompt_path)
-    name = File.basename(prompt_path, File.extname(prompt_path)).sub(/_prompt\z/i, '')
+    name = File.basename(prompt_path, File.extname(prompt_path)).sub(/[-_]prompt\z/i, '')
     slug = sanitize(name).downcase
     slug.empty? ? 'prompt' : slug
   end
