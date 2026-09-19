@@ -7,18 +7,29 @@ model that produced it.
 
 Produce a consolidated report with exactly these sections:
 
+## Provilder / Model List
+
+Output a list of provider/model agents, with a heading "Agent Consultants".
+
 ## Consensus findings
+
 Issues identified independently by two or more analysts. For each, list the
 sources and briefly note any differences in emphasis.
 
 ## Unique findings
+
 Issues raised by exactly one analyst, attributed to its source. Assess
 whether each is plausible.
 
+For each agent having any findings, output a heading with the provider and model name,
+and all the findings for that agent.
+
 ## Contradictions
+
 Points where analysts disagree, with each position attributed.
 
 ## Overall assessment
+
 The most important findings overall and your confidence in each. If you can
 verify a claim against the repository, do so (read-only) and state the
 result.
