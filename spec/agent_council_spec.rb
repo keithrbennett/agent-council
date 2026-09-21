@@ -181,18 +181,20 @@ RSpec.describe AgentCouncil do
                    AgentCouncil.with_front_matter({ 'provider' => 'openai', 'model' => 'gpt-x' }, 'findings'))
 
         captured = nil
-        allow(AgentCouncil).to receive(:run_agent) do |_agent, _prompt, run_dir, _prefix, filename:, meta:|
-          captured = { run_dir: run_dir, filename: filename, meta: meta }
+        allow(AgentCouncil).to receive(:run_agent) do |_agent, _prompt, run_dir, _prefix, filename:, meta:, title: nil|
+          captured = { run_dir: run_dir, filename: filename, meta: meta, title: title }
           File.write(File.join(run_dir, filename), 'consolidated body')
           ['zai / glm-5.3', true, filename]
         end
 
-        label, ok, = AgentCouncil.run_consolidation({ 'provider' => 'zai', 'model' => 'glm-5.3' }, 'prompt', dir, 'prefix')
+        label, ok, = AgentCouncil.run_consolidation({ 'provider' => 'zai', 'model' => 'glm-5.3' }, 'prompt', dir,
+                                                    'prefix', meta: { 'timestamp' => '2026-09-03T19:23:57' })
         expect(ok).to be(true)
         expect(label).to eq('zai / glm-5.3 (consolidator)')
         expect(captured[:run_dir]).to eq(dir)
         expect(captured[:filename]).to eq('prefix_consolidated_pi_zai_glm-5.3.md')
         expect(captured[:meta]['role']).to eq('consolidator')
+        expect(captured[:title]).to eq('Consolidated Report -- pi/zai/glm-5.3 -- 2026-09-03T19:23:57')
         expect(File.read(File.join(dir, captured[:filename]))).to eq('consolidated body')
         expect(Dir.exist?(File.join(dir, 'consolidated'))).to be(false)
       end

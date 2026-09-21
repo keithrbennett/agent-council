@@ -56,8 +56,9 @@ module AgentCouncil
   end
 
   # Returns [label, ok, detail]; never raises.
-  # filename: overrides the output name; meta: becomes YAML front matter.
-  def run_agent(agent, prompt, run_dir, file_prefix, filename: nil, meta: {})
+  # filename: overrides the output name; meta: becomes YAML front matter;
+  # title: an H1 prepended to the report body.
+  def run_agent(agent, prompt, run_dir, file_prefix, filename: nil, meta: {}, title: nil)
     provider = agent['provider'] if agent.is_a?(Hash)
     model = agent['model'] if agent.is_a?(Hash)
     label = "#{provider} / #{model}"
@@ -90,6 +91,7 @@ module AgentCouncil
       end
 
       filename ||= report_filename(file_prefix, provider, model)
+      text = "# #{title}\n\n#{text}" if title
       content = with_front_matter(meta.merge('harness' => HARNESS::NAME,
                                              'provider' => provider,
                                              'model' => model), text)
@@ -207,8 +209,10 @@ module AgentCouncil
     end
 
     prompt = consolidation_prompt(original_prompt, reports)
+    title = "Consolidated Report -- #{HARNESS::NAME}/#{provider}/#{model} -- #{meta['timestamp']}"
     label, ok, detail = run_agent(consolidator, prompt, run_dir, file_prefix,
                                   filename: consolidated_filename(file_prefix, provider, model),
+                                  title: title,
                                   meta: meta.merge('role' => 'consolidator',
                                                    'sources' => reports.map(&:first)))
     ["#{label} (consolidator)", ok, detail]
