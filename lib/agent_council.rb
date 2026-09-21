@@ -187,8 +187,8 @@ module AgentCouncil
     MARKDOWN
   end
 
-  # The consolidator's output filename; lives in the run's consolidated/
-  # subdir, and stays self-describing when copied out of the tree.
+  # The consolidator's output filename; lives at the top level of the run
+  # dir, and stays self-describing when copied out of the tree.
   def consolidated_filename(file_prefix, provider, model)
     "#{file_prefix}_consolidated_#{HARNESS::NAME}_#{sanitize(provider)}_#{sanitize(model)}.md"
   end
@@ -206,10 +206,8 @@ module AgentCouncil
               "no reports found in #{relative_path(File.join(run_dir, 'answers'))}"]
     end
 
-    consolidated_dir = File.join(run_dir, 'consolidated')
-    FileUtils.mkdir_p(consolidated_dir)
     prompt = consolidation_prompt(original_prompt, reports)
-    label, ok, detail = run_agent(consolidator, prompt, consolidated_dir, file_prefix,
+    label, ok, detail = run_agent(consolidator, prompt, run_dir, file_prefix,
                                   filename: consolidated_filename(file_prefix, provider, model),
                                   meta: meta.merge('role' => 'consolidator',
                                                    'sources' => reports.map(&:first)))

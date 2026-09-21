@@ -268,14 +268,14 @@ reports/
         2026-09-02-16-21-43_codebase-review_pi_openai_gpt-x.md
         2026-09-02-16-21-43_codebase-review_pi_opencode-go_kimi-x.md
         2026-09-02-16-21-43_codebase-review_pi_zai_glm-x.md
-      consolidated/                 # consolidator output, if configured
-        2026-09-02-16-21-43_codebase-review_consolidated_pi_zai_glm-x.md
+      2026-09-02-16-21-43_codebase-review_consolidated_pi_zai_glm-x.md  # consolidator output, if configured
   latest -> 2026-09-02/16-21-43
 ```
 
 Each run gets its own directory: day bucket / `hh-mm-ss`. Inputs (prompt
-and config copies) sit at the run dir root; analysts' reports go to
-`answers/`, consolidations to `consolidated/` — reports are identified by
+and config copies) sit at the run dir root; so does the consolidator's
+report, when configured — only the analysts' reports go to `answers/`;
+reports are identified by
 where they live, and their provider/model metadata comes from YAML front
 matter the orchestrator writes at the top of each file (the body below it
 is the model's verbatim response). Report filenames still carry the

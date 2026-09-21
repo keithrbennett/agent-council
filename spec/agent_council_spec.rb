@@ -154,7 +154,7 @@ RSpec.describe AgentCouncil do
     it 'is distinct from agent report filenames and self-identifying' do
       name = AgentCouncil.consolidated_filename('2026-09-03-19-23-57_review', 'zai', 'glm-5.3')
       expect(name).to eq('2026-09-03-19-23-57_review_consolidated_pi_zai_glm-5.3.md')
-      # distinct from analyst filenames; also lives apart in consolidated/
+      # distinct from analyst filenames; the "_consolidated" infix marks its role
     end
   end
 
@@ -170,6 +170,31 @@ RSpec.describe AgentCouncil do
         expect(result[0]).to eq('zai / glm-5.3 (consolidator)')
         expect(result[1]).to be(false)
         expect(result[2]).to match(/no reports found/)
+      end
+    end
+
+    it 'writes the consolidated report at the top level of the run dir' do
+      Dir.mktmpdir do |dir|
+        answers = File.join(dir, 'answers')
+        FileUtils.mkdir_p(answers)
+        File.write(File.join(answers, 'analyst.md'),
+                   AgentCouncil.with_front_matter({ 'provider' => 'openai', 'model' => 'gpt-x' }, 'findings'))
+
+        captured = nil
+        allow(AgentCouncil).to receive(:run_agent) do |_agent, _prompt, run_dir, _prefix, filename:, meta:|
+          captured = { run_dir: run_dir, filename: filename, meta: meta }
+          File.write(File.join(run_dir, filename), 'consolidated body')
+          ['zai / glm-5.3', true, filename]
+        end
+
+        label, ok, = AgentCouncil.run_consolidation({ 'provider' => 'zai', 'model' => 'glm-5.3' }, 'prompt', dir, 'prefix')
+        expect(ok).to be(true)
+        expect(label).to eq('zai / glm-5.3 (consolidator)')
+        expect(captured[:run_dir]).to eq(dir)
+        expect(captured[:filename]).to eq('prefix_consolidated_pi_zai_glm-5.3.md')
+        expect(captured[:meta]['role']).to eq('consolidator')
+        expect(File.read(File.join(dir, captured[:filename]))).to eq('consolidated body')
+        expect(Dir.exist?(File.join(dir, 'consolidated'))).to be(false)
       end
     end
   end

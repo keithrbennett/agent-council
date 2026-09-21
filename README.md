@@ -107,8 +107,7 @@ reports/
         2026-09-02-16-21-43_codebase-review_pi_github-copilot_claude-sonnet-5.md
         2026-09-02-16-21-43_codebase-review_pi_opencode-go_kimi-k2.6.md
         2026-09-02-16-21-43_codebase-review_pi_zai_glm-5.3.md
-      consolidated/                                          # if consolidator configured
-        2026-09-02-16-21-43_codebase-review_consolidated_pi_zai_glm-5.3.md
+      2026-09-02-16-21-43_codebase-review_consolidated_pi_zai_glm-5.3.md  # if consolidator configured
     18-05-11/
       ...
   2026-09-03/
