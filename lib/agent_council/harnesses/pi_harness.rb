@@ -23,11 +23,9 @@ module AgentCouncil
       # scaffolding text constrains its use.
       TOOLS = 'read,grep,find,ls,bash'
 
-      module_function
-
       # Invocation for one model run. The substantive prompt is not part of argv;
       # it is piped to stdin, byte-identical for every agent.
-      def argv(provider, model, scratch_dir)
+      module_function def argv(provider, model, scratch_dir)
         [
           NAME,
           '-p',               # non-interactive: process prompt and exit
@@ -42,7 +40,7 @@ module AgentCouncil
 
       # Scaffolding appended to pi's system prompt. Identical for every agent
       # except the scratch dir path.
-      def scaffold_text(scratch_dir)
+      module_function def scaffold_text(scratch_dir)
         <<~TEXT
           You are one of several independent agents analyzing the same repository
           with the same prompt. This is a strictly read-only analysis task.
@@ -73,7 +71,7 @@ module AgentCouncil
 
       # The assistant message from a single pi JSONL line, or nil if the line
       # is not an assistant message_end event.
-      def assistant_message_from_line(line)
+      module_function def assistant_message_from_line(line)
         event =
           begin
             JSON.parse(line)
@@ -92,11 +90,11 @@ module AgentCouncil
 
       # Assistant messages from all message_end events in a pi JSONL stream,
       # in order. Unparseable lines are skipped.
-      def assistant_messages(jsonl)
+      module_function def assistant_messages(jsonl)
         jsonl.each_line.filter_map { |line| assistant_message_from_line(line) }
       end
 
-      def response_text(message)
+      module_function def response_text(message)
         Array(message['content'])
           .select { |block| block['type'] == 'text' }
           .map { |block| block['text'] }
@@ -106,7 +104,7 @@ module AgentCouncil
       # The final assistant response: per pi's docs, message_end holds the
       # authoritative final message of each turn; the last assistant message_end
       # with actual text is the report (earlier ones belong to tool-use turns).
-      def final_response(jsonl)
+      module_function def final_response(jsonl)
         message = assistant_messages(jsonl).reverse_each.detect do |m|
           !response_text(m).empty?
         end
@@ -116,7 +114,7 @@ module AgentCouncil
       # Last provider-reported assistant error in the stream, if any. Pi exits 0
       # even when the provider rejects the request, so this is how such failures
       # are surfaced.
-      def error_message(jsonl)
+      module_function def error_message(jsonl)
         assistant_messages(jsonl).reverse_each.detect do |m|
           m['errorMessage']
         end&.fetch('errorMessage')

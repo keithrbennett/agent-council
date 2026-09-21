@@ -20,8 +20,8 @@
 #   -i, --ids     2 fields: provider, id (formatted as "provider/id")
 #   -h, --help    0 fields: prints help and exits
 
-require "json"
-require "open3"
+require 'json'
+require 'open3'
 
 PiModel = Data.define(
   :provider,
@@ -40,19 +40,19 @@ PiModel = Data.define(
   end
 end
 
-RPC_GET_MODELS = { "type" => "get_available_models" }
-RPC_REQUEST_ID = "list-models"
+RPC_GET_MODELS = { 'type' => 'get_available_models' }.freeze
+RPC_REQUEST_ID = 'list-models'
 
-HELP_OUTPUT    = ARGV.delete("-h")     || ARGV.delete("--help")
-JSON_OUTPUT    = ARGV.delete("--json") || ARGV.delete("-j")
-IDS_OUTPUT     = ARGV.delete("--ids")  || ARGV.delete("-i")
+HELP_OUTPUT    = ARGV.delete('-h')     || ARGV.delete('--help')
+JSON_OUTPUT    = ARGV.delete('--json') || ARGV.delete('-j')
+IDS_OUTPUT     = ARGV.delete('--ids')  || ARGV.delete('-i')
 
 def fetch_models
-  Open3.popen3("pi", "--mode", "rpc", "--no-session") do |stdin, stdout, _stderr, wait_thr|
-    send_rpc_command(stdin, RPC_GET_MODELS.merge("id" => RPC_REQUEST_ID))
+  Open3.popen3('pi', '--mode', 'rpc', '--no-session') do |stdin, stdout, _stderr, wait_thr|
+    send_rpc_command(stdin, RPC_GET_MODELS.merge('id' => RPC_REQUEST_ID))
 
     events = stdout.each_line(chomp: true).map { |line| JSON.parse(line) }
-    response = events.detect { |e| e["id"] == RPC_REQUEST_ID && e["type"] == "response" }
+    response = events.detect { |e| e['id'] == RPC_REQUEST_ID && e['type'] == 'response' }
     return event_to_models(response) if response
 
     raise "pi exited (#{wait_thr.value.exitstatus}) before responding"
@@ -66,8 +66,8 @@ def send_rpc_command(stdin, command)
 end
 
 def event_to_models(event)
-  if event["success"]
-    event.dig("data", "models").map { |m| PiModel.from_hash(m) }
+  if event['success']
+    event.dig('data', 'models').map { |m| PiModel.from_hash(m) }
   else
     raise "pi error: #{event['error']}"
   end
@@ -77,7 +77,7 @@ def help_text
   <<~HELP
     Usage: pi-models [options]
 
-    List provider/model pairs available to \`pi\`.
+    List provider/model pairs available to `pi`.
 
     Options:
       -t, --table     Formatted table (default)
@@ -97,13 +97,13 @@ def format_as_table(models)
   return "No models configured. Run `pi` interactively and add a provider first.\n" if models.empty?
 
   columns = [
-    { label: "PROVIDER",   value: ->(m) { m.provider },                 align: :left  },
-    { label: "MODEL ID",   value: ->(m) { m.id },                       align: :left  },
-    { label: "API",        value: ->(m) { m.api },                      align: :left  },
-    { label: "REASONING",  value: ->(m) { m.reasoning ? "yes" : "no" }, align: :left  },
-    { label: "CONTEXT",    value: ->(m) { m.context_window.to_s },      align: :right },
-    { label: "MAX TOKENS", value: ->(m) { m.max_tokens.to_s },          align: :right },
-    { label: "NAME",       value: ->(m) { m.name },                     align: :left  }
+    { label: 'PROVIDER',   value: ->(m) { m.provider },                 align: :left  },
+    { label: 'MODEL ID',   value: ->(m) { m.id },                       align: :left  },
+    { label: 'API',        value: ->(m) { m.api },                      align: :left  },
+    { label: 'REASONING',  value: ->(m) { m.reasoning ? 'yes' : 'no' }, align: :left  },
+    { label: 'CONTEXT',    value: ->(m) { m.context_window.to_s },      align: :right },
+    { label: 'MAX TOKENS', value: ->(m) { m.max_tokens.to_s },          align: :right },
+    { label: 'NAME',       value: ->(m) { m.name },                     align: :left  },
   ]
 
   widths = columns.map do |col|
@@ -112,11 +112,11 @@ def format_as_table(models)
   end
 
   format_string = columns.each_with_index.map do |col, i|
-    align_sign = col[:align] == :right ? "" : "-"
+    align_sign = col[:align] == :right ? '' : '-'
     "%#{align_sign}#{widths[i]}s"
-  end.join("  ") + "\n"
+  end.join('  ') + "\n"
 
-  separator = widths.map { |w| "-" * w }.join("  ") + "\n"
+  separator = widths.map { |w| '-' * w }.join('  ') + "\n"
   header = format(format_string, *columns.map { |c| c[:label] })
   body_lines = models.map { |m| format(format_string, *columns.map { |c| c[:value].(m) }) }
 
