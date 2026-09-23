@@ -505,6 +505,10 @@ The following are not part of this MVP:
 
 These are possible later enhancements, not prerequisites.
 
+Distinct from the above: `REVIEW_NOTES.md` tracks review findings that
+were considered and don't need to be re-raised — accepted risks and
+non-issues — rather than features not yet built.
+
 ---
 
 ## 20. What We Want to Learn
