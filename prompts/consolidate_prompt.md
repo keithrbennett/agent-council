@@ -36,6 +36,8 @@ verify a claim against the repository, do so (read-only) and state the
 result.
 
 Rules:
+- Begin directly with the "## Agent Consultants" section; do not add a
+  document title or top-level heading.
 - Attribute every claim to its source model(s); never drop attribution.
 - Do not invent findings that appear in no report.
 - Deduplicate, but do not dilute: keep concrete file and line references.

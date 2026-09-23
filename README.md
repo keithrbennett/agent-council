@@ -101,6 +101,7 @@ reports/
   2026-09-02/
     16-21-43/
       codebase-review.md                                     # copy of the prompt, as asked
+      analyst_format.md                                      # format addendum appended to the prompt
       ensemble.yml                                           # copy of the config used
       answers/                                               # analysts' reports
         2026-09-02-16-21-43_codebase-review_pi_openai-codex_gpt-5.4.md

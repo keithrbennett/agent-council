@@ -17,6 +17,7 @@ module AgentCouncil
   PROJECT_ROOT = File.expand_path('..', __dir__)
   DEFAULT_CONFIG = File.join(PROJECT_ROOT, 'examples/configs/consolidated.yml')
   CONSOLIDATE_PROMPT_PATH = File.join(PROJECT_ROOT, 'prompts', 'consolidate_prompt.md')
+  ANALYST_FORMAT_PATH = File.join(PROJECT_ROOT, 'prompts', 'analyst_format.md')
 
   # The harness every model runs through; the single swap point. A second
   # harness would be another module under AgentCouncil::Harnesses,
@@ -55,8 +56,9 @@ module AgentCouncil
 
   # Returns [label, ok, detail]; never raises.
   # filename: overrides the output name; meta: becomes YAML front matter;
-  # title: an H1 prepended to the report body.
-  module_function def run_agent(agent, prompt, run_dir, file_prefix, filename: nil, meta: {}, title: nil)
+  # header: markdown prepended to the report body. If the response begins
+  # with an H1 of its own, it is dropped to avoid a duplicated title.
+  module_function def run_agent(agent, prompt, run_dir, file_prefix, filename: nil, meta: {}, header: nil)
     provider = agent['provider'] if agent.is_a?(Hash)
     model = agent['model'] if agent.is_a?(Hash)
     label = "#{provider} / #{model}"
@@ -89,7 +91,10 @@ module AgentCouncil
       end
 
       filename ||= report_filename(file_prefix, provider, model)
-      text = "# #{title}\n\n#{text}" if title
+      if header
+        text = text.sub(/\A\s*#(?!#).+\n+/, '')
+        text = "#{header}\n#{text}"
+      end
       content = with_front_matter(meta.merge('harness' => HARNESS::NAME,
         'provider' => provider,
         'model' => model), text)
@@ -164,6 +169,12 @@ module AgentCouncil
     [fields, match.post_match]
   end
 
+  # The exact bytes piped to each analyst harness: the user's prompt
+  # verbatim, then the report-format addendum.
+  module_function def compose_analyst_prompt(prompt, addendum)
+    "#{prompt.chomp}\n\n#{addendum}"
+  end
+
   # The consolidator's substantive prompt: the instructions template, the
   # original prompt every analyst answered, and all reports with their
   # source labels.
@@ -193,6 +204,26 @@ module AgentCouncil
     "#{file_prefix}_consolidated_#{HARNESS::NAME}_#{sanitize(provider)}_#{sanitize(model)}.md"
   end
 
+  # Centered markdown table mirroring the report's front matter, placed
+  # under the report title; one row per consulted agent, when present.
+  module_function def byline_table(meta, provider, model)
+    fields = {
+      'role'      => meta['role'],
+      'query'     => meta['query'],
+      'harness'   => HARNESS::NAME,
+      'provider'  => provider,
+      'model'     => model,
+      'timestamp' => meta['timestamp'],
+    }
+    rows = fields.map { |field, value| "| #{field} | #{value} |" }
+    rows += Array(meta['sources']).map { |label| "| source | #{label} |" }
+    <<~TABLE
+      | Field     | Value |
+      | :-------- | :---------------------------- |
+      #{rows.join("\n")}
+    TABLE
+  end
+
   # Runs the configured consolidator model over a run's reports and writes
   # its report into the same run dir. Returns [label, ok, detail].
   module_function def run_consolidation(consolidator, original_prompt, run_dir, file_prefix, meta: {})
@@ -207,12 +238,12 @@ module AgentCouncil
     end
 
     prompt = consolidation_prompt(original_prompt, reports)
-    title = "Consolidated Report -- #{HARNESS::NAME}/#{provider}/#{model} -- #{meta['timestamp']}"
+    meta = meta.merge('role' => 'consolidator', 'sources' => reports.map(&:first))
+    header = "# Consolidated Report\n\n#{byline_table(meta, provider, model)}"
     label, ok, detail = run_agent(consolidator, prompt, run_dir, file_prefix,
       filename: consolidated_filename(file_prefix, provider, model),
-      title:    title,
-      meta:     meta.merge('role' => 'consolidator',
-        'sources' => reports.map(&:first)))
+      header:   header,
+      meta:     meta)
     ["#{label} (consolidator)", ok, detail]
   end
 
@@ -235,9 +266,14 @@ module AgentCouncil
     abort "Prompt file not found: #{prompt_path}" unless File.file?(prompt_path)
     abort "Config file not found: #{config_path}" unless File.file?(config_path)
 
-    # Read once; these exact bytes are piped to every harness invocation.
+    # Read once. Analysts receive the user's prompt verbatim, followed by
+    # the report-format addendum; the consolidator cites the prompt alone.
+    # Both input files are copied into the run dir, so the exact bytes sent
+    # to each harness are recoverable.
     prompt = File.read(prompt_path)
     abort "Prompt file is empty: #{prompt_path}" if prompt.empty?
+    abort "Analyst format addendum missing: #{ANALYST_FORMAT_PATH}" unless File.file?(ANALYST_FORMAT_PATH)
+    analyst_prompt = compose_analyst_prompt(prompt, File.read(ANALYST_FORMAT_PATH))
 
     config = YAML.load_file(config_path)
     agents = config['agents']
@@ -262,9 +298,11 @@ module AgentCouncil
     answers_dir = File.join(run_dir, 'answers')
     FileUtils.mkdir_p(answers_dir)
 
-    # Self-contained run: preserve the exact inputs — prompt and config.
-    # (The orchestrator is not copied: it is versioned in git.)
+    # Self-contained run: preserve the exact inputs — prompt, format
+    # addendum, and config. (The orchestrator is not copied: it is
+    # versioned in git.)
     FileUtils.cp(prompt_path, run_dir)
+    FileUtils.cp(ANALYST_FORMAT_PATH, run_dir)
     FileUtils.cp(config_path, run_dir)
 
     # Convenience pointer to the newest run: reports/latest
@@ -273,7 +311,11 @@ module AgentCouncil
     puts "Running #{agents.size} model(s) with prompt: #{prompt_path}"
     results = agents.map do |agent|
       Thread.new do
-        result = run_agent(agent, prompt, answers_dir, file_prefix, meta: report_meta)
+        provider = agent.is_a?(Hash) ? agent['provider'] : nil
+        model = agent.is_a?(Hash) ? agent['model'] : nil
+        result = run_agent(agent, analyst_prompt, answers_dir, file_prefix,
+          meta:   report_meta,
+          header: byline_table(report_meta, provider, model))
         label, ok, detail = result
         puts(ok ? "  ✓ #{label} finished" : "  ✗ #{label} failed: #{detail}")
         result

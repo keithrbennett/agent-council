@@ -160,6 +160,37 @@ RSpec.describe AgentCouncil do
     end
   end
 
+  describe '.byline_table' do
+    it 'mirrors the front matter fields, centered, one row per source' do
+      meta = {
+        'role'      => 'consolidator',
+        'query'     => 'check-prev-commits',
+        'timestamp' => '2026-09-03T19:23:57',
+        'sources'   => ['openai / gpt-x', 'zai / glm-5.3'],
+      }
+      expect(described_class.byline_table(meta, 'zai', 'glm-5.3')).to eq(
+        "| Field     | Value |\n" \
+        "| :-------- | :---------------------------- |\n" \
+        "| role | consolidator |\n" \
+        "| query | check-prev-commits |\n" \
+        "| harness | pi |\n" \
+        "| provider | zai |\n" \
+        "| model | glm-5.3 |\n" \
+        "| timestamp | 2026-09-03T19:23:57 |\n" \
+        "| source | openai / gpt-x |\n" \
+        "| source | zai / glm-5.3 |\n"
+      )
+    end
+
+    it 'omits source rows when there are none (analyst reports)' do
+      meta = { 'role' => 'analyst', 'query' => 'review', 'timestamp' => '2026-09-03T19:23:57' }
+      table = described_class.byline_table(meta, 'openai', 'gpt-x')
+      expect(table).not_to include('| source |')
+      expect(table).to include('| role | analyst |')
+      expect(table).to include('| model | gpt-x |')
+    end
+  end
+
   describe '.run_consolidation' do
     it 'fails cleanly when the config entry is malformed' do
       expect(described_class.run_consolidation({ 'provider' => 'zai' }, 'prompt', '/tmp/x', 'prefix'))
@@ -185,23 +216,44 @@ RSpec.describe AgentCouncil do
 
         captured = nil
         allow(described_class).to receive(:run_agent) do |_agent, _prompt, run_dir, _prefix,
-          filename:, meta:, title: nil|
-          captured = { run_dir: run_dir, filename: filename, meta: meta, title: title }
+          filename:, meta:, header: nil|
+          captured = { run_dir: run_dir, filename: filename, meta: meta, header: header }
           File.write(File.join(run_dir, filename), 'consolidated body')
           ['zai / glm-5.3', true, filename]
         end
 
         label, ok, = described_class.run_consolidation({ 'provider' => 'zai', 'model' => 'glm-5.3' },
-          'prompt', dir, 'prefix', meta: { 'timestamp' => '2026-09-03T19:23:57' })
+          'prompt', dir, 'prefix', meta: {
+            'query'     => 'check-prev-commits',
+            'timestamp' => '2026-09-03T19:23:57',
+          })
         expect(ok).to be(true)
         expect(label).to eq('zai / glm-5.3 (consolidator)')
         expect(captured[:run_dir]).to eq(dir)
         expect(captured[:filename]).to eq('prefix_consolidated_pi_zai_glm-5.3.md')
         expect(captured[:meta]['role']).to eq('consolidator')
-        expect(captured[:title]).to eq('Consolidated Report -- pi/zai/glm-5.3 -- 2026-09-03T19:23:57')
+        expect(captured[:header]).to eq(
+          "# Consolidated Report\n\n" \
+          "| Field     | Value |\n" \
+          "| :-------- | :---------------------------- |\n" \
+          "| role | consolidator |\n" \
+          "| query | check-prev-commits |\n" \
+          "| harness | pi |\n" \
+          "| provider | zai |\n" \
+          "| model | glm-5.3 |\n" \
+          "| timestamp | 2026-09-03T19:23:57 |\n" \
+          "| source | openai / gpt-x |\n"
+        )
         expect(File.read(File.join(dir, captured[:filename]))).to eq('consolidated body')
         expect(Dir.exist?(File.join(dir, 'consolidated'))).to be(false)
       end
+    end
+  end
+
+  describe '.compose_analyst_prompt' do
+    it 'appends the format addendum to the prompt verbatim, separated by a blank line' do
+      expect(described_class.compose_analyst_prompt("Analyze this.\n", 'FORMAT RULES'))
+        .to eq("Analyze this.\n\nFORMAT RULES")
     end
   end
 
