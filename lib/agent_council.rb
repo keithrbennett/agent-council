@@ -10,7 +10,9 @@ require 'yaml'
 require 'open3'
 require 'fileutils'
 require 'tmpdir'
+require 'optparse'
 
+require_relative 'agent_council/version'
 require_relative 'agent_council/harnesses/pi_harness'
 
 module AgentCouncil
@@ -255,12 +257,50 @@ module AgentCouncil
     path.delete_prefix(cwd + File::SEPARATOR)
   end
 
+  module_function def option_parser
+    OptionParser.new do |opts|
+      opts.banner = <<~BANNER
+        -------------------------------------------------------------------------------
+        Usage:                 agent-council [options] PROMPT_FILE [CONFIG_FILE]
+        Repository:            https://github.com/keithrbennett/agent-council
+        Documentation (Local): #{File.join(PROJECT_ROOT, 'README.md')}
+        Version:               #{VERSION}
+        -------------------------------------------------------------------------------
+
+        Arguments:
+          PROMPT_FILE   Path to the prompt file to send to every configured model (required)
+          CONFIG_FILE   Path to a YAML agent config (default: #{relative_path(DEFAULT_CONFIG)})
+
+        Options:
+      BANNER
+
+      opts.on('-h', '--help', 'Show this help and exit') do
+        puts opts
+        exit 0
+      end
+
+      opts.separator ''
+      opts.separator 'Examples:'
+      opts.separator '  agent-council my-analysis-prompt.md'
+      opts.separator '  agent-council my-analysis-prompt.md other-config.yml'
+    end
+  end
+
   module_function def main(argv)
+    parser = option_parser
+    begin
+      argv = parser.parse(argv)
+    rescue OptionParser::ParseError => e
+      warn e.message
+      warn parser
+      exit 1
+    end
+
     prompt_path = argv[0]
     config_path = argv[1] || DEFAULT_CONFIG
 
     if prompt_path.nil? || argv.length > 2
-      warn 'Usage: agent-council PROMPT_FILE [CONFIG_FILE]'
+      warn parser
       exit 1
     end
     abort "Prompt file not found: #{prompt_path}" unless File.file?(prompt_path)

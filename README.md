@@ -57,6 +57,7 @@ want `reports/` in that project's `.gitignore`). If that directory has an
 ```bash
 ./exe/agent-council my-analysis-prompt.md                    # uses examples/configs/consolidated.yml
 ./exe/agent-council my-analysis-prompt.md other-config.yml  # alternate config
+./exe/agent-council -h                                       # usage and options
 rspec                                                        # unit tests (no model calls)
 ```
 
