@@ -257,6 +257,12 @@ module AgentCouncil
     path.delete_prefix(cwd + File::SEPARATOR)
   end
 
+  # True if a config entry (agent or consolidator) has the required string
+  # 'provider' and 'model' fields.
+  module_function def valid_agent_entry?(entry)
+    entry.is_a?(Hash) && entry['provider'].is_a?(String) && entry['model'].is_a?(String)
+  end
+
   module_function def option_parser
     OptionParser.new do |opts|
       opts.banner = <<~BANNER
@@ -315,12 +321,24 @@ module AgentCouncil
     abort "Analyst format addendum missing: #{ANALYST_FORMAT_PATH}" unless File.file?(ANALYST_FORMAT_PATH)
     analyst_prompt = compose_analyst_prompt(prompt, File.read(ANALYST_FORMAT_PATH))
 
-    config = YAML.load_file(config_path)
+    config =
+      begin
+        YAML.safe_load_file(config_path)
+      rescue Psych::Exception => e
+        abort "Invalid YAML in #{config_path}: #{e.message}"
+      end
+    abort "Config file must be a YAML mapping: #{config_path}" unless config.is_a?(Hash)
+
     agents = config['agents']
     abort "No agents defined in #{config_path}" unless agents.is_a?(Array) && !agents.empty?
+    unless agents.all? { |a| valid_agent_entry?(a) }
+      abort "Each agent in #{config_path} needs string 'provider' and 'model' fields"
+    end
+
     consolidator = config['consolidator']
-    if consolidator && !File.file?(CONSOLIDATE_PROMPT_PATH)
-      abort "Consolidator configured but template missing: #{CONSOLIDATE_PROMPT_PATH}"
+    if consolidator
+      abort "Consolidator in #{config_path} needs string 'provider' and 'model' fields" unless valid_agent_entry?(consolidator)
+      abort "Consolidator configured but template missing: #{CONSOLIDATE_PROMPT_PATH}" unless File.file?(CONSOLIDATE_PROMPT_PATH)
     end
 
     # One run dir per invocation, day-bucketed so reports/ stays navigable at
