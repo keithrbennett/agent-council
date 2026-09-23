@@ -88,6 +88,13 @@ RSpec.describe AgentCouncil do
       expect(described_class.report_filename('2026-09-03-19-23-57_prompt', 'zai', 'glm-5.3'))
         .to eq('2026-09-03-19-23-57_prompt_pi_zai_glm-5.3.md')
     end
+
+    it 'inserts a zero-padded agent index before the harness, disambiguating repeated provider/model pairs' do
+      expect(described_class.report_filename('2026-09-03-19-23-57_prompt', 'zai', 'glm-5.3', index: 1))
+        .to eq('2026-09-03-19-23-57_prompt_01_pi_zai_glm-5.3.md')
+      expect(described_class.report_filename('2026-09-03-19-23-57_prompt', 'zai', 'glm-5.3', index: 2))
+        .to eq('2026-09-03-19-23-57_prompt_02_pi_zai_glm-5.3.md')
+    end
   end
 
   describe '.collect_reports' do
@@ -114,6 +121,18 @@ RSpec.describe AgentCouncil do
       Dir.mktmpdir do |dir|
         File.write(File.join(dir, 'a.md'), "---\nprovider: [oops\n---\n\nbody")
         expect(described_class.collect_reports(dir)).to eq([])
+      end
+    end
+
+    it 'prefixes the label with the agent index when present, distinguishing repeated provider/model pairs' do
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, 'a_01_pi_zai_glm-5.3.md'),
+          "---\nprovider: zai\nmodel: glm-5.3\nagent_index: 1\n---\n\nbody A")
+        File.write(File.join(dir, 'b_02_pi_zai_glm-5.3.md'),
+          "---\nprovider: zai\nmodel: glm-5.3\nagent_index: 2\n---\n\nbody B")
+
+        reports = described_class.collect_reports(dir)
+        expect(reports).to eq([['#1 zai / glm-5.3', 'body A'], ['#2 zai / glm-5.3', 'body B']])
       end
     end
   end
@@ -188,6 +207,19 @@ RSpec.describe AgentCouncil do
       expect(table).not_to include('| source |')
       expect(table).to include('| role | analyst |')
       expect(table).to include('| model | gpt-x |')
+    end
+
+    it 'adds an agent row when an agent_index is present' do
+      meta = { 'role' => 'analyst', 'query' => 'review', 'timestamp' => '2026-09-03T19:23:57',
+        'agent_index' => 2 }
+      table = described_class.byline_table(meta, 'openai', 'gpt-x')
+      expect(table).to include('| agent | #2 |')
+    end
+
+    it 'omits the agent row when there is no agent_index (consolidator)' do
+      meta = { 'role' => 'consolidator', 'query' => 'review', 'timestamp' => '2026-09-03T19:23:57' }
+      table = described_class.byline_table(meta, 'openai', 'gpt-x')
+      expect(table).not_to include('| agent |')
     end
   end
 

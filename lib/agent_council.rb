@@ -49,21 +49,34 @@ module AgentCouncil
     slug.empty? ? 'prompt' : slug
   end
 
-  # <run_stamp>_<query-slug>_<harness>_<provider>_<model>.md — the full
-  # timestamp and slug live in the filename so reports stay self-describing
-  # when copied out of the reports tree.
-  module_function def report_filename(file_prefix, provider, model)
-    "#{file_prefix}_#{HARNESS::NAME}_#{sanitize(provider)}_#{sanitize(model)}.md"
+  # <run_stamp>_<query-slug>[_<index>]_<harness>_<provider>_<model>.md — the
+  # full timestamp and slug live in the filename so reports stay
+  # self-describing when copied out of the reports tree. index (an agent's
+  # 1-based position in the config's agent list) disambiguates repeated
+  # provider/model entries — e.g. the same model configured twice to spread
+  # load across a rate-limited subscription — without depending on it being
+  # unique. It sits before the harness so that once more than one harness
+  # exists, filenames still sort in config/agent order first, rather than
+  # grouping by harness.
+  module_function def report_filename(file_prefix, provider, model, index: nil)
+    parts = [file_prefix]
+    parts << format('%02d', index) if index
+    parts << HARNESS::NAME
+    parts += [sanitize(provider), sanitize(model)]
+    "#{parts.join('_')}.md"
   end
 
   # Returns [label, ok, detail]; never raises.
+  # index: the agent's 1-based position in the config's agent list, used to
+  # disambiguate repeated provider/model entries in the filename and label;
   # filename: overrides the output name; meta: becomes YAML front matter;
   # header: markdown prepended to the report body. If the response begins
   # with an H1 of its own, it is dropped to avoid a duplicated title.
-  module_function def run_agent(agent, prompt, run_dir, file_prefix, filename: nil, meta: {}, header: nil)
+  module_function def run_agent(agent, prompt, run_dir, file_prefix, index: nil, filename: nil, meta: {},
+    header: nil)
     provider = agent['provider'] if agent.is_a?(Hash)
     model = agent['model'] if agent.is_a?(Hash)
-    label = "#{provider} / #{model}"
+    label = index ? "##{index} #{provider} / #{model}" : "#{provider} / #{model}"
     return [label, false, "config entry needs 'provider' and 'model'"] if provider.nil? || model.nil?
 
     Dir.mktmpdir('agent-council-') do |scratch_dir|
@@ -92,7 +105,7 @@ module AgentCouncil
         return [label, false, "#{HARNESS::NAME} exited 0 but #{detail}"]
       end
 
-      filename ||= report_filename(file_prefix, provider, model)
+      filename ||= report_filename(file_prefix, provider, model, index: index)
       if header
         text = text.sub(/\A\s*#(?!#).+\n+/, '')
         text = "#{header}\n#{text}"
@@ -127,7 +140,9 @@ module AgentCouncil
       fields, body = parse_front_matter(File.read(path))
       next unless fields && fields['provider'] && fields['model']
 
-      ["#{fields['provider']} / #{fields['model']}", body]
+      index = fields['agent_index']
+      plain = "#{fields['provider']} / #{fields['model']}"
+      [index ? "##{index} #{plain}" : plain, body]
     end
   end
 
@@ -211,12 +226,13 @@ module AgentCouncil
   module_function def byline_table(meta, provider, model)
     fields = {
       'role'      => meta['role'],
+      'agent'     => (meta['agent_index'] ? "##{meta['agent_index']}" : nil),
       'query'     => meta['query'],
       'harness'   => HARNESS::NAME,
       'provider'  => provider,
       'model'     => model,
       'timestamp' => meta['timestamp'],
-    }
+    }.compact
     rows = fields.map { |field, value| "| #{field} | #{value} |" }
     rows += Array(meta['sources']).map { |label| "| source | #{label} |" }
     <<~TABLE
@@ -367,13 +383,16 @@ module AgentCouncil
     update_latest_symlink(File.join(day, run_name))
 
     puts "Running #{agents.size} model(s) with prompt: #{prompt_path}"
-    results = agents.map do |agent|
+    results = agents.each_with_index.map do |agent, i|
+      index = i + 1
       Thread.new do
         provider = agent.is_a?(Hash) ? agent['provider'] : nil
         model = agent.is_a?(Hash) ? agent['model'] : nil
+        meta = report_meta.merge('agent_index' => index)
         result = run_agent(agent, analyst_prompt, answers_dir, file_prefix,
-          meta:   report_meta,
-          header: byline_table(report_meta, provider, model))
+          index:  index,
+          meta:   meta,
+          header: byline_table(meta, provider, model))
         label, ok, detail = result
         puts(ok ? "  ✓ #{label} finished" : "  ✗ #{label} failed: #{detail}")
         result

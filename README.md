@@ -106,10 +106,10 @@ reports/
       analyst_format.md                                      # format addendum appended to the prompt
       consolidated.yml                                       # copy of the config used
       answers/                                               # analysts' reports
-        2026-09-02-16-21-43_codebase-review_pi_openai-codex_gpt-5.4.md
-        2026-09-02-16-21-43_codebase-review_pi_github-copilot_claude-sonnet-5.md
-        2026-09-02-16-21-43_codebase-review_pi_opencode-go_kimi-k2.6.md
-        2026-09-02-16-21-43_codebase-review_pi_zai_glm-5.3.md
+        2026-09-02-16-21-43_codebase-review_01_pi_openai-codex_gpt-5.4.md
+        2026-09-02-16-21-43_codebase-review_02_pi_github-copilot_claude-sonnet-5.md
+        2026-09-02-16-21-43_codebase-review_03_pi_opencode-go_kimi-k2.6.md
+        2026-09-02-16-21-43_codebase-review_04_pi_zai_glm-5.3.md
       2026-09-02-16-21-43_codebase-review_consolidated_pi_zai_glm-5.3.md  # if consolidator configured
     18-05-11/
       ...
@@ -123,11 +123,16 @@ reports/
   time, second resolution — runs never overwrite each other). Pure time,
   nothing else.
 - **Report filenames** carry everything else:
-  `<yyyy-mm-dd>-<hh-mm-ss>_<query-slug>_pi_<provider>_<model>.md`, so a
-  report stays self-describing when you copy or attach it outside the tree.
-  The query slug comes from the prompt file name, with either `-prompt` or
-  `_prompt` suffix stripped (`codebase-review-prompt.md` and
-  `codebase-review_prompt.md` both become `codebase-review`).
+  `<yyyy-mm-dd>-<hh-mm-ss>_<query-slug>_<agent-number>_pi_<provider>_<model>.md`,
+  so a report stays self-describing when you copy or attach it outside the
+  tree. `<agent-number>` is the agent's 1-based position in the config's
+  `agents` list (`01`, `02`, ...) — it gives every report a stable, unique
+  handle even if the same provider/model is configured more than once (e.g.
+  to spread load across a rate-limited subscription), and it sits before
+  the harness so filenames still sort in agent order once more than one
+  harness is in play. The query slug comes from the prompt file name, with
+  either `-prompt` or `_prompt` suffix stripped (`codebase-review-prompt.md`
+  and `codebase-review_prompt.md` both become `codebase-review`).
 - **Day buckets** keep `reports/` itself navigable when you have hundreds
   of runs.
 - **`reports/latest`** is a relative symlink to the newest run, so the
