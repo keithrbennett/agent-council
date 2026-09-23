@@ -8,8 +8,8 @@
 # Usage:
 #   agent-council PROMPT_FILE [CONFIG_FILE]
 #
-# CONFIG_FILE defaults to ensemble.yml at the repository root. Run FROM the
-# repository you want analyzed: the harness analyzes its own cwd.
+# CONFIG_FILE defaults to examples/configs/consolidated.yml in this repo.
+# Run FROM the repository you want analyzed: the harness analyzes its own cwd.
 
 require_relative '../lib/agent_council'
 

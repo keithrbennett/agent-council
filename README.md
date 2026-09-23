@@ -26,7 +26,8 @@ pi --list-models kimi            # fuzzy search
 pi auth check --provider zai     # is this provider authenticated?
 ```
 
-Edit `ensemble.yml` to choose the ensemble. Each entry becomes one
+Edit the config (default: `examples/configs/consolidated.yml`) to choose
+the ensemble. Each entry becomes one
 `pi --provider <provider> --model <model>` invocation. No Ruby changes are
 needed to add, remove, or swap models.
 
@@ -54,7 +55,7 @@ want `reports/` in that project's `.gitignore`). If that directory has an
 `untracked/` subdirectory, reports go in `untracked/reports` instead.
 
 ```bash
-./exe/agent-council my-analysis-prompt.md                    # uses ensemble.yml at the repo root
+./exe/agent-council my-analysis-prompt.md                    # uses examples/configs/consolidated.yml
 ./exe/agent-council my-analysis-prompt.md other-config.yml  # alternate config
 rspec                                                        # unit tests (no model calls)
 ```
@@ -102,7 +103,7 @@ reports/
     16-21-43/
       codebase-review.md                                     # copy of the prompt, as asked
       analyst_format.md                                      # format addendum appended to the prompt
-      ensemble.yml                                           # copy of the config used
+      consolidated.yml                                       # copy of the config used
       answers/                                               # analysts' reports
         2026-09-02-16-21-43_codebase-review_pi_openai-codex_gpt-5.4.md
         2026-09-02-16-21-43_codebase-review_pi_github-copilot_claude-sonnet-5.md
@@ -141,7 +142,7 @@ reports/
   verbatim final message. Unquoted ISO timestamps parse cleanly as `Time`
   objects.
 - The copied prompt and config make every run reproducible after the fact.
-  (An alternate config keeps its own filename, e.g. `ensemble.smoke.yml`.)
+  (An alternate config keeps its own filename, e.g. `single.yml`.)
   The orchestrator itself is deliberately not copied: it is versioned in
   git and may grow into multiple files.
 

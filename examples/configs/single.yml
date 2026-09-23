@@ -1,7 +1,7 @@
 # Minimal smoke-test config: one inexpensive model, for checking that your
 # setup works (auth, invocation, report writing) without a full ensemble run:
 #
-#   ruby ensemble.rb examples/prompts/smoke-test_prompt.md examples/configs/single.yml
+#   ruby exe/agent-council examples/prompts/smoke-test_prompt.md examples/configs/single.yml
 agents:
   - provider: opencode-go # OPENCODE_API_KEY
     model: kimi-k2.6

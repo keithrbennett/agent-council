@@ -262,7 +262,7 @@ reports/
   2026-09-02/
     16-21-43/
       codebase-review.md            # copy of the prompt, as asked
-      ensemble.yml                  # copy of the config used
+      consolidated.yml              # copy of the config used
       answers/                      # analysts' reports
         2026-09-02-16-21-43_codebase-review_pi_anthropic_claude-x.md
         2026-09-02-16-21-43_codebase-review_pi_openai_gpt-x.md
@@ -382,7 +382,6 @@ DESIGN.md
 .gitignore
 exe/
   agent-council          # executable entry point; all code lives in lib/
-ensemble.yml
 lib/
   agent_council.rb       # harness-agnostic orchestration (AgentCouncil)
   agent_council/
@@ -409,7 +408,7 @@ reports/                 # created on demand; gitignored
 ```
 
 Do not create gem infrastructure yet. A flat `lib/` now holds the code;
-do not introduce deeper namespaces (`lib/ensemble/services/...`) unless
+do not introduce deeper namespaces (`lib/agent_council/services/...`) unless
 the experiment actually grows enough to require them.
 
 A clean, disposable 100–300 line Ruby implementation is preferable to a speculative framework.
@@ -460,7 +459,7 @@ reports/
   2026-09-02/
     16-21-43/
       codebase-review.md
-      ensemble.yml
+      consolidated.yml
       2026-09-02-16-21-43_codebase-review_pi_anthropic_claude-x.md
       2026-09-02-16-21-43_codebase-review_pi_openai_gpt-x.md
       2026-09-02-16-21-43_codebase-review_pi_opencode-go_kimi-x.md
