@@ -41,18 +41,25 @@ module AgentCouncil
     File.join(base, 'reports')
   end
 
-  # Name of the config file picked up from the current working directory
-  # when no CONFIG_FILE argument is given.
+  # Config file names picked up when no CONFIG_FILE argument is given: a
+  # visible per-project file in the current working directory, and a hidden
+  # (dotfile) per-user file in the home directory.
   CWD_CONFIG_NAME = 'agent-council.yml'
+  HOME_CONFIG_NAME = '.agent-council.yml'
 
   # The explicit CONFIG_FILE argument if given, else ./agent-council.yml if
-  # it exists; nil when neither applies. Only the cwd is checked (no upward
-  # walk), consistent with reports_dir.
+  # it exists, else ~/.agent-council.yml if it exists; nil when none apply.
+  # Only the cwd is checked (no upward walk), consistent with reports_dir.
   module_function def resolve_config_path(explicit)
     return explicit if explicit
 
-    cwd_config = File.join(Dir.pwd, CWD_CONFIG_NAME)
-    cwd_config if File.file?(cwd_config)
+    candidates = [File.join(Dir.pwd, CWD_CONFIG_NAME)]
+    begin
+      candidates << File.join(Dir.home, HOME_CONFIG_NAME)
+    rescue ArgumentError
+      # No resolvable home directory; only the cwd candidate applies.
+    end
+    candidates.find { |path| File.file?(path) }
   end
 
   # Make an identifier safe for a filename component.
@@ -310,7 +317,7 @@ module AgentCouncil
 
         Arguments:
           PROMPT_FILE   Path to the prompt file to send to every configured model (required)
-          CONFIG_FILE   Path to a YAML agent config (default: ./#{CWD_CONFIG_NAME} if present)
+          CONFIG_FILE   Path to a YAML agent config (default: ./#{CWD_CONFIG_NAME}, else ~/#{HOME_CONFIG_NAME}, if present)
 
         Options:
       BANNER
@@ -348,7 +355,7 @@ module AgentCouncil
     config_path = resolve_config_path(argv[1])
     unless config_path
       abort <<~MESSAGE
-        No config file given and no #{CWD_CONFIG_NAME} found in the current directory.
+        No config file given, and neither ./#{CWD_CONFIG_NAME} nor ~/#{HOME_CONFIG_NAME} exists.
         Pass a config path: agent-council PROMPT_FILE CONFIG_FILE
         See examples/configs/ in the repository for sample configs.
       MESSAGE

@@ -82,11 +82,26 @@ RSpec.describe AgentCouncil do
 
   describe '.resolve_config_path' do
     around do |example|
-      Dir.mktmpdir { |dir| Dir.chdir(dir) { example.run } }
+      Dir.mktmpdir do |dir|
+        home = File.join(dir, 'home')
+        work = File.join(dir, 'work')
+        Dir.mkdir(home)
+        Dir.mkdir(work)
+        original_home = ENV.fetch('HOME', nil)
+        ENV['HOME'] = home
+        begin
+          Dir.chdir(work) { example.run }
+        ensure
+          ENV['HOME'] = original_home
+        end
+      end
     end
 
-    it 'returns the explicit path when given, even if ./agent-council.yml exists' do
+    let(:home_config) { File.join(Dir.home, '.agent-council.yml') }
+
+    it 'returns the explicit path when given, even if default configs exist' do
       File.write('agent-council.yml', '')
+      File.write(home_config, '')
       expect(described_class.resolve_config_path('other.yml')).to eq('other.yml')
     end
 
@@ -95,7 +110,18 @@ RSpec.describe AgentCouncil do
       expect(described_class.resolve_config_path(nil)).to eq(File.join(Dir.pwd, 'agent-council.yml'))
     end
 
-    it 'is nil when no path is given and ./agent-council.yml is absent' do
+    it 'prefers ./agent-council.yml over ~/.agent-council.yml' do
+      File.write('agent-council.yml', '')
+      File.write(home_config, '')
+      expect(described_class.resolve_config_path(nil)).to eq(File.join(Dir.pwd, 'agent-council.yml'))
+    end
+
+    it 'falls back to ~/.agent-council.yml when the cwd has no config' do
+      File.write(home_config, '')
+      expect(described_class.resolve_config_path(nil)).to eq(home_config)
+    end
+
+    it 'is nil when no path is given and no default config exists' do
       expect(described_class.resolve_config_path(nil)).to be_nil
     end
 
