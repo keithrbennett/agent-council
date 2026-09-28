@@ -408,8 +408,12 @@ module AgentCouncil
 
     consolidator = config['consolidator']
     if consolidator
-      abort "Consolidator in #{config_path} needs string 'provider' and 'model' fields" unless valid_agent_entry?(consolidator)
-      abort "Consolidator configured but template missing: #{CONSOLIDATE_PROMPT_PATH}" unless File.file?(CONSOLIDATE_PROMPT_PATH)
+      unless valid_agent_entry?(consolidator)
+        abort "Consolidator in #{config_path} needs string 'provider' and 'model' fields"
+      end
+      unless File.file?(CONSOLIDATE_PROMPT_PATH)
+        abort "Consolidator configured but template missing: #{CONSOLIDATE_PROMPT_PATH}"
+      end
     end
 
     # One run dir per invocation, day-bucketed so reports/ stays navigable at

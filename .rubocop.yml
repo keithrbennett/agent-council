@@ -19,6 +19,10 @@ Naming/MethodName:
   Exclude:
     - exe/pi-models
 
+Naming/MethodParameterName:
+  Exclude:
+    - lib/agent_council.rb
+
 RSpec/DescribeMethod:
   Enabled: false
 

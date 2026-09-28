@@ -6,3 +6,4 @@ tmp/
 *.log
 untracked/
 agent-council.yml
+Gemfile.lock
