@@ -50,6 +50,13 @@ RSpec.describe AgentCouncil::PiModels do
       expect(model.max_tokens).to eq(8_192)
     end
 
+    it 'raises ArgumentError naming the missing fields' do
+      raw = raw_model.except('id', 'maxTokens')
+
+      expect { described_class.from_hash(raw) }
+        .to raise_error(ArgumentError, 'missing model field(s): id, maxTokens')
+    end
+
     it 'serializes using pi JSON field names' do
       expect(described_class.from_hash(raw_model).to_h).to eq(raw_model)
     end

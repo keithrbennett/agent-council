@@ -18,7 +18,10 @@ module AgentCouncil
 
     Model = Data.define(*FIELD_NAMES.keys) do
       def self.from_hash(raw)
-        new(**FIELD_NAMES.to_h { |member, field| [member, raw.fetch(field)] })
+        missing = FIELD_NAMES.values - raw.keys
+        raise ArgumentError, "missing model field(s): #{missing.join(', ')}" unless missing.empty?
+
+        new(**FIELD_NAMES.to_h { |member, field| [member, raw[field]] })
       end
 
       # Keep pi's JSON field names in --json output while exposing Ruby-style
