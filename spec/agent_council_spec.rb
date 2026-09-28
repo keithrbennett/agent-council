@@ -81,23 +81,22 @@ RSpec.describe AgentCouncil do
   end
 
   describe '.resolve_config_path' do
+    let(:tmp_root) { Dir.mktmpdir }
+    let(:home) { File.join(tmp_root, 'home') }
+    let(:work) { File.join(tmp_root, 'work') }
+    let(:home_config) { File.join(home, '.agent-council.yml') }
+
     around do |example|
-      Dir.mktmpdir do |dir|
-        home = File.join(dir, 'home')
-        work = File.join(dir, 'work')
-        Dir.mkdir(home)
-        Dir.mkdir(work)
-        original_home = ENV.fetch('HOME', nil)
-        ENV['HOME'] = home
-        begin
-          Dir.chdir(work) { example.run }
-        ensure
-          ENV['HOME'] = original_home
-        end
-      end
+      Dir.mkdir(home)
+      Dir.mkdir(work)
+      Dir.chdir(work) { example.run }
+    ensure
+      FileUtils.remove_entry(tmp_root)
     end
 
-    let(:home_config) { File.join(Dir.home, '.agent-council.yml') }
+    # Stub Dir.home rather than mutating ENV['HOME']: Dir.home's env-var
+    # precedence differs by platform (e.g. USERPROFILE on Windows).
+    before { allow(Dir).to receive(:home).and_return(home) }
 
     it 'returns the explicit path when given, even if default configs exist' do
       File.write('agent-council.yml', '')
