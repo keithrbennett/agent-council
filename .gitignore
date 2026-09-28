@@ -5,3 +5,4 @@ tmp/
 *.gem
 *.log
 untracked/
+agent-council.yml

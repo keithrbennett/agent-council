@@ -8,7 +8,9 @@
 # Usage:
 #   agent-council PROMPT_FILE [CONFIG_FILE]
 #
-# CONFIG_FILE defaults to examples/configs/consolidated.yml in this repo.
+# CONFIG_FILE defaults to ./agent-council.yml in the current directory, if
+# that file exists (no upward directory search); otherwise it is required.
+# See examples/configs/ in the repository for sample configs.
 # Run FROM the repository you want analyzed: the harness analyzes its own cwd.
 
 require_relative '../lib/agent_council'

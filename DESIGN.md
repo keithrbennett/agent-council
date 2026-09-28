@@ -387,15 +387,15 @@ lib/
   agent_council/
     harnesses/
       pi_harness.rb      # pi-specific behavior (AgentCouncil::Harnesses::PiHarness)
+    templates/           # runtime data files (resolved via __dir__, shipped in the gem)
+      consolidate_prompt.md  # instructions template for the consolidator
+      analyst_format.md      # report-format addendum for analysts
 spec/
   agent_council_spec.rb       # RSpec; harness-agnostic logic
   agent_council/
     pi_harness_spec.rb        # RSpec; pi invocation + event-stream parsing
 
-prompts/
-  consolidate_prompt.md  # instructions template for the consolidator
-
-examples/
+examples/                # pure, non-runtime samples (not shipped in the gem)
   prompts/
     smoke-test_prompt.md
     code-base-state_prompt.md
@@ -449,7 +449,7 @@ The experiment is successful when we can:
 Example:
 
 ```bash
-./exe/agent-council prompts/codebase-review.md
+./exe/agent-council examples/prompts/codebase-review.md
 ```
 
 produces:

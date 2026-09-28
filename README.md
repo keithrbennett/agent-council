@@ -26,8 +26,10 @@ pi --list-models kimi            # fuzzy search
 pi auth check --provider zai     # is this provider authenticated?
 ```
 
-Edit the config (default: `examples/configs/consolidated.yml`) to choose
-the ensemble. Each entry becomes one
+Edit the config to choose the ensemble. The config is the optional second
+argument; if omitted, `./agent-council.yml` in the current directory is used
+(only the current directory is checked), and it is an error if neither
+exists. Start from a sample in `examples/configs/`. Each entry becomes one
 `pi --provider <provider> --model <model>` invocation. No Ruby changes are
 needed to add, remove, or swap models.
 
@@ -35,8 +37,8 @@ An optional top-level `consolidator:` entry (provider + model, same
 shape as an agent) runs after all agents finish: that model receives the
 original prompt plus all of the run's reports — each labeled with its
 source model — plus the instructions in
-`prompts/consolidate_prompt.md` (edit
-this file to tune the consolidation), and writes a
+`lib/agent_council/templates/consolidate_prompt.md` (edit
+this file in a repo checkout to tune the consolidation), and writes a
 `<stamp>_<slug>_consolidated_pi_<provider>_<model>.md` report into the
 same run dir. Remove the key to skip consolidation. A consolidation
 failure is reported but does not affect the run's exit status.
@@ -55,25 +57,27 @@ want `reports/` in that project's `.gitignore`). If that directory has an
 `untracked/` subdirectory, reports go in `untracked/reports` instead.
 
 ```bash
-./exe/agent-council my-analysis-prompt.md                    # uses examples/configs/consolidated.yml
+./exe/agent-council my-analysis-prompt.md                    # requires ./agent-council.yml to exist
 ./exe/agent-council my-analysis-prompt.md other-config.yml  # alternate config
 ./exe/agent-council -h                                       # usage and options
 rspec                                                        # unit tests (no model calls)
 ```
 
-(Paths are resolved from the working directory except the default config,
-which lives at the root of this repo.)
+(Paths are resolved from the working directory, including the default
+`./agent-council.yml`.)
 
 `exe/agent-council` has a shebang and is executable, so `./exe/agent-council ...`
 (or an absolute path) works identically to `ruby exe/agent-council ...`.
 
-`examples/` holds ready-to-run prompts and configs:
+`examples/` holds sample prompts and configs — pure samples, not used at
+runtime and not shipped in the gem:
 
 - `examples/prompts/code-base-state_prompt.md` — a real codebase-analysis
-  prompt; with the default config this is the full ensemble:
+  prompt; with `examples/configs/consolidated.yml` this is the full
+  ensemble:
 
 ```bash
-./exe/agent-council examples/prompts/code-base-state_prompt.md
+./exe/agent-council examples/prompts/code-base-state_prompt.md examples/configs/consolidated.yml
 ```
 
 - `examples/prompts/smoke-test_prompt.md` +

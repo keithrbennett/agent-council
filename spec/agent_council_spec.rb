@@ -80,6 +80,32 @@ RSpec.describe AgentCouncil do
     end
   end
 
+  describe '.resolve_config_path' do
+    around do |example|
+      Dir.mktmpdir { |dir| Dir.chdir(dir) { example.run } }
+    end
+
+    it 'returns the explicit path when given, even if ./agent-council.yml exists' do
+      File.write('agent-council.yml', '')
+      expect(described_class.resolve_config_path('other.yml')).to eq('other.yml')
+    end
+
+    it 'falls back to ./agent-council.yml when no path is given' do
+      File.write('agent-council.yml', '')
+      expect(described_class.resolve_config_path(nil)).to eq(File.join(Dir.pwd, 'agent-council.yml'))
+    end
+
+    it 'is nil when no path is given and ./agent-council.yml is absent' do
+      expect(described_class.resolve_config_path(nil)).to be_nil
+    end
+
+    it 'does not look in parent directories' do
+      File.write('agent-council.yml', '')
+      Dir.mkdir('sub')
+      Dir.chdir('sub') { expect(described_class.resolve_config_path(nil)).to be_nil }
+    end
+  end
+
   describe '.report_filename' do
     it 'carries the full timestamp and query slug, then harness/provider/model' do
       expect(described_class.report_filename('2026-09-03-19-23-57_code-base-state', 'opencode-go',

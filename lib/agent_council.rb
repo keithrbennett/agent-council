@@ -16,10 +16,15 @@ require_relative 'agent_council/version'
 require_relative 'agent_council/harnesses/pi_harness'
 
 module AgentCouncil
+  # Runtime data files (prompt templates) ship inside lib/, resolved
+  # relative to this file, so the gem is self-contained: what gets loaded at runtime never depends on which
+  # files happen to survive the gemspec's file list. PROJECT_ROOT remains
+  # only for documentation references (e.g. the local README path in help
+  # text), not for runtime data.
   PROJECT_ROOT = File.expand_path('..', __dir__)
-  DEFAULT_CONFIG = File.join(PROJECT_ROOT, 'examples/configs/consolidated.yml')
-  CONSOLIDATE_PROMPT_PATH = File.join(PROJECT_ROOT, 'prompts', 'consolidate_prompt.md')
-  ANALYST_FORMAT_PATH = File.join(PROJECT_ROOT, 'prompts', 'analyst_format.md')
+  TEMPLATES_DIR = File.join(__dir__, 'agent_council', 'templates')
+  CONSOLIDATE_PROMPT_PATH = File.join(TEMPLATES_DIR, 'consolidate_prompt.md')
+  ANALYST_FORMAT_PATH = File.join(TEMPLATES_DIR, 'analyst_format.md')
 
   # The harness every model runs through; the single swap point. A second
   # harness would be another module under AgentCouncil::Harnesses,
@@ -34,6 +39,20 @@ module AgentCouncil
   module_function def reports_dir
     base = File.directory?(File.join(Dir.pwd, 'untracked')) ? File.join(Dir.pwd, 'untracked') : Dir.pwd
     File.join(base, 'reports')
+  end
+
+  # Name of the config file picked up from the current working directory
+  # when no CONFIG_FILE argument is given.
+  CWD_CONFIG_NAME = 'agent-council.yml'
+
+  # The explicit CONFIG_FILE argument if given, else ./agent-council.yml if
+  # it exists; nil when neither applies. Only the cwd is checked (no upward
+  # walk), consistent with reports_dir.
+  module_function def resolve_config_path(explicit)
+    return explicit if explicit
+
+    cwd_config = File.join(Dir.pwd, CWD_CONFIG_NAME)
+    cwd_config if File.file?(cwd_config)
   end
 
   # Make an identifier safe for a filename component.
@@ -291,7 +310,7 @@ module AgentCouncil
 
         Arguments:
           PROMPT_FILE   Path to the prompt file to send to every configured model (required)
-          CONFIG_FILE   Path to a YAML agent config (default: #{relative_path(DEFAULT_CONFIG)})
+          CONFIG_FILE   Path to a YAML agent config (default: ./#{CWD_CONFIG_NAME} if present)
 
         Options:
       BANNER
@@ -319,13 +338,21 @@ module AgentCouncil
     end
 
     prompt_path = argv[0]
-    config_path = argv[1] || DEFAULT_CONFIG
 
     if prompt_path.nil? || argv.length > 2
       warn parser
       exit 1
     end
     abort "Prompt file not found: #{prompt_path}" unless File.file?(prompt_path)
+
+    config_path = resolve_config_path(argv[1])
+    unless config_path
+      abort <<~MESSAGE
+        No config file given and no #{CWD_CONFIG_NAME} found in the current directory.
+        Pass a config path: agent-council PROMPT_FILE CONFIG_FILE
+        See examples/configs/ in the repository for sample configs.
+      MESSAGE
+    end
     abort "Config file not found: #{config_path}" unless File.file?(config_path)
 
     # Read once. Analysts receive the user's prompt verbatim, followed by
