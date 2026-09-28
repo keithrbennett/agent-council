@@ -24,9 +24,13 @@ Gem::Specification.new do |spec|
   spec.metadata['changelog_uri'] = 'https://github.com/keithrbennett/agent-council/blob/main/CHANGELOG.md'
   spec.required_ruby_version = '>= 3.2'
 
+  # Only ship runtime assets and user-facing documentation. Exclude
+  # development-only files (CI config, lint configs, Gemfile, lockfile,
+  # Rakefile, internal design/review notes, etc.).
   spec.files = Dir.chdir(File.expand_path(__dir__)) do
-    `git ls-files -z`.split("\x0").reject do |f|
-      f.start_with?('spec/')
+    `git ls-files -z`.split("\x0").select do |f|
+      f.start_with?('lib/', 'exe/', 'prompts/', 'examples/configs/') ||
+        %w[README.md CHANGELOG.md LICENSE.txt].include?(f)
     end
   end
   spec.bindir        = 'exe'
