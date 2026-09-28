@@ -29,6 +29,11 @@ and all the findings for that agent.
 
 Points where analysts disagree, with each position attributed.
 
+## Explain Findings, Don't Just List Them
+
+When listing findings, unanimous or otherwise, add enough explanation of the issue so that the reader
+can easily understand what the issue is. Avoid limiting the text to single phrase attributions.
+
 ## Overall assessment
 
 The most important findings overall and your confidence in each. If you can
