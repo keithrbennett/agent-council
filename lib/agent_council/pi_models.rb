@@ -95,7 +95,11 @@ module AgentCouncil
         [max_value_length, column[:label].length].max
       end
 
+      last_index = columns.length - 1
       format_string = columns.each_with_index.map do |column, index|
+        # Don't pad the final left-aligned column; it would only add trailing whitespace.
+        next '%s' if index == last_index && column[:align] == :left
+
         align_sign = column[:align] == :right ? '' : '-'
         "%#{align_sign}#{widths[index]}s"
       end.join('  ') + "\n"
