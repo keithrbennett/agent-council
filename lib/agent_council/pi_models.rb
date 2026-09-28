@@ -7,13 +7,13 @@ module AgentCouncil
   # Reads and formats the models configured in pi.
   module PiModels
     FIELD_NAMES = {
-      provider: 'provider',
-      id: 'id',
-      name: 'name',
-      api: 'api',
-      reasoning: 'reasoning',
+      provider:       'provider',
+      id:             'id',
+      name:           'name',
+      api:            'api',
+      reasoning:      'reasoning',
       context_window: 'contextWindow',
-      max_tokens: 'maxTokens'
+      max_tokens:     'maxTokens',
     }.freeze
 
     Model = Data.define(*FIELD_NAMES.keys) do
@@ -87,7 +87,7 @@ module AgentCouncil
         { label: 'REASONING',  value: ->(model) { model.reasoning ? 'yes' : 'no' }, align: :left  },
         { label: 'CONTEXT',    value: ->(model) { model.context_window.to_s },      align: :right },
         { label: 'MAX TOKENS', value: ->(model) { model.max_tokens.to_s },          align: :right },
-        { label: 'NAME',       value: ->(model) { model.name },                     align: :left  }
+        { label: 'NAME',       value: ->(model) { model.name },                     align: :left  },
       ]
 
       widths = columns.map do |column|
@@ -102,7 +102,11 @@ module AgentCouncil
 
       separator = widths.map { |width| '-' * width }.join('  ') + "\n"
       header = format(format_string, *columns.map { |column| column[:label] })
-      body_lines = models.map { |model| format(format_string, *columns.map { |column| column[:value].(model) }) }
+      body_lines = models.map do |model|
+        format(format_string, *columns.map do |column|
+          column[:value].(model)
+        end)
+      end
 
       separator + header + separator + body_lines.join + separator
     end
