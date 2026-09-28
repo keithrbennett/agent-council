@@ -16,4 +16,4 @@
 
 require_relative '../lib/agent_council'
 
-AgentCouncil.main(ARGV) if __FILE__ == $PROGRAM_NAME
+AgentCouncil.main(ARGV)
