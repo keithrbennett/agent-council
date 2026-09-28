@@ -313,6 +313,13 @@ module AgentCouncil
     [result, Process.clock_gettime(Process::CLOCK_MONOTONIC) - started]
   end
 
+  # One result line: "✓ duration  label  ->  report_path" on success,
+  # "✗ duration  label  (error)" on failure.
+  module_function def format_result_line(label, ok, detail, elapsed)
+    duration = format_duration(elapsed)
+    ok ? "  ✓ #{duration}  #{label}  ->  #{detail}" : "  ✗ #{duration}  #{label}  (#{detail})"
+  end
+
   # True if a config entry (agent or consolidator) has the required string
   # 'provider' and 'model' fields.
   module_function def valid_agent_entry?(entry)
@@ -454,14 +461,12 @@ module AgentCouncil
       (label, ok, detail), elapsed = timed do
         run_consolidation(consolidator, prompt, run_dir, file_prefix, meta: report_meta)
       end
-      duration = format_duration(elapsed)
-      puts(ok ? "  ✓ #{duration}  #{label}  ->  #{detail}" : "  ✗ #{duration}  #{label}  (#{detail})")
+      puts format_result_line(label, ok, detail, elapsed)
     end
 
-    puts "\nSummary (duration, agent):"
+    puts "\nSummary (duration, agent, report):"
     results.each do |label, ok, detail, elapsed|
-      duration = format_duration(elapsed)
-      puts(ok ? "  ✓ #{duration}  #{label}  ->  #{detail}" : "  ✗ #{duration}  #{label}  (#{detail})")
+      puts format_result_line(label, ok, detail, elapsed)
     end
 
     failed = results.count { |_, ok, _| !ok }

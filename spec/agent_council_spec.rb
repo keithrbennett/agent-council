@@ -264,6 +264,18 @@ RSpec.describe AgentCouncil do
     end
   end
 
+  describe '.format_result_line' do
+    it 'shows the report path after an arrow on success' do
+      expect(described_class.format_result_line('claude/opus', true, 'answers/a.md', 61))
+        .to eq('  ✓ 00:01:01  claude/opus  ->  answers/a.md')
+    end
+
+    it 'shows the error in parentheses on failure' do
+      expect(described_class.format_result_line('claude/opus', false, 'exit 1', 3))
+        .to eq('  ✗ 00:00:03  claude/opus  (exit 1)')
+    end
+  end
+
   describe '.timed' do
     it 'returns the block result and a non-negative elapsed time' do
       result, elapsed = described_class.timed { :done }
