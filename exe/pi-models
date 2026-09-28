@@ -6,10 +6,17 @@ require_relative '../lib/agent_council/pi_models'
 help_output = ARGV.delete('-h') || ARGV.delete('--help')
 json_output = ARGV.delete('--json') || ARGV.delete('-j')
 ids_output = ARGV.delete('--ids') || ARGV.delete('-i')
+ARGV.delete('--table') || ARGV.delete('-t') # table is the default format; accepted for explicitness
 
 if help_output
   puts AgentCouncil::PiModels.help_text
   exit
+end
+
+unless ARGV.empty?
+  warn "pi-models: unknown option(s): #{ARGV.join(' ')}"
+  warn "Try 'pi-models --help' for usage."
+  exit 1
 end
 
 models = AgentCouncil::PiModels.fetch_models
