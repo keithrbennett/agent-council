@@ -2,10 +2,9 @@
 
 # Focused tests for the harness-agnostic logic in lib/agent_council.rb
 # (no model calls). Pi-specific behavior is tested in
-# spec/agent_council/pi_spec.rb. Run with: rspec
+# spec/agent_council/pi_harness_spec.rb. Run with: rspec
 
 require 'tmpdir'
-require_relative '../lib/agent_council'
 
 RSpec.describe AgentCouncil do
   describe '.sanitize' do

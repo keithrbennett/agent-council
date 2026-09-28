@@ -3,8 +3,6 @@
 # Focused tests for the pi-specific behavior in
 # lib/agent_council/harnesses/pi_harness.rb (no model calls). Run with: rspec
 
-require_relative '../../lib/agent_council/harnesses/pi_harness'
-
 RSpec.describe AgentCouncil::Harnesses::PiHarness do
   # Captured shape of a pi --mode json event stream (pi 0.84.4), trimmed to
   # the relevant events: a tool-use turn (first assistant message_end) and
