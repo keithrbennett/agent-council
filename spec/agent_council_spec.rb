@@ -4,6 +4,7 @@
 # (no model calls). Pi-specific behavior is tested in
 # spec/agent_council/pi_harness_spec.rb. Run with: rspec
 
+require 'spec_helper'
 require 'tmpdir'
 
 RSpec.describe AgentCouncil do
