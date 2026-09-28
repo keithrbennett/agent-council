@@ -22,6 +22,8 @@ Gem::Specification.new do |spec|
   spec.homepage      = 'https://github.com/keithrbennett/agent-council'
   spec.metadata['source_code_uri'] = 'https://github.com/keithrbennett/agent-council'
   spec.metadata['changelog_uri'] = 'https://github.com/keithrbennett/agent-council/blob/main/CHANGELOG.md'
+  spec.metadata['documentation_uri'] = 'https://github.com/keithrbennett/agent-council/blob/main/README.md'
+  spec.metadata['bug_tracker_uri'] = 'https://github.com/keithrbennett/agent-council/issues'
   spec.required_ruby_version = '>= 3.2'
 
   # Only ship runtime assets (lib/ includes code plus the prompt
