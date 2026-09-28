@@ -31,19 +31,41 @@ module AgentCouncil
       end
     end
 
+    # Raised for failures talking to pi (missing executable, early exit, RPC error).
+    class Error < RuntimeError; end
+
     RPC_GET_MODELS = { 'type' => 'get_available_models' }.freeze
     RPC_REQUEST_ID = 'list-models'
 
     module_function def fetch_models
-      Open3.popen3('pi', '--mode', 'rpc', '--no-session') do |stdin, stdout, _stderr, wait_thr|
+      Open3.popen3('pi', '--mode', 'rpc', '--no-session') do |stdin, stdout, stderr, wait_thr|
+        # Drain stderr concurrently so a chatty pi can't block on a full pipe,
+        # and so we can report it if pi fails.
+        stderr_reader = Thread.new { stderr.read }
         send_rpc_command(stdin, RPC_GET_MODELS.merge('id' => RPC_REQUEST_ID))
 
-        events = stdout.each_line(chomp: true).map { |line| JSON.parse(line) }
+        events = stdout.each_line(chomp: true).lazy.filter_map { |line| parse_event(line) }
         response = events.detect { |event| event['id'] == RPC_REQUEST_ID && event['type'] == 'response' }
         return event_to_models(response) if response
 
-        raise "pi exited (#{wait_thr.value.exitstatus}) before responding"
+        diagnostics = stderr_reader.value.to_s.strip
+        message = "pi exited (#{wait_thr.value.exitstatus}) before responding"
+        message += ": #{diagnostics}" unless diagnostics.empty?
+        raise Error, message
+      ensure
+        stderr_reader&.kill
       end
+    rescue Errno::ENOENT
+      raise Error, 'pi executable not found; is `pi` installed and on your PATH?'
+    end
+
+    # Returns the parsed event, or nil for lines that aren't JSON objects
+    # (blank lines, stray non-protocol output).
+    module_function def parse_event(line)
+      event = JSON.parse(line)
+      event if event.is_a?(Hash)
+    rescue JSON::ParserError
+      nil
     end
 
     module_function def send_rpc_command(stdin, command)
@@ -56,7 +78,7 @@ module AgentCouncil
       if event['success']
         event.dig('data', 'models').map { |model| Model.from_hash(model) }
       else
-        raise "pi error: #{event['error']}"
+        raise Error, "pi error: #{event['error']}"
       end
     end
 

@@ -2,6 +2,7 @@
 
 require 'spec_helper'
 require 'open3'
+require 'tmpdir'
 require 'rbconfig'
 require_relative '../../lib/agent_council/pi_models'
 
@@ -84,6 +85,58 @@ RSpec.describe AgentCouncil::PiModels do
     it 'raises the error from an unsuccessful RPC response' do
       expect { described_class.event_to_models('success' => false, 'error' => 'not configured') }
         .to raise_error(RuntimeError, 'pi error: not configured')
+    end
+  end
+
+  describe '.fetch_models' do
+    def with_fake_pi(script)
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, 'pi')
+        File.write(path, "#!/bin/sh\n#{script}\n")
+        File.chmod(0o755, path)
+        original_path = ENV.fetch('PATH')
+        ENV['PATH'] = "#{dir}:#{original_path}"
+        begin
+          yield
+        ensure
+          ENV['PATH'] = original_path
+        end
+      end
+    end
+
+    let(:response_json) do
+      JSON.generate(
+        'type' => 'response', 'id' => 'list-models', 'success' => true,
+        'data' => { 'models' => [{
+          'provider' => 'anthropic', 'id' => 'claude-sonnet', 'name' => 'Claude Sonnet',
+          'api' => 'anthropic-messages', 'reasoning' => true,
+          'contextWindow' => 200_000, 'maxTokens' => 8_192
+        }] }
+      )
+    end
+
+    it 'ignores non-JSON and unrelated lines around the response' do
+      with_fake_pi("echo 'warming up...'; echo '{\"type\":\"event\"}'; echo ''; echo '#{response_json}'") do
+        expect(described_class.fetch_models.map(&:id)).to eq(['claude-sonnet'])
+      end
+    end
+
+    it 'includes pi stderr when it exits without responding' do
+      with_fake_pi("echo 'no credentials configured' >&2; exit 3") do
+        expect { described_class.fetch_models }
+          .to raise_error(described_class::Error, /pi exited \(3\).*no credentials configured/)
+      end
+    end
+
+    it 'raises a clear error when pi is not installed' do
+      original_path = ENV.fetch('PATH')
+      ENV['PATH'] = ''
+      begin
+        expect { described_class.fetch_models }
+          .to raise_error(described_class::Error, /pi executable not found/)
+      ensure
+        ENV['PATH'] = original_path
+      end
     end
   end
 

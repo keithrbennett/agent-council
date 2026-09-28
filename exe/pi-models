@@ -19,7 +19,12 @@ unless ARGV.empty?
   exit 1
 end
 
-models = AgentCouncil::PiModels.fetch_models
+begin
+  models = AgentCouncil::PiModels.fetch_models
+rescue AgentCouncil::PiModels::Error => e
+  warn "pi-models: #{e.message}"
+  exit 1
+end
 
 if json_output
   puts AgentCouncil::PiModels.format_as_json(models)
