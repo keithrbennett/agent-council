@@ -13,12 +13,6 @@ Layout/CaseIndentation:
 Layout/LineEndStringConcatenationIndentation:
   Enabled: false
 
-# exe/pi-models defines Data members (contextWindow, maxTokens) mirroring
-# pi's JSON field names; snake_case aliases are provided alongside them.
-Naming/MethodName:
-  Exclude:
-    - exe/pi-models
-
 Naming/MethodParameterName:
   Exclude:
     - lib/agent_council.rb
