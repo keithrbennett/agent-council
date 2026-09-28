@@ -165,8 +165,9 @@ ls reports/$(date +%F)/                    # today's runs
 ls reports/*/*/answers/*codebase-review*   # every report for one question, all runs
 ```
 
-The summary printed at the end shows which models succeeded; one model's
-failure does not affect the others. Exit status is 0 only if every agent
+The summary printed at the end shows which models succeeded and how long
+each took (`HH:MM:SS`); the consolidator's duration is printed when it
+finishes. One model's failure does not affect the others. Exit status is 0 only if every agent
 succeeded. Output paths are printed relative to the current working
 directory (e.g. `reports/2026-09-04/21-39-01/answers`), regardless of
 where the tool was invoked from — the tool runs in any project, so paths

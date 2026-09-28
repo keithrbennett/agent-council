@@ -300,6 +300,19 @@ module AgentCouncil
     path.delete_prefix(cwd + File::SEPARATOR)
   end
 
+  # Whole seconds as HH:MM:SS (hours may exceed 99); rounds to the nearest second.
+  module_function def format_duration(seconds)
+    total = seconds.round
+    format('%02d:%02d:%02d', total / 3600, total % 3600 / 60, total % 60)
+  end
+
+  # Runs the block; returns [block_result, elapsed_seconds] (monotonic clock).
+  module_function def timed
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    result = yield
+    [result, Process.clock_gettime(Process::CLOCK_MONOTONIC) - started]
+  end
+
   # True if a config entry (agent or consolidator) has the required string
   # 'provider' and 'model' fields.
   module_function def valid_agent_entry?(entry)
@@ -424,25 +437,31 @@ module AgentCouncil
         provider = agent.is_a?(Hash) ? agent['provider'] : nil
         model = agent.is_a?(Hash) ? agent['model'] : nil
         meta = report_meta.merge('agent_index' => index)
-        result = run_agent(agent, analyst_prompt, answers_dir, file_prefix,
-          index:  index,
-          meta:   meta,
-          header: byline_table(meta, provider, model))
-        label, ok, detail = result
-        puts(ok ? "  ✓ #{label} finished" : "  ✗ #{label} failed: #{detail}")
-        result
+        (label, ok, detail), elapsed = timed do
+          run_agent(agent, analyst_prompt, answers_dir, file_prefix,
+            index:  index,
+            meta:   meta,
+            header: byline_table(meta, provider, model))
+        end
+        duration = format_duration(elapsed)
+        puts(ok ? "  ✓ #{duration}  #{label}" : "  ✗ #{duration}  #{label}  (#{detail})")
+        [label, ok, detail, elapsed]
       end
     end.map(&:value)
 
     if consolidator
       puts 'Consolidating reports...'
-      label, ok, detail = run_consolidation(consolidator, prompt, run_dir, file_prefix, meta: report_meta)
-      puts(ok ? "  ✓ #{label}  ->  #{detail}" : "  ✗ #{label}  (#{detail})")
+      (label, ok, detail), elapsed = timed do
+        run_consolidation(consolidator, prompt, run_dir, file_prefix, meta: report_meta)
+      end
+      duration = format_duration(elapsed)
+      puts(ok ? "  ✓ #{duration}  #{label}  ->  #{detail}" : "  ✗ #{duration}  #{label}  (#{detail})")
     end
 
-    puts "\nSummary:"
-    results.each do |label, ok, detail|
-      puts(ok ? "  ✓ #{label}  ->  #{detail}" : "  ✗ #{label}  (#{detail})")
+    puts "\nSummary (duration, agent):"
+    results.each do |label, ok, detail, elapsed|
+      duration = format_duration(elapsed)
+      puts(ok ? "  ✓ #{duration}  #{label}  ->  #{detail}" : "  ✗ #{duration}  #{label}  (#{detail})")
     end
 
     failed = results.count { |_, ok, _| !ok }

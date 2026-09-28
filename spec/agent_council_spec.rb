@@ -246,6 +246,32 @@ RSpec.describe AgentCouncil do
     end
   end
 
+  describe '.format_duration' do
+    it 'formats seconds as HH:MM:SS' do
+      expect(described_class.format_duration(0)).to eq('00:00:00')
+      expect(described_class.format_duration(59)).to eq('00:00:59')
+      expect(described_class.format_duration(61)).to eq('00:01:01')
+      expect(described_class.format_duration(3661)).to eq('01:01:01')
+    end
+
+    it 'rounds fractional seconds to the nearest second' do
+      expect(described_class.format_duration(1.4)).to eq('00:00:01')
+      expect(described_class.format_duration(1.6)).to eq('00:00:02')
+    end
+
+    it 'lets hours exceed two digits' do
+      expect(described_class.format_duration(100 * 3600)).to eq('100:00:00')
+    end
+  end
+
+  describe '.timed' do
+    it 'returns the block result and a non-negative elapsed time' do
+      result, elapsed = described_class.timed { :done }
+      expect(result).to eq(:done)
+      expect(elapsed).to be >= 0
+    end
+  end
+
   describe '.consolidated_filename' do
     it 'is distinct from agent report filenames and self-identifying' do
       name = described_class.consolidated_filename('2026-09-03-19-23-57_review', 'zai', 'glm-5.3')
