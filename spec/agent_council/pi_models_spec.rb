@@ -125,6 +125,16 @@ RSpec.describe AgentCouncil::PiModels do
       expect(described_class.format_as_table(models)).to eq(expected)
     end
 
+    it 'renders nil values as empty cells instead of raising' do
+      sparse = described_class::Model.new(
+        provider: 'openai', id: 'gpt-mini', name: nil, api: nil,
+        reasoning: false, context_window: nil, max_tokens: nil
+      )
+
+      expect { described_class.format_as_table([sparse]) }.not_to raise_error
+      expect(described_class.format_as_table([sparse])).to include('openai')
+    end
+
     it 'shows setup guidance when there are no models' do
       expect(described_class.format_as_table([]))
         .to eq("No models configured. Run `pi` interactively and add a provider first.\n")

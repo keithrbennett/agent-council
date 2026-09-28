@@ -84,13 +84,13 @@ module AgentCouncil
       return "No models configured. Run `pi` interactively and add a provider first.\n" if models.empty?
 
       columns = [
-        { label: 'PROVIDER',   value: ->(model) { model.provider },                 align: :left  },
-        { label: 'MODEL ID',   value: ->(model) { model.id },                       align: :left  },
-        { label: 'API',        value: ->(model) { model.api },                      align: :left  },
+        { label: 'PROVIDER',   value: ->(model) { model.provider.to_s },              align: :left  },
+        { label: 'MODEL ID',   value: ->(model) { model.id.to_s },                    align: :left  },
+        { label: 'API',        value: ->(model) { model.api.to_s },                   align: :left  },
         { label: 'REASONING',  value: ->(model) { model.reasoning ? 'yes' : 'no' }, align: :left  },
         { label: 'CONTEXT',    value: ->(model) { model.context_window.to_s },      align: :right },
         { label: 'MAX TOKENS', value: ->(model) { model.max_tokens.to_s },          align: :right },
-        { label: 'NAME',       value: ->(model) { model.name },                     align: :left  },
+        { label: 'NAME',       value: ->(model) { model.name.to_s },                  align: :left  },
       ]
 
       widths = columns.map do |column|
