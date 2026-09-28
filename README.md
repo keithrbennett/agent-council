@@ -18,6 +18,35 @@ non-goals.
 - Credentials for at least two providers, configured through pi itself
   (`/login` in interactive pi, or provider API-key env vars)
 
+## Installation
+
+Install the gem to make the `agent-council` command available on your
+RubyGems executable path:
+
+```bash
+gem install agent-council
+agent-council -h
+```
+
+If you manage Ruby dependencies with Bundler, add the gem to your application's
+Gemfile and run its commands through Bundler:
+
+```bash
+bundle add agent-council
+bundle exec agent-council -h
+```
+
+The gem does not install a config file or the repository's `examples/` files.
+Create `agent-council.yml` in the directory you will analyze, or
+`~/.agent-council.yml` in your home directory, and put your model configuration
+there. When no config path is passed, the command checks the current working
+directory first, then the home config. See [Discovering and configuring
+models](#discovering-and-configuring-models) and the checkout's
+`examples/configs/` for the config format and samples.
+
+You can also run `./exe/agent-council` directly from a source checkout; the
+repo-relative invocation below does not require installing the gem.
+
 ## Discovering and configuring models
 
 ```bash
@@ -240,3 +269,10 @@ reports, no manifests or indexes — the directory layout is the index. This
 is
 an experiment to answer one question: is Pi-based model diversity worth
 building on? See `DESIGN.md` §19–21.
+
+## Occasional utility: `pi-models`
+
+The gem also includes `pi-models`, a helper for listing models configured in
+the `pi` CLI. It prints a table by default; `pi-models --json` emits JSON and
+`pi-models --ids` prints `provider/id` values for shell use. It requires `pi`
+to be installed and can be run directly after installing the gem.
