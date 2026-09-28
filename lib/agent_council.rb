@@ -55,7 +55,8 @@ module AgentCouncil
 
     candidates = [File.join(Dir.pwd, CWD_CONFIG_NAME)]
     begin
-      candidates << File.join(Dir.home, HOME_CONFIG_NAME)
+      home = Dir.home
+      candidates << File.join(home, HOME_CONFIG_NAME) unless home.empty?
     rescue ArgumentError
       # No resolvable home directory; only the cwd candidate applies.
     end

@@ -125,6 +125,30 @@ RSpec.describe AgentCouncil do
       expect(described_class.resolve_config_path(nil)).to be_nil
     end
 
+    it 'does not probe the root directory when Dir.home is empty' do
+      allow(Dir).to receive(:home).and_return('')
+      checked_paths = []
+      allow(File).to receive(:file?) do |path|
+        checked_paths << path
+        false
+      end
+
+      expect(described_class.resolve_config_path(nil)).to be_nil
+      expect(checked_paths).to eq([File.join(Dir.pwd, 'agent-council.yml')])
+    end
+
+    it 'checks only the cwd when the home directory cannot be resolved' do
+      allow(Dir).to receive(:home).and_raise(ArgumentError)
+      checked_paths = []
+      allow(File).to receive(:file?) do |path|
+        checked_paths << path
+        false
+      end
+
+      expect(described_class.resolve_config_path(nil)).to be_nil
+      expect(checked_paths).to eq([File.join(Dir.pwd, 'agent-council.yml')])
+    end
+
     it 'does not look in parent directories' do
       File.write('agent-council.yml', '')
       Dir.mkdir('sub')
