@@ -109,6 +109,12 @@ RSpec.describe AgentCouncil::PiModels do
   end
 
   describe '.fetch_models' do
+    before do
+      # The fake `pi` below is a #!/bin/sh script (and one variant sends
+      # itself a POSIX signal), so it can't run on Windows.
+      skip 'requires a POSIX shell to build the fake pi executable' if Gem.win_platform?
+    end
+
     def with_fake_pi(script)
       Dir.mktmpdir do |dir|
         path = File.join(dir, 'pi')
