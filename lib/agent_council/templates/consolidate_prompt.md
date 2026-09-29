@@ -10,21 +10,27 @@ Produce a consolidated report with exactly these sections:
 ## Agent Consultants
 
 A list of provider/model agents consulted; for any that failed to run properly,
-say so and say why
+say so and say why.
 
-## Consensus findings
+## Findings
 
-Issues identified independently by two or more analysts. For each, list the
-sources and briefly note any differences in emphasis.
+- Output the findings of each section (consolidated or unique) in a _numbered_ list.
+- For each finding, add explanatory text if it would be helpful to the reader.
 
-## Unique findings
+### Consensus findings
 
-Issues raised by exactly one analyst, attributed to its source. Assess
-whether each is plausible.
+Issues identified independently by two or more analysts. 
 
-For each agent having any findings, output a heading with the provider and model name,
-and all the findings for that agent.
+For each, list the sources and briefly note any differences in emphasis.
 
+### Unique findings
+
+Issues raised by exactly one analyst, attributed to its source. 
+
+- Assess whether each is plausible.
+- Group findings by agent; for each group:
+  - output a heading with the agent number, provider, and model name
+ 
 ## Contradictions
 
 Points where analysts disagree, with each position attributed.
