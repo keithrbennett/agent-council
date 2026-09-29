@@ -42,7 +42,12 @@ module AgentCouncil
         # Drain stderr concurrently so a chatty pi can't block on a full pipe,
         # and so we can report it if pi fails.
         stderr_reader = Thread.new { stderr.read }
-        send_rpc_command(stdin, RPC_GET_MODELS.merge('id' => RPC_REQUEST_ID))
+        begin
+          send_rpc_command(stdin, RPC_GET_MODELS.merge('id' => RPC_REQUEST_ID))
+        rescue Errno::EPIPE, IOError
+          # pi exited (or closed stdin) before we could send the request; fall
+          # through so the exit-status/diagnostics check below explains why.
+        end
 
         events = stdout.each_line(chomp: true).lazy.filter_map { |line| parse_event(line) }
         response = events.detect { |event| event['id'] == RPC_REQUEST_ID && event['type'] == 'response' }
@@ -57,6 +62,10 @@ module AgentCouncil
       end
     rescue Errno::ENOENT
       raise Error, 'pi executable not found; is `pi` installed and on your PATH?'
+    rescue SystemCallError => e
+      # Covers EACCES (not executable) and other spawn-time failures that
+      # Errno::ENOENT doesn't catch.
+      raise Error, "pi could not be started: #{e.message}"
     end
 
     # Returns the parsed event, or nil for lines that aren't JSON objects

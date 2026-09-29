@@ -138,6 +138,13 @@ RSpec.describe AgentCouncil::PiModels do
         ENV['PATH'] = original_path
       end
     end
+
+    it 'reports the exit status instead of crashing when pi exits before reading stdin' do
+      with_fake_pi("echo 'boom' >&2; exit 9") do
+        expect { described_class.fetch_models }
+          .to raise_error(described_class::Error, /pi exited \(9\).*boom/m)
+      end
+    end
   end
 
   describe '.format_as_json' do
