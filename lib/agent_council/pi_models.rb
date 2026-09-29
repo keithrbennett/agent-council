@@ -54,7 +54,7 @@ module AgentCouncil
         return event_to_models(response) if response
 
         diagnostics = stderr_reader.value.to_s.strip
-        message = "pi exited (#{wait_thr.value.exitstatus}) before responding"
+        message = "pi exited (#{describe_status(wait_thr.value)}) before responding"
         message += ": #{diagnostics}" unless diagnostics.empty?
         raise Error, message
       ensure
@@ -66,6 +66,14 @@ module AgentCouncil
       # Covers EACCES (not executable) and other spawn-time failures that
       # Errno::ENOENT doesn't catch.
       raise Error, "pi could not be started: #{e.message}"
+    end
+
+    # Describes a Process::Status for diagnostics, covering both normal exits
+    # and termination by signal (where #exitstatus is nil).
+    module_function def describe_status(status)
+      return "signal #{status.termsig}" if status.signaled?
+
+      status.exitstatus.to_s
     end
 
     # Returns the parsed event, or nil for lines that aren't JSON objects

@@ -165,6 +165,13 @@ RSpec.describe AgentCouncil::PiModels do
           .to raise_error(described_class::Error, /pi exited \(9\).*boom/m)
       end
     end
+
+    it 'reports the signal instead of a blank status when pi is killed by a signal' do
+      with_fake_pi('kill -TERM $$') do
+        expect { described_class.fetch_models }
+          .to raise_error(described_class::Error, /pi exited \(signal 15\) before responding/)
+      end
+    end
   end
 
   describe '.format_as_json' do
