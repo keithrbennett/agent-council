@@ -271,7 +271,8 @@ module AgentCouncil
 
   # Runs the configured consolidator model over a run's reports and writes
   # its report into the same run dir. Returns [label, ok, detail].
-  module_function def run_consolidation(consolidator, original_prompt, run_dir, file_prefix, meta: {})
+  module_function def run_consolidation(consolidator, original_prompt, run_dir, file_prefix,
+    meta: {}, prompt_path: nil)
     provider = consolidator['provider'] if consolidator.is_a?(Hash)
     model = consolidator['model'] if consolidator.is_a?(Hash)
     return ['consolidator', false, "config entry needs 'provider' and 'model'"] if provider.nil? || model.nil?
@@ -284,7 +285,8 @@ module AgentCouncil
 
     prompt = consolidation_prompt(original_prompt, reports)
     meta = meta.merge('role' => 'consolidator', 'sources' => reports.map(&:first))
-    header = "# Consolidated Report\n\n#{byline_table(meta, provider, model)}"
+    prompt_line = prompt_path ? "### Prompt: #{prompt_path}\n\n" : ''
+    header = "# Consolidated Report\n\n#{prompt_line}#{byline_table(meta, provider, model)}"
     label, ok, detail = run_agent(consolidator, prompt, run_dir, file_prefix,
       filename: consolidated_filename(file_prefix, provider, model),
       header:   header,
@@ -463,7 +465,8 @@ module AgentCouncil
     if consolidator
       puts 'Consolidating reports...'
       (label, ok, detail), elapsed = timed do
-        run_consolidation(consolidator, prompt, run_dir, file_prefix, meta: report_meta)
+        run_consolidation(consolidator, prompt, run_dir, file_prefix,
+          meta: report_meta, prompt_path: prompt_path)
       end
       puts format_result_line(label, ok, detail, elapsed)
     end

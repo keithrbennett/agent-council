@@ -371,24 +371,27 @@ RSpec.describe AgentCouncil do
           'prompt', dir, 'prefix', meta: {
             'query'     => 'check-prev-commits',
             'timestamp' => '2026-09-03T19:23:57',
-          })
+          }, prompt_path: 'prompts/check-prev-commits_prompt.md')
         expect(ok).to be(true)
         expect(label).to eq('zai / glm-5.3 (consolidator)')
         expect(captured[:run_dir]).to eq(dir)
         expect(captured[:filename]).to eq('prefix_consolidated_pi_zai_glm-5.3.md')
         expect(captured[:meta]['role']).to eq('consolidator')
-        expect(captured[:header]).to eq(
-          "# Consolidated Report\n\n" \
-          "| Field     | Value |\n" \
-          "| :-------- | :---------------------------- |\n" \
-          "| role | consolidator |\n" \
-          "| query | check-prev-commits |\n" \
-          "| harness | pi |\n" \
-          "| provider | zai |\n" \
-          "| model | glm-5.3 |\n" \
-          "| timestamp | 2026-09-03T19:23:57 |\n" \
-          "| source | openai / gpt-x |\n"
-        )
+        expect(captured[:header]).to eq(<<~HEADER)
+          # Consolidated Report
+
+          ### Prompt: prompts/check-prev-commits_prompt.md
+
+          | Field     | Value |
+          | :-------- | :---------------------------- |
+          | role | consolidator |
+          | query | check-prev-commits |
+          | harness | pi |
+          | provider | zai |
+          | model | glm-5.3 |
+          | timestamp | 2026-09-03T19:23:57 |
+          | source | openai / gpt-x |
+        HEADER
         expect(File.read(File.join(dir, captured[:filename]))).to eq('consolidated body')
         expect(Dir.exist?(File.join(dir, 'consolidated'))).to be(false)
       end
