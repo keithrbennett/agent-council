@@ -423,7 +423,7 @@ module AgentCouncil
     day = now.strftime('%Y-%m-%d')
     run_name = now.strftime('%H-%M-%S')
     run_stamp = "#{day}-#{run_name}"
-    iso_stamp = now.strftime('%Y-%m-%dT%H:%M:%S')
+    iso_stamp = now.strftime('%Y-%m-%dT%H:%M:%S%:z')
     slug = query_slug(prompt_path)
     file_prefix = "#{run_stamp}_#{slug}"
     report_meta = { 'role' => 'analyst', 'timestamp' => iso_stamp, 'query' => slug }
