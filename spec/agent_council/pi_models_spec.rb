@@ -2,6 +2,7 @@
 
 require 'spec_helper'
 require 'open3'
+require 'shellwords'
 require 'tmpdir'
 require 'rbconfig'
 require_relative '../../lib/agent_council/pi_models'
@@ -142,7 +143,9 @@ RSpec.describe AgentCouncil::PiModels do
     end
 
     it 'ignores non-JSON and unrelated lines around the response' do
-      with_fake_pi("echo 'warming up...'; echo '{\"type\":\"event\"}'; echo ''; echo '#{response_json}'") do
+      script = "echo 'warming up...'; echo '{\"type\":\"event\"}'; echo ''; " \
+               "echo #{Shellwords.escape(response_json)}"
+      with_fake_pi(script) do
         expect(described_class.fetch_models.map(&:id)).to eq(['claude-sonnet'])
       end
     end
