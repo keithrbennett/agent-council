@@ -84,10 +84,15 @@ module AgentCouncil
     end
 
     module_function def event_to_models(event)
-      if event['success']
-        event.dig('data', 'models').map { |model| Model.from_hash(model) }
-      else
-        raise Error, "pi error: #{event['error']}"
+      raise Error, "pi error: #{event['error']}" unless event['success']
+
+      raw_models = event.dig('data', 'models')
+      raise Error, "pi response missing data.models: #{event.inspect}" unless raw_models.is_a?(Array)
+
+      raw_models.map do |raw_model|
+        Model.from_hash(raw_model)
+      rescue ArgumentError => e
+        raise Error, "pi returned a malformed model: #{e.message}"
       end
     end
 

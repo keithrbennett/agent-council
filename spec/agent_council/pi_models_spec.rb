@@ -86,6 +86,26 @@ RSpec.describe AgentCouncil::PiModels do
       expect { described_class.event_to_models('success' => false, 'error' => 'not configured') }
         .to raise_error(RuntimeError, 'pi error: not configured')
     end
+
+    it 'raises a PiModels::Error when data.models is absent' do
+      expect { described_class.event_to_models('success' => true, 'data' => {}) }
+        .to raise_error(described_class::Error, /pi response missing data\.models/)
+    end
+
+    it 'raises a PiModels::Error when data.models is not an array' do
+      expect { described_class.event_to_models('success' => true, 'data' => { 'models' => 'oops' }) }
+        .to raise_error(described_class::Error, /pi response missing data\.models/)
+    end
+
+    it 'raises a PiModels::Error when a model is missing fields' do
+      event = {
+        'success' => true,
+        'data'    => { 'models' => [{ 'provider' => 'anthropic', 'id' => 'claude-sonnet' }] },
+      }
+
+      expect { described_class.event_to_models(event) }
+        .to raise_error(described_class::Error, /pi returned a malformed model: missing model field/)
+    end
   end
 
   describe '.fetch_models' do
