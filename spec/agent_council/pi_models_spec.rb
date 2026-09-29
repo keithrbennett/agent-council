@@ -85,7 +85,7 @@ RSpec.describe AgentCouncil::PiModels do
 
     it 'raises the error from an unsuccessful RPC response' do
       expect { described_class.event_to_models('success' => false, 'error' => 'not configured') }
-        .to raise_error(RuntimeError, 'pi error: not configured')
+        .to raise_error(described_class::Error, 'pi error: not configured')
     end
 
     it 'raises a PiModels::Error when data.models is absent' do

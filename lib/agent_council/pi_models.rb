@@ -41,7 +41,13 @@ module AgentCouncil
       Open3.popen3('pi', '--mode', 'rpc', '--no-session') do |stdin, stdout, stderr, wait_thr|
         # Drain stderr concurrently so a chatty pi can't block on a full pipe,
         # and so we can report it if pi fails.
-        stderr_reader = Thread.new { stderr.read }
+        # An I/O failure while reading is treated as "no diagnostics" so it
+        # can't escape as something other than PiModels::Error.
+        stderr_reader = Thread.new do
+          stderr.read
+        rescue IOError, SystemCallError
+          ''
+        end
         begin
           send_rpc_command(stdin, RPC_GET_MODELS.merge('id' => RPC_REQUEST_ID))
         rescue Errno::EPIPE, IOError
