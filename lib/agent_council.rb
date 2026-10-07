@@ -450,11 +450,13 @@ module AgentCouncil
     # Convenience pointer to the newest run: reports/latest
     update_latest_symlink(File.join(day, run_name))
 
-    puts "Running #{agents.size} model(s) with prompt: #{prompt_path}"
+    puts "\nPrompt: #{prompt_path}"
+    puts "\nAgents (#{agents.size}):"
     agents.each_with_index do |agent, i|
       puts "  ##{i + 1} #{agent_descriptor(agent)}"
     end
-    puts "  consolidator: #{agent_descriptor(consolidator)}" if consolidator
+    puts "\nConsolidator:\n  #{agent_descriptor(consolidator)}" if consolidator
+    puts "\nProgress:"
     results = agents.each_with_index.map do |agent, i|
       index = i + 1
       Thread.new do
@@ -474,7 +476,7 @@ module AgentCouncil
     end.map(&:value)
 
     if consolidator
-      puts 'Consolidating reports...'
+      puts "\nConsolidating reports:"
       (label, ok, detail), elapsed = timed do
         run_consolidation(consolidator, prompt, run_dir, file_prefix,
           meta: report_meta, prompt_path: prompt_path)
