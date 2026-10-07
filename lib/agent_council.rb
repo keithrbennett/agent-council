@@ -328,6 +328,12 @@ module AgentCouncil
     entry.is_a?(Hash) && entry['provider'].is_a?(String) && entry['model'].is_a?(String)
   end
 
+  # "harness / provider / model" for a validated config entry, printed at
+  # startup so it is clear which agents are still running later.
+  module_function def agent_descriptor(entry)
+    "#{HARNESS::NAME} / #{entry['provider']} / #{entry['model']}"
+  end
+
   module_function def option_parser
     OptionParser.new do |opts|
       opts.banner = <<~BANNER
@@ -444,6 +450,10 @@ module AgentCouncil
     update_latest_symlink(File.join(day, run_name))
 
     puts "Running #{agents.size} model(s) with prompt: #{prompt_path}"
+    agents.each_with_index do |agent, i|
+      puts "  ##{i + 1} #{agent_descriptor(agent)}"
+    end
+    puts "  consolidator: #{agent_descriptor(consolidator)}" if consolidator
     results = agents.each_with_index.map do |agent, i|
       index = i + 1
       Thread.new do
