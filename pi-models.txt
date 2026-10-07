@@ -1,0 +1,341 @@
+--------------  ------------------------------------  ----------------------  ---------  -------  ----------  ---------------------------------------------------------
+PROVIDER        MODEL ID                              API                     REASONING  CONTEXT  MAX TOKENS  NAME
+--------------  ------------------------------------  ----------------------  ---------  -------  ----------  ---------------------------------------------------------
+anthropic       claude-fable-5                        anthropic-messages      yes        1000000      128000  Claude Fable 5
+anthropic       claude-fable-5-1                      anthropic-messages      yes        1000000      128000  Claude Fable 5.1
+anthropic       claude-haiku-4-5                      anthropic-messages      yes         200000       64000  Claude Haiku 4.5 (latest)
+anthropic       claude-haiku-4-5-20251001             anthropic-messages      yes         200000       64000  Claude Haiku 4.5
+anthropic       claude-opus-4-5                       anthropic-messages      yes         200000       64000  Claude Opus 4.5 (latest)
+anthropic       claude-opus-4-5-20251101              anthropic-messages      yes         200000       64000  Claude Opus 4.5
+anthropic       claude-opus-4-6                       anthropic-messages      yes        1000000      128000  Claude Opus 4.6
+anthropic       claude-opus-4-7                       anthropic-messages      yes        1000000      128000  Claude Opus 4.7
+anthropic       claude-opus-4-8                       anthropic-messages      yes        1000000      128000  Claude Opus 4.8
+anthropic       claude-opus-5                         anthropic-messages      yes        1000000      128000  Claude Opus 5
+anthropic       claude-opus-5-5                       anthropic-messages      yes        1000000      128000  Claude Opus 5.5
+anthropic       claude-sonnet-4-5                     anthropic-messages      yes        1000000       64000  Claude Sonnet 4.5 (latest)
+anthropic       claude-sonnet-4-5-20250929            anthropic-messages      yes        1000000       64000  Claude Sonnet 4.5
+anthropic       claude-sonnet-4-6                     anthropic-messages      yes        1000000      128000  Claude Sonnet 4.6
+anthropic       claude-sonnet-5                       anthropic-messages      yes        1000000      128000  Claude Sonnet 5
+github-copilot  claude-fable-5                        anthropic-messages      yes        1000000      128000  Claude Fable 5
+github-copilot  claude-fable-5.1                      anthropic-messages      yes        1000000      128000  Claude Fable 5.1
+github-copilot  claude-haiku-4.5                      anthropic-messages      yes         200000       64000  Claude Haiku 4.5 (latest)
+github-copilot  claude-opus-4.7                       anthropic-messages      yes        1000000       32000  Claude Opus 4.7
+github-copilot  claude-opus-4.8                       anthropic-messages      yes        1000000       64000  Claude Opus 4.8
+github-copilot  claude-opus-5                         anthropic-messages      yes        1000000       64000  Claude Opus 5
+github-copilot  claude-opus-5.5                       anthropic-messages      yes        1000000      128000  Claude Opus 5.5
+github-copilot  claude-sonnet-4.6                     anthropic-messages      yes        1000000       32000  Claude Sonnet 4.6
+github-copilot  claude-sonnet-5                       anthropic-messages      yes        1000000      128000  Claude Sonnet 5
+github-copilot  gemini-3.5-flash                      openai-completions      yes         200000       64000  Gemini 3.5 Flash
+github-copilot  gemini-3.6-flash                      openai-completions      yes        1000000       64000  Gemini 3.6 Flash
+github-copilot  gemini-3.7-flash                      openai-completions      yes        1000000       64000  Gemini 3.7 Flash
+github-copilot  gemini-3.8-flash                      openai-completions      yes        1000000       64000  Gemini 3.8 Flash
+github-copilot  kimi-k2.7-code                        openai-completions      yes         256000       32000  Kimi K2.7 Code
+github-copilot  kimi-k3                               openai-completions      yes        1048576      131072  Kimi K3
+github-copilot  gpt-5-mini                            openai-responses        yes         264000       64000  GPT-5 Mini
+github-copilot  gpt-5.3-codex                         openai-responses        yes        1000000      128000  GPT-5.3 Codex
+github-copilot  gpt-5.4                               openai-responses        yes        1000000      128000  GPT-5.4
+github-copilot  gpt-5.4-mini                          openai-responses        yes         400000      128000  GPT-5.4 mini
+github-copilot  gpt-5.4-nano                          openai-responses        yes         400000      128000  GPT-5.4 nano
+github-copilot  gpt-5.5                               openai-responses        yes        1000000      128000  GPT-5.5
+github-copilot  gpt-5.6-luna                          openai-responses        yes        1050000      128000  GPT-5.6 Luna
+github-copilot  gpt-5.6-sol                           openai-responses        yes        1050000      128000  GPT-5.6 Sol
+github-copilot  gpt-5.6-terra                         openai-responses        yes        1050000      128000  GPT-5.6 Terra
+github-copilot  gpt-6-astra                           openai-responses        yes        1000000      128000  GPT-6 Astra
+github-copilot  gpt-6-luna                            openai-responses        yes        1000000      128000  GPT-6 Luna
+github-copilot  gpt-6-sol                             openai-responses        yes        1000000      128000  GPT-6 Sol
+github-copilot  grok-4.5                              openai-responses        yes         500000      128000  Grok 4.5
+github-copilot  grok-4.6                              openai-responses        yes         500000      128000  Grok 4.6
+github-copilot  grok-4.7                              openai-responses        yes         500000      128000  Grok 4.7
+github-copilot  mai-code-1-flash-picker               openai-responses        yes         256000      128000  MAI-Code-1-Flash
+github-copilot  mai-code-1.1-flash                    openai-responses        yes         256000      128000  MAI-Code-1.1-Flash
+kimi-coding     k3                                    anthropic-messages      yes        1048576      131072  Kimi K3
+kimi-coding     k3-256k                               anthropic-messages      yes         262144      131072  Kimi K3-256K
+kimi-coding     kimi-for-coding                       anthropic-messages      yes        1048576       32768  kimi-for-coding
+kimi-coding     kimi-for-coding-highspeed             anthropic-messages      yes         262144       32768  Kimi For Coding HighSpeed
+openai-codex    gpt-5.3-codex-spark                   openai-codex-responses  yes         128000      128000  GPT-5.3 Codex Spark
+openai-codex    gpt-5.5                               openai-codex-responses  yes         272000      128000  GPT-5.5
+openai-codex    gpt-5.6-luna                          openai-codex-responses  yes         272000      128000  GPT-5.6 Luna
+openai-codex    gpt-5.6-sol                           openai-codex-responses  yes         272000      128000  GPT-5.6 Sol
+openai-codex    gpt-5.6-terra                         openai-codex-responses  yes         272000      128000  GPT-5.6 Terra
+openai-codex    gpt-6-astra                           openai-codex-responses  yes         272000      128000  GPT-6 Astra
+openai-codex    gpt-6-luna                            openai-codex-responses  yes         272000      128000  GPT-6 Luna
+openai-codex    gpt-6-sol                             openai-codex-responses  yes         272000      128000  GPT-6 Sol
+opencode-go     minimax-m3                            anthropic-messages      yes        1000000      131072  MiniMax-M3
+opencode-go     qwen3.8-flash                         anthropic-messages      yes        1000000      131072  Qwen3.8 Flash
+opencode-go     deepseek-v4-flash                     openai-completions      yes        1000000      384000  DeepSeek V4 Flash
+opencode-go     deepseek-v4-flash-vision-exp          openai-completions      yes        1000000      384000  DeepSeek V4 Flash Vision Exp
+opencode-go     deepseek-v4-pro                       openai-completions      yes        1000000      384000  DeepSeek V4 Pro (New)
+opencode-go     deepseek-v4.1-flash                   openai-completions      yes        1000000      384000  DeepSeek V4.1 Flash
+opencode-go     glm-5.1                               openai-completions      yes         202752       32768  GLM-5.1
+opencode-go     glm-5.2                               openai-completions      yes        1000000      131072  GLM-5.2
+opencode-go     glm-5.3                               openai-completions      yes        1000000      131072  GLM-5.3
+opencode-go     glm-5.3-flash                         openai-completions      yes        1000000      131072  GLM-5.3-Flash
+opencode-go     hy3                                   openai-completions      yes         256000      128000  Hy3
+opencode-go     hy4-preview                           openai-completions      yes        1024000       64000  Hy4 preview
+opencode-go     kimi-k2.6                             openai-completions      yes         262144       65536  Kimi K2.6
+opencode-go     kimi-k2.7-code                        openai-completions      yes         262144      262144  Kimi K2.7 Code
+opencode-go     kimi-k3                               openai-completions      yes        1048576      131072  Kimi K3
+opencode-go     longcat-2.0                           openai-completions      yes        1000000      131072  LongCat-2.0
+opencode-go     mimo-v2.5                             openai-completions      yes        1000000      128000  MiMo V2.5
+opencode-go     mimo-v2.5-pro                         openai-completions      yes        1048576      128000  MiMo V2.5 Pro
+opencode-go     mimo-v2.6-flash                       openai-completions      yes        1048576      131072  MiMo-V2.6-Flash
+opencode-go     mimo-v2.6-pro                         openai-completions      yes        1048576      131072  MiMo-V2.6-Pro
+opencode-go     minimax-m2.7                          openai-completions      yes         204800      131072  MiniMax-M2.7
+opencode-go     qwen3.6-plus                          openai-completions      yes        1000000       65536  Qwen3.6 Plus
+opencode-go     qwen3.7-max                           openai-completions      yes        1000000       65536  Qwen3.7 Max
+opencode-go     qwen3.7-plus                          openai-completions      yes        1000000       65536  Qwen3.7 Plus
+opencode-go     qwen3.8-max                           openai-completions      yes        1000000      131072  Qwen3.8 Max
+opencode-go     gpt-5.6-luna                          openai-responses        yes        1050000      128000  GPT-5.6 Luna
+opencode-go     grok-4.6                              openai-responses        yes         500000      500000  Grok 4.6
+opencode-go     grok-4.7                              openai-responses        yes         500000      500000  Grok 4.7
+opencode-go     muse-spark-1.2-contributor            openai-responses        yes        1048576      131072  Muse Spark 1.2 Contributor
+opencode-go     muse-spark-1.3-contributor            openai-responses        yes        1048576      131072  Muse Spark 1.3 Contributor
+opencode-go     gpt-6-luna                            openai-responses        yes        1050000      128000  GPT-6 Luna
+opencode-go     longcat-2.5-preview-free              openai-completions      yes        1000000      131072  LongCat 2.5 Preview Free
+opencode-go     space-bunny-free                      openai-completions      yes        1048576      524288  Space Bunny Free
+zai             glm-4.7                               openai-completions      yes         204800      131072  GLM-4.7
+zai             glm-5-turbo                           openai-completions      yes         200000      131072  GLM-5-Turbo
+zai             glm-5.2                               openai-completions      yes        1000000      131072  GLM-5.2
+zai             glm-5.2-highspeed                     openai-completions      yes        1000000      131072  GLM-5.2 Highspeed
+zai             glm-5.3                               openai-completions      yes        1000000      131072  GLM-5.3
+zai             glm-5.3-flash                         openai-completions      yes        1000000      131072  GLM-5.3-Flash
+zai             glm-5.3-highspeed                     openai-completions      yes        1000000      131072  GLM-5.3 Highspeed
+cursor          auto                                  cursor-cli              no          200000       32768  Auto (Cursor)
+cursor          gpt-5.3-codex                         cursor-cli              no          200000       32768  Codex 5.3 (Cursor)
+cursor          gpt-5.3-codex-fast                    cursor-cli              no          200000       32768  Codex 5.3 Fast (Cursor)
+cursor          gpt-5.2                               cursor-cli              no          200000       32768  GPT-5.2 (Cursor)
+cursor          composer-2.5                          cursor-cli              no          200000       32768  Composer 2.5 (Cursor)
+cursor          claude-opus-5-thinking-high           cursor-cli              yes         200000       32768  Claude Opus 5 1M Thinking (Cursor)
+cursor          claude-opus-5-thinking-high-fast      cursor-cli              no          200000       32768  Claude Opus 5 1M Thinking Fast (Cursor)
+cursor          gpt-5.6-sol-high                      cursor-cli              yes         200000       32768  GPT-5.6 Sol 1M High (Cursor)
+cursor          gpt-5.6-sol-high-fast                 cursor-cli              no          200000       32768  GPT-5.6 Sol 1M High Fast (Cursor)
+cursor          gpt-5.6-sol-xhigh                     cursor-cli              yes         200000       32768  GPT-5.6 Sol 1M Extra High (Cursor)
+cursor          gpt-5.6-sol-xhigh-fast                cursor-cli              no          200000       32768  GPT-5.6 Sol 1M Extra High Fast (Cursor)
+cursor          claude-fable-5-thinking-high          cursor-cli              yes         200000       32768  Claude Fable 5 1M Thinking (NO ZDR) (Cursor)
+cursor          claude-fable-5-thinking-xhigh         cursor-cli              yes         200000       32768  Claude Fable 5 1M Extra High Thinking (NO ZDR) (Cursor)
+cursor          cursor-grok-4.5-high                  cursor-cli              yes         200000       32768  Grok 4.5 (Cursor)
+cursor          cursor-grok-4.5-high-fast             cursor-cli              no          200000       32768  Grok 4.5 Fast (Cursor)
+cursor          gemini-3.7-flash-high                 cursor-cli              yes         200000       32768  Gemini 3.7 Flash (Cursor)
+cursor          claude-sonnet-5-thinking-high         cursor-cli              yes         200000       32768  Claude Sonnet 5 1M Thinking (Cursor)
+cursor          claude-sonnet-5-thinking-xhigh        cursor-cli              yes         200000       32768  Claude Sonnet 5 1M Extra High Thinking (Cursor)
+cursor          gpt-5.6-luna-high                     cursor-cli              yes         200000       32768  GPT-5.6 Luna 1M High (Cursor)
+cursor          grok-4.7-low                          cursor-cli              no          200000       32768  Grok 4.7  Low (Cursor)
+cursor          grok-4.7-low-fast                     cursor-cli              no          200000       32768  Grok 4.7  Low Fast​​ (Cursor)
+cursor          grok-4.7-medium                       cursor-cli              no          200000       32768  Grok 4.7  Medium (Cursor)
+cursor          grok-4.7-medium-fast                  cursor-cli              no          200000       32768  Grok 4.7  Medium Fast​​ (Cursor)
+cursor          grok-4.7-high                         cursor-cli              yes         200000       32768  Grok 4.7  High (Cursor)
+cursor          grok-4.7-high-fast                    cursor-cli              no          200000       32768  Grok 4.7  High Fast​​ (Cursor)
+cursor          grok-4.7-xhigh                        cursor-cli              yes         200000       32768  Grok 4.7  Extra High (Cursor)
+cursor          grok-4.7-xhigh-fast                   cursor-cli              no          200000       32768  Grok 4.7  Extra High Fast​​ (Cursor)
+cursor          cursor-grok-4.6-low                   cursor-cli              no          200000       32768  Grok 4.6 Low (Cursor)
+cursor          cursor-grok-4.6-low-fast              cursor-cli              no          200000       32768  Grok 4.6 Low Fast (Cursor)
+cursor          cursor-grok-4.6-medium                cursor-cli              no          200000       32768  Grok 4.6 Medium (Cursor)
+cursor          cursor-grok-4.6-medium-fast           cursor-cli              no          200000       32768  Grok 4.6 Medium Fast (Cursor)
+cursor          cursor-grok-4.6-high                  cursor-cli              yes         200000       32768  Grok 4.6 (Cursor)
+cursor          cursor-grok-4.6-high-fast             cursor-cli              no          200000       32768  Grok 4.6 Fast (Cursor)
+cursor          cursor-grok-4.6-xhigh                 cursor-cli              yes         200000       32768  Grok 4.6 Extra High (Cursor)
+cursor          cursor-grok-4.6-xhigh-fast            cursor-cli              no          200000       32768  Grok 4.6 Extra High Fast (Cursor)
+cursor          composer-2.5-fast                     cursor-cli              no          200000       32768  Composer 2.5 Fast (Cursor)
+cursor          claude-opus-5-5-low                   cursor-cli              no          200000       32768  Claude Opus 5.5 1M Low (Cursor)
+cursor          claude-opus-5-5-low-fast              cursor-cli              no          200000       32768  Claude Opus 5.5 1M Low Fast (Cursor)
+cursor          claude-opus-5-5-medium                cursor-cli              no          200000       32768  Claude Opus 5.5 1M (Cursor)
+cursor          claude-opus-5-5-medium-fast           cursor-cli              no          200000       32768  Claude Opus 5.5 1M Fast (Cursor)
+cursor          claude-opus-5-5-high                  cursor-cli              yes         200000       32768  Claude Opus 5.5 1M High (Cursor)
+cursor          claude-opus-5-5-high-fast             cursor-cli              no          200000       32768  Claude Opus 5.5 1M High Fast (Cursor)
+cursor          claude-opus-5-5-xhigh                 cursor-cli              yes         200000       32768  Claude Opus 5.5 1M Extra High (Cursor)
+cursor          claude-opus-5-5-xhigh-fast            cursor-cli              no          200000       32768  Claude Opus 5.5 1M Extra High Fast (Cursor)
+cursor          claude-opus-5-5-max                   cursor-cli              no          200000       32768  Claude Opus 5.5 1M Max (Cursor)
+cursor          claude-opus-5-5-max-fast              cursor-cli              no          200000       32768  Claude Opus 5.5 1M Max Fast (Cursor)
+cursor          claude-opus-5-low                     cursor-cli              no          200000       32768  Claude Opus 5 1M Low (Cursor)
+cursor          claude-opus-5-low-fast                cursor-cli              no          200000       32768  Claude Opus 5 1M Low Fast (Cursor)
+cursor          claude-opus-5-medium                  cursor-cli              no          200000       32768  Claude Opus 5 1M Medium (Cursor)
+cursor          claude-opus-5-medium-fast             cursor-cli              no          200000       32768  Claude Opus 5 1M Medium Fast (Cursor)
+cursor          claude-opus-5-high                    cursor-cli              yes         200000       32768  Claude Opus 5 1M (Cursor)
+cursor          claude-opus-5-high-fast               cursor-cli              no          200000       32768  Claude Opus 5 1M Fast (Cursor)
+cursor          claude-opus-5-thinking-low            cursor-cli              no          200000       32768  Claude Opus 5 1M Low Thinking (Cursor)
+cursor          claude-opus-5-thinking-low-fast       cursor-cli              no          200000       32768  Claude Opus 5 1M Low Thinking Fast (Cursor)
+cursor          claude-opus-5-thinking-medium         cursor-cli              no          200000       32768  Claude Opus 5 1M Medium Thinking (Cursor)
+cursor          claude-opus-5-thinking-medium-fast    cursor-cli              no          200000       32768  Claude Opus 5 1M Medium Thinking Fast (Cursor)
+cursor          claude-opus-5-thinking-xhigh          cursor-cli              yes         200000       32768  Claude Opus 5 1M Extra High Thinking (Cursor)
+cursor          claude-opus-5-thinking-xhigh-fast     cursor-cli              no          200000       32768  Claude Opus 5 1M Extra High Thinking Fast (Cursor)
+cursor          claude-opus-5-thinking-max            cursor-cli              no          200000       32768  Claude Opus 5 1M Max Thinking (Cursor)
+cursor          claude-opus-5-thinking-max-fast       cursor-cli              no          200000       32768  Claude Opus 5 1M Max Thinking Fast (Cursor)
+cursor          claude-opus-4-8-low                   cursor-cli              no          200000       32768  Claude Opus 4.8 1M Low (Cursor)
+cursor          claude-opus-4-8-low-fast              cursor-cli              no          200000       32768  Claude Opus 4.8 1M Low Fast (Cursor)
+cursor          claude-opus-4-8-medium                cursor-cli              no          200000       32768  Claude Opus 4.8 1M Medium (Cursor)
+cursor          claude-opus-4-8-medium-fast           cursor-cli              no          200000       32768  Claude Opus 4.8 1M Medium Fast (Cursor)
+cursor          claude-opus-4-8-high                  cursor-cli              yes         200000       32768  Claude Opus 4.8 1M (Cursor)
+cursor          claude-opus-4-8-high-fast             cursor-cli              no          200000       32768  Claude Opus 4.8 1M Fast (Cursor)
+cursor          claude-opus-4-8-xhigh                 cursor-cli              yes         200000       32768  Claude Opus 4.8 1M Extra High (Cursor)
+cursor          claude-opus-4-8-xhigh-fast            cursor-cli              no          200000       32768  Claude Opus 4.8 1M Extra High Fast (Cursor)
+cursor          claude-opus-4-8-max                   cursor-cli              no          200000       32768  Claude Opus 4.8 1M Max (Cursor)
+cursor          claude-opus-4-8-max-fast              cursor-cli              no          200000       32768  Claude Opus 4.8 1M Max Fast (Cursor)
+cursor          claude-opus-4-8-thinking-low          cursor-cli              no          200000       32768  Claude Opus 4.8 1M Low Thinking (Cursor)
+cursor          claude-opus-4-8-thinking-low-fast     cursor-cli              no          200000       32768  Claude Opus 4.8 1M Low Thinking Fast (Cursor)
+cursor          claude-opus-4-8-thinking-medium       cursor-cli              no          200000       32768  Claude Opus 4.8 1M Medium Thinking (Cursor)
+cursor          claude-opus-4-8-thinking-medium-fast  cursor-cli              no          200000       32768  Claude Opus 4.8 1M Medium Thinking Fast (Cursor)
+cursor          claude-opus-4-8-thinking-high         cursor-cli              yes         200000       32768  Claude Opus 4.8 1M Thinking (Cursor)
+cursor          claude-opus-4-8-thinking-high-fast    cursor-cli              no          200000       32768  Claude Opus 4.8 1M Thinking Fast (Cursor)
+cursor          claude-opus-4-8-thinking-xhigh        cursor-cli              yes         200000       32768  Claude Opus 4.8 1M Extra High Thinking (Cursor)
+cursor          claude-opus-4-8-thinking-xhigh-fast   cursor-cli              no          200000       32768  Claude Opus 4.8 1M Extra High Thinking Fast (Cursor)
+cursor          claude-opus-4-8-thinking-max          cursor-cli              no          200000       32768  Claude Opus 4.8 1M Max Thinking (Cursor)
+cursor          claude-opus-4-8-thinking-max-fast     cursor-cli              no          200000       32768  Claude Opus 4.8 1M Max Thinking Fast (Cursor)
+cursor          gpt-5.6-sol-none                      cursor-cli              no          200000       32768  GPT-5.6 Sol 1M None (Cursor)
+cursor          gpt-5.6-sol-none-fast                 cursor-cli              no          200000       32768  GPT-5.6 Sol 1M None Fast (Cursor)
+cursor          gpt-5.6-sol-low                       cursor-cli              no          200000       32768  GPT-5.6 Sol 1M Low (Cursor)
+cursor          gpt-5.6-sol-low-fast                  cursor-cli              no          200000       32768  GPT-5.6 Sol 1M Low Fast (Cursor)
+cursor          gpt-5.6-sol-medium                    cursor-cli              no          200000       32768  GPT-5.6 Sol 1M (Cursor)
+cursor          gpt-5.6-sol-medium-fast               cursor-cli              no          200000       32768  GPT-5.6 Sol 1M Fast (Cursor)
+cursor          gpt-5.6-sol-max                       cursor-cli              no          200000       32768  GPT-5.6 Sol 1M Max (Cursor)
+cursor          gpt-5.6-sol-max-fast                  cursor-cli              no          200000       32768  GPT-5.6 Sol 1M Max Fast (Cursor)
+cursor          gpt-5.5-none                          cursor-cli              no          200000       32768  GPT-5.5 1M None (Cursor)
+cursor          gpt-5.5-none-fast                     cursor-cli              no          200000       32768  GPT-5.5 None Fast (Cursor)
+cursor          gpt-5.5-low                           cursor-cli              no          200000       32768  GPT-5.5 1M Low (Cursor)
+cursor          gpt-5.5-low-fast                      cursor-cli              no          200000       32768  GPT-5.5 Low Fast (Cursor)
+cursor          gpt-5.5-medium                        cursor-cli              no          200000       32768  GPT-5.5 1M (Cursor)
+cursor          gpt-5.5-medium-fast                   cursor-cli              no          200000       32768  GPT-5.5 Fast (Cursor)
+cursor          gpt-5.5-high                          cursor-cli              yes         200000       32768  GPT-5.5 1M High (Cursor)
+cursor          gpt-5.5-high-fast                     cursor-cli              no          200000       32768  GPT-5.5 High Fast (Cursor)
+cursor          gpt-5.5-extra-high                    cursor-cli              yes         200000       32768  GPT-5.5 1M Extra High (Cursor)
+cursor          gpt-5.5-extra-high-fast               cursor-cli              no          200000       32768  GPT-5.5 Extra High Fast (Cursor)
+cursor          claude-fable-5-1-low                  cursor-cli              no          200000       32768  Claude Fable 5.1 1M Low (NO ZDR) (Cursor)
+cursor          claude-fable-5-1-medium               cursor-cli              no          200000       32768  Claude Fable 5.1 1M Medium (NO ZDR) (Cursor)
+cursor          claude-fable-5-1-high                 cursor-cli              yes         200000       32768  Claude Fable 5.1 1M (NO ZDR) (Cursor)
+cursor          claude-fable-5-1-xhigh                cursor-cli              yes         200000       32768  Claude Fable 5.1 1M Extra High (NO ZDR) (Cursor)
+cursor          claude-fable-5-1-max                  cursor-cli              no          200000       32768  Claude Fable 5.1 1M Max (NO ZDR) (Cursor)
+cursor          claude-fable-5-1-thinking-low         cursor-cli              no          200000       32768  Claude Fable 5.1 1M Low Thinking (NO ZDR) (Cursor)
+cursor          claude-fable-5-1-thinking-medium      cursor-cli              no          200000       32768  Claude Fable 5.1 1M Medium Thinking (NO ZDR) (Cursor)
+cursor          claude-fable-5-1-thinking-high        cursor-cli              yes         200000       32768  Claude Fable 5.1 1M Thinking (NO ZDR) (Cursor)
+cursor          claude-fable-5-1-thinking-xhigh       cursor-cli              yes         200000       32768  Claude Fable 5.1 1M Extra High Thinking (NO ZDR) (Cursor)
+cursor          claude-fable-5-1-thinking-max         cursor-cli              no          200000       32768  Claude Fable 5.1 1M Max Thinking (NO ZDR) (Cursor)
+cursor          claude-fable-5-low                    cursor-cli              no          200000       32768  Claude Fable 5 1M Low (NO ZDR) (Cursor)
+cursor          claude-fable-5-medium                 cursor-cli              no          200000       32768  Claude Fable 5 1M Medium (NO ZDR) (Cursor)
+cursor          claude-fable-5-high                   cursor-cli              yes         200000       32768  Claude Fable 5 1M (NO ZDR) (Cursor)
+cursor          claude-fable-5-xhigh                  cursor-cli              yes         200000       32768  Claude Fable 5 1M Extra High (NO ZDR) (Cursor)
+cursor          claude-fable-5-max                    cursor-cli              no          200000       32768  Claude Fable 5 1M Max (NO ZDR) (Cursor)
+cursor          claude-fable-5-thinking-low           cursor-cli              no          200000       32768  Claude Fable 5 1M Low Thinking (NO ZDR) (Cursor)
+cursor          claude-fable-5-thinking-medium        cursor-cli              no          200000       32768  Claude Fable 5 1M Medium Thinking (NO ZDR) (Cursor)
+cursor          claude-fable-5-thinking-max           cursor-cli              no          200000       32768  Claude Fable 5 1M Max Thinking (NO ZDR) (Cursor)
+cursor          cursor-grok-4.5-low                   cursor-cli              no          200000       32768  Grok 4.5 Low (Cursor)
+cursor          cursor-grok-4.5-low-fast              cursor-cli              no          200000       32768  Grok 4.5 Low Fast (Cursor)
+cursor          cursor-grok-4.5-medium                cursor-cli              no          200000       32768  Grok 4.5 Medium (Cursor)
+cursor          cursor-grok-4.5-medium-fast           cursor-cli              no          200000       32768  Grok 4.5 Medium Fast (Cursor)
+cursor          gemini-3.8-flash-low                  cursor-cli              no          200000       32768  Gemini 3.8 Flash Low (Cursor)
+cursor          gemini-3.8-flash-medium               cursor-cli              no          200000       32768  Gemini 3.8 Flash Medium (Cursor)
+cursor          gemini-3.8-flash-high                 cursor-cli              yes         200000       32768  Gemini 3.8 Flash High (Cursor)
+cursor          gemini-3.7-flash-low                  cursor-cli              no          200000       32768  Gemini 3.7 Flash Low (Cursor)
+cursor          gemini-3.7-flash-medium               cursor-cli              no          200000       32768  Gemini 3.7 Flash Medium (Cursor)
+cursor          muse-spark-1.3-minimal                cursor-cli              no          200000       32768  Muse Spark 1.3 1M Minimal (Cursor)
+cursor          muse-spark-1.3-low                    cursor-cli              no          200000       32768  Muse Spark 1.3 1M Low (Cursor)
+cursor          muse-spark-1.3-medium                 cursor-cli              no          200000       32768  Muse Spark 1.3 1M Medium (Cursor)
+cursor          muse-spark-1.3-high                   cursor-cli              yes         200000       32768  Muse Spark 1.3 1M (Cursor)
+cursor          muse-spark-1.3-xhigh                  cursor-cli              yes         200000       32768  Muse Spark 1.3 1M Extra High (Cursor)
+cursor          muse-spark-1.3-max                    cursor-cli              no          200000       32768  Muse Spark 1.3 1M Max (Cursor)
+cursor          gpt-5.6-terra-none                    cursor-cli              no          200000       32768  GPT-5.6 Terra 1M None (Cursor)
+cursor          gpt-5.6-terra-none-fast               cursor-cli              no          200000       32768  GPT-5.6 Terra 1M None Fast (Cursor)
+cursor          gpt-5.6-terra-low                     cursor-cli              no          200000       32768  GPT-5.6 Terra 1M Low (Cursor)
+cursor          gpt-5.6-terra-low-fast                cursor-cli              no          200000       32768  GPT-5.6 Terra 1M Low Fast (Cursor)
+cursor          gpt-5.6-terra-medium                  cursor-cli              no          200000       32768  GPT-5.6 Terra 1M (Cursor)
+cursor          gpt-5.6-terra-medium-fast             cursor-cli              no          200000       32768  GPT-5.6 Terra 1M Fast (Cursor)
+cursor          gpt-5.6-terra-high                    cursor-cli              yes         200000       32768  GPT-5.6 Terra 1M High (Cursor)
+cursor          gpt-5.6-terra-high-fast               cursor-cli              no          200000       32768  GPT-5.6 Terra 1M High Fast (Cursor)
+cursor          gpt-5.6-terra-xhigh                   cursor-cli              yes         200000       32768  GPT-5.6 Terra 1M Extra High (Cursor)
+cursor          gpt-5.6-terra-xhigh-fast              cursor-cli              no          200000       32768  GPT-5.6 Terra 1M Extra High Fast (Cursor)
+cursor          gpt-5.6-terra-max                     cursor-cli              no          200000       32768  GPT-5.6 Terra 1M Max (Cursor)
+cursor          gpt-5.6-terra-max-fast                cursor-cli              no          200000       32768  GPT-5.6 Terra 1M Max Fast (Cursor)
+cursor          claude-sonnet-5-5-low                 cursor-cli              no          200000       32768  Claude Sonnet 5.5  Low (Cursor)
+cursor          claude-sonnet-5-5-medium              cursor-cli              no          200000       32768  Claude Sonnet 5.5  Medium (Cursor)
+cursor          claude-sonnet-5-5-high                cursor-cli              yes         200000       32768  Claude Sonnet 5.5  High (Cursor)
+cursor          claude-sonnet-5-5-xhigh               cursor-cli              yes         200000       32768  Claude Sonnet 5.5  Extra High (Cursor)
+cursor          claude-sonnet-5-5-max                 cursor-cli              no          200000       32768  Claude Sonnet 5.5  Max (Cursor)
+cursor          claude-sonnet-5-low                   cursor-cli              no          200000       32768  Claude Sonnet 5 1M Low (Cursor)
+cursor          claude-sonnet-5-medium                cursor-cli              no          200000       32768  Claude Sonnet 5 1M Medium (Cursor)
+cursor          claude-sonnet-5-high                  cursor-cli              yes         200000       32768  Claude Sonnet 5 1M (Cursor)
+cursor          claude-sonnet-5-xhigh                 cursor-cli              yes         200000       32768  Claude Sonnet 5 1M Extra High (Cursor)
+cursor          claude-sonnet-5-max                   cursor-cli              no          200000       32768  Claude Sonnet 5 1M Max (Cursor)
+cursor          claude-sonnet-5-thinking-low          cursor-cli              no          200000       32768  Claude Sonnet 5 1M Low Thinking (Cursor)
+cursor          claude-sonnet-5-thinking-medium       cursor-cli              no          200000       32768  Claude Sonnet 5 1M Medium Thinking (Cursor)
+cursor          claude-sonnet-5-thinking-max          cursor-cli              no          200000       32768  Claude Sonnet 5 1M Max Thinking (Cursor)
+cursor          claude-4.6-sonnet-medium              cursor-cli              no          200000       32768  Claude Sonnet 4.6 1M (Cursor)
+cursor          claude-4.6-sonnet-medium-thinking     cursor-cli              yes         200000       32768  Claude Sonnet 4.6 1M Thinking (Cursor)
+cursor          claude-opus-4-7-low                   cursor-cli              no          200000       32768  Claude Opus 4.7 1M Low (Cursor)
+cursor          claude-opus-4-7-low-fast              cursor-cli              no          200000       32768  Claude Opus 4.7 1M Low Fast (Cursor)
+cursor          claude-opus-4-7-medium                cursor-cli              no          200000       32768  Claude Opus 4.7 1M Medium (Cursor)
+cursor          claude-opus-4-7-medium-fast           cursor-cli              no          200000       32768  Claude Opus 4.7 1M Medium Fast (Cursor)
+cursor          claude-opus-4-7-high                  cursor-cli              yes         200000       32768  Claude Opus 4.7 1M High (Cursor)
+cursor          claude-opus-4-7-high-fast             cursor-cli              no          200000       32768  Claude Opus 4.7 1M High Fast (Cursor)
+cursor          claude-opus-4-7-xhigh                 cursor-cli              yes         200000       32768  Claude Opus 4.7 1M (Cursor)
+cursor          claude-opus-4-7-xhigh-fast            cursor-cli              no          200000       32768  Claude Opus 4.7 1M Fast (Cursor)
+cursor          claude-opus-4-7-max                   cursor-cli              no          200000       32768  Claude Opus 4.7 1M Max (Cursor)
+cursor          claude-opus-4-7-max-fast              cursor-cli              no          200000       32768  Claude Opus 4.7 1M Max Fast (Cursor)
+cursor          claude-opus-4-7-thinking-low          cursor-cli              no          200000       32768  Claude Opus 4.7 1M Low Thinking (Cursor)
+cursor          claude-opus-4-7-thinking-low-fast     cursor-cli              no          200000       32768  Claude Opus 4.7 1M Low Thinking Fast (Cursor)
+cursor          claude-opus-4-7-thinking-medium       cursor-cli              no          200000       32768  Claude Opus 4.7 1M Medium Thinking (Cursor)
+cursor          claude-opus-4-7-thinking-medium-fast  cursor-cli              no          200000       32768  Claude Opus 4.7 1M Medium Thinking Fast (Cursor)
+cursor          claude-opus-4-7-thinking-high         cursor-cli              yes         200000       32768  Claude Opus 4.7 1M High Thinking (Cursor)
+cursor          claude-opus-4-7-thinking-high-fast    cursor-cli              no          200000       32768  Claude Opus 4.7 1M High Thinking Fast (Cursor)
+cursor          claude-opus-4-7-thinking-xhigh        cursor-cli              yes         200000       32768  Claude Opus 4.7 1M Thinking (Cursor)
+cursor          claude-opus-4-7-thinking-xhigh-fast   cursor-cli              no          200000       32768  Claude Opus 4.7 1M Thinking Fast (Cursor)
+cursor          claude-opus-4-7-thinking-max          cursor-cli              no          200000       32768  Claude Opus 4.7 1M Max Thinking (Cursor)
+cursor          claude-opus-4-7-thinking-max-fast     cursor-cli              no          200000       32768  Claude Opus 4.7 1M Max Thinking Fast (Cursor)
+cursor          gpt-5.4-low                           cursor-cli              no          200000       32768  GPT-5.4 1M Low (Cursor)
+cursor          gpt-5.4-medium                        cursor-cli              no          200000       32768  GPT-5.4 1M (Cursor)
+cursor          gpt-5.4-medium-fast                   cursor-cli              no          200000       32768  GPT-5.4 Fast (Cursor)
+cursor          gpt-5.4-high                          cursor-cli              yes         200000       32768  GPT-5.4 1M High (Cursor)
+cursor          gpt-5.4-high-fast                     cursor-cli              no          200000       32768  GPT-5.4 High Fast (Cursor)
+cursor          gpt-5.4-xhigh                         cursor-cli              yes         200000       32768  GPT-5.4 1M Extra High (Cursor)
+cursor          gpt-5.4-xhigh-fast                    cursor-cli              no          200000       32768  GPT-5.4 Extra High Fast (Cursor)
+cursor          claude-4.6-opus-high                  cursor-cli              yes         200000       32768  Claude Opus 4.6 1M (Cursor)
+cursor          claude-4.6-opus-max                   cursor-cli              no          200000       32768  Claude Opus 4.6 1M Max (Cursor)
+cursor          claude-4.6-opus-high-thinking         cursor-cli              yes         200000       32768  Claude Opus 4.6 1M Thinking (Cursor)
+cursor          claude-4.6-opus-max-thinking          cursor-cli              yes         200000       32768  Claude Opus 4.6 1M Max Thinking (Cursor)
+cursor          claude-4.5-opus-high                  cursor-cli              yes         200000       32768  Claude Opus 4.5 (Cursor)
+cursor          claude-4.5-opus-high-thinking         cursor-cli              yes         200000       32768  Claude Opus 4.5 Thinking (Cursor)
+cursor          gpt-5.2-low                           cursor-cli              no          200000       32768  GPT-5.2 Low (Cursor)
+cursor          gpt-5.2-low-fast                      cursor-cli              no          200000       32768  GPT-5.2 Low Fast (Cursor)
+cursor          gpt-5.2-fast                          cursor-cli              no          200000       32768  GPT-5.2 Fast (Cursor)
+cursor          gpt-5.2-high-fast                     cursor-cli              no          200000       32768  GPT-5.2 High Fast (Cursor)
+cursor          gpt-5.2-xhigh                         cursor-cli              yes         200000       32768  GPT-5.2 Extra High (Cursor)
+cursor          gpt-5.2-xhigh-fast                    cursor-cli              no          200000       32768  GPT-5.2 Extra High Fast (Cursor)
+cursor          gpt-5.6-luna-none                     cursor-cli              no          200000       32768  GPT-5.6 Luna 1M None (Cursor)
+cursor          gpt-5.6-luna-none-fast                cursor-cli              no          200000       32768  GPT-5.6 Luna 1M None Fast (Cursor)
+cursor          gpt-5.6-luna-low                      cursor-cli              no          200000       32768  GPT-5.6 Luna 1M Low (Cursor)
+cursor          gpt-5.6-luna-low-fast                 cursor-cli              no          200000       32768  GPT-5.6 Luna 1M Low Fast (Cursor)
+cursor          gpt-5.6-luna-medium                   cursor-cli              no          200000       32768  GPT-5.6 Luna 1M (Cursor)
+cursor          gpt-5.6-luna-medium-fast              cursor-cli              no          200000       32768  GPT-5.6 Luna 1M Fast (Cursor)
+cursor          gpt-5.6-luna-high-fast                cursor-cli              no          200000       32768  GPT-5.6 Luna 1M High Fast (Cursor)
+cursor          gpt-5.6-luna-xhigh                    cursor-cli              yes         200000       32768  GPT-5.6 Luna 1M Extra High (Cursor)
+cursor          gpt-5.6-luna-xhigh-fast               cursor-cli              no          200000       32768  GPT-5.6 Luna 1M Extra High Fast (Cursor)
+cursor          gpt-5.6-luna-max                      cursor-cli              no          200000       32768  GPT-5.6 Luna 1M Max (Cursor)
+cursor          gpt-5.6-luna-max-fast                 cursor-cli              no          200000       32768  GPT-5.6 Luna 1M Max Fast (Cursor)
+cursor          gemini-3.6-flash-minimal              cursor-cli              no          200000       32768  Gemini 3.6 Flash Minimal (Cursor)
+cursor          gemini-3.6-flash-low                  cursor-cli              no          200000       32768  Gemini 3.6 Flash Low (Cursor)
+cursor          gemini-3.6-flash-medium               cursor-cli              no          200000       32768  Gemini 3.6 Flash Medium (Cursor)
+cursor          gemini-3.6-flash-high                 cursor-cli              yes         200000       32768  Gemini 3.6 Flash (Cursor)
+cursor          gemini-3.1-pro                        cursor-cli              no          200000       32768  Gemini 3.1 Pro (Cursor)
+cursor          gpt-5.4-mini-none                     cursor-cli              no          200000       32768  GPT-5.4 Mini None (Cursor)
+cursor          gpt-5.4-mini-low                      cursor-cli              no          200000       32768  GPT-5.4 Mini Low (Cursor)
+cursor          gpt-5.4-mini-medium                   cursor-cli              no          200000       32768  GPT-5.4 Mini (Cursor)
+cursor          gpt-5.4-mini-high                     cursor-cli              yes         200000       32768  GPT-5.4 Mini High (Cursor)
+cursor          gpt-5.4-mini-xhigh                    cursor-cli              yes         200000       32768  GPT-5.4 Mini Extra High (Cursor)
+cursor          gpt-5.4-nano-none                     cursor-cli              no          200000       32768  GPT-5.4 Nano None (Cursor)
+cursor          gpt-5.4-nano-low                      cursor-cli              no          200000       32768  GPT-5.4 Nano Low (Cursor)
+cursor          gpt-5.4-nano-medium                   cursor-cli              no          200000       32768  GPT-5.4 Nano (Cursor)
+cursor          gpt-5.4-nano-high                     cursor-cli              yes         200000       32768  GPT-5.4 Nano High (Cursor)
+cursor          gpt-5.4-nano-xhigh                    cursor-cli              yes         200000       32768  GPT-5.4 Nano Extra High (Cursor)
+cursor          claude-4.5-sonnet                     cursor-cli              no          200000       32768  Claude Sonnet 4.5 (Cursor)
+cursor          claude-4.5-sonnet-thinking            cursor-cli              yes         200000       32768  Claude Sonnet 4.5 Thinking (Cursor)
+cursor          gpt-5.1-low                           cursor-cli              no          200000       32768  GPT-5.1 Low (Cursor)
+cursor          gpt-5.1                               cursor-cli              no          200000       32768  GPT-5.1 (Cursor)
+cursor          gemini-3-flash-preview                cursor-cli              no         1000000       65536  Gemini 3 Flash (Cursor)
+cursor          gemini-3.5-flash                      cursor-cli              no          200000       32768  Gemini 3.5 Flash (Cursor)
+cursor          claude-4-sonnet                       cursor-cli              no          200000       32768  Claude Sonnet 4 (Cursor)
+cursor          claude-4-sonnet-thinking              cursor-cli              yes         200000       32768  Claude Sonnet 4 Thinking (Cursor)
+cursor          gpt-5-mini                            cursor-cli              no          200000       32768  GPT-5 Mini (Cursor)
+cursor          kimi-k3-low                           cursor-cli              no          200000       32768  Kimi K3 Low (Cursor)
+cursor          kimi-k3-high                          cursor-cli              yes         200000       32768  Kimi K3 High (Cursor)
+cursor          kimi-k3-max                           cursor-cli              no          200000       32768  Kimi K3 (Cursor)
+cursor          kimi-k2.7-code                        cursor-cli              no          200000       32768  Kimi K2.7 Code (Cursor)
+cursor          glm-5.2-high                          cursor-cli              yes         200000       32768  GLM 5.2 (Cursor)
+cursor          glm-5.2-max                           cursor-cli              no          200000       32768  GLM 5.2 Max (Cursor)
+--------------  ------------------------------------  ----------------------  ---------  -------  ----------  ---------------------------------------------------------

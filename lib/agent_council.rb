@@ -390,6 +390,7 @@ module AgentCouncil
       MESSAGE
     end
     abort "Config file not found: #{config_path}" unless File.file?(config_path)
+    warn "No config file given; using default config file: #{File.expand_path(config_path)}" unless argv[1]
 
     # Read once. Analysts receive the user's prompt verbatim, followed by
     # the report-format addendum; the consolidator cites the prompt alone.
