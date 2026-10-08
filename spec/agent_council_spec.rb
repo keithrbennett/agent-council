@@ -314,6 +314,14 @@ RSpec.describe AgentCouncil do
       )
     end
 
+    it 'adds a duration row and annotates sources with their durations' do
+      meta = { 'role' => 'consolidator', 'duration' => '00:02:10', 'sources' => ['a / b'],
+        'source_durations' => { 'a / b' => '00:00:42' } }
+      table = described_class.byline_table(meta, 'openai', 'gpt-x')
+      expect(table).to include('| duration | 00:02:10 |')
+      expect(table).to include('| source | a / b (00:00:42) |')
+    end
+
     it 'omits source rows when there are none (analyst reports)' do
       meta = { 'role' => 'analyst', 'query' => 'review', 'timestamp' => '2026-09-03T19:23:57' }
       table = described_class.byline_table(meta, 'openai', 'gpt-x')
@@ -368,7 +376,7 @@ RSpec.describe AgentCouncil do
         end
 
         label, ok, = described_class.run_consolidation({ 'provider' => 'zai', 'model' => 'glm-5.3' },
-          'prompt', dir, 'prefix', meta: {
+          'prompt', dir, 'prefix', source_durations: { 'openai / gpt-x' => '00:01:05' }, meta: {
             'query'     => 'check-prev-commits',
             'timestamp' => '2026-09-03T19:23:57',
           }, prompt_path: 'prompts/check-prev-commits_prompt.md')
@@ -377,7 +385,7 @@ RSpec.describe AgentCouncil do
         expect(captured[:run_dir]).to eq(dir)
         expect(captured[:filename]).to eq('prefix_consolidated_pi_zai_glm-5.3.md')
         expect(captured[:meta]['role']).to eq('consolidator')
-        expect(captured[:header]).to eq(<<~HEADER)
+        expect(captured[:header].call('00:02:10')).to eq(<<~HEADER)
           # Consolidated Report
 
           ### Prompt: prompts/check-prev-commits_prompt.md
@@ -390,7 +398,8 @@ RSpec.describe AgentCouncil do
           | provider | zai |
           | model | glm-5.3 |
           | timestamp | 2026-09-03T19:23:57 |
-          | source | openai / gpt-x |
+          | duration | 00:02:10 |
+          | source | openai / gpt-x (00:01:05) |
         HEADER
         expect(File.read(File.join(dir, captured[:filename]))).to eq('consolidated body')
         expect(Dir.exist?(File.join(dir, 'consolidated'))).to be(false)

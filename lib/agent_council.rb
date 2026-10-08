@@ -97,7 +97,8 @@ module AgentCouncil
   # index: the agent's 1-based position in the config's agent list, used to
   # disambiguate repeated provider/model entries in the filename and label;
   # filename: overrides the output name; meta: becomes YAML front matter;
-  # header: markdown prepended to the report body. If the response begins
+  # header: markdown prepended to the report body (or a callable receiving the
+  # task's HH:MM:SS duration and returning it). If the response begins
   # with an H1 of its own, it is dropped to avoid a duplicated title.
   module_function def run_agent(agent, prompt, run_dir, file_prefix, index: nil, filename: nil, meta: {},
     header: nil)
@@ -108,7 +109,10 @@ module AgentCouncil
 
     Dir.mktmpdir('agent-council-') do |scratch_dir|
       argv = HARNESS.argv(provider, model, scratch_dir)
-      stdout, stderr, status = Open3.capture3({ 'TMPDIR' => scratch_dir }, *argv, stdin_data: prompt)
+      (stdout, stderr, status), elapsed = timed do
+        Open3.capture3({ 'TMPDIR' => scratch_dir }, *argv, stdin_data: prompt)
+      end
+      duration = format_duration(elapsed)
 
       unless status.success?
         detail = stderr.lines.map(&:strip).reject(&:empty?).first || 'no error output'
@@ -134,6 +138,7 @@ module AgentCouncil
 
       filename ||= report_filename(file_prefix, provider, model, index: index)
       if header
+        header = header.call(duration) if header.respond_to?(:call)
         text = text.sub(/\A\s*#(?!#).+\n+/, '')
         text = "#{header}\n#{text}"
       end
@@ -259,9 +264,14 @@ module AgentCouncil
       'provider'  => provider,
       'model'     => model,
       'timestamp' => meta['timestamp'],
+      'duration'  => meta['duration'],
     }.compact
     rows = fields.map { |field, value| "| #{field} | #{value} |" }
-    rows += Array(meta['sources']).map { |label| "| source | #{label} |" }
+    source_durations = meta['source_durations'] || {}
+    rows += Array(meta['sources']).map do |label|
+      duration = source_durations[label]
+      "| source | #{label}#{" (#{duration})" if duration} |"
+    end
     <<~TABLE
       | Field     | Value |
       | :-------- | :---------------------------- |
@@ -272,7 +282,7 @@ module AgentCouncil
   # Runs the configured consolidator model over a run's reports and writes
   # its report into the same run dir. Returns [label, ok, detail].
   module_function def run_consolidation(consolidator, original_prompt, run_dir, file_prefix,
-    meta: {}, prompt_path: nil)
+    meta: {}, prompt_path: nil, source_durations: {})
     provider = consolidator['provider'] if consolidator.is_a?(Hash)
     model = consolidator['model'] if consolidator.is_a?(Hash)
     return ['consolidator', false, "config entry needs 'provider' and 'model'"] if provider.nil? || model.nil?
@@ -284,9 +294,13 @@ module AgentCouncil
     end
 
     prompt = consolidation_prompt(original_prompt, reports)
-    meta = meta.merge('role' => 'consolidator', 'sources' => reports.map(&:first))
+    meta = meta.merge('role' => 'consolidator', 'sources' => reports.map(&:first),
+      'source_durations' => source_durations)
     prompt_line = prompt_path ? "### Prompt: #{prompt_path}\n\n" : ''
-    header = "# Consolidated Report\n\n#{prompt_line}#{byline_table(meta, provider, model)}"
+    header = ->(duration) do
+      "# Consolidated Report\n\n#{prompt_line}" \
+        "#{byline_table(meta.merge('duration' => duration), provider, model)}"
+    end
     label, ok, detail = run_agent(consolidator, prompt, run_dir, file_prefix,
       filename: consolidated_filename(file_prefix, provider, model),
       header:   header,
@@ -479,7 +493,8 @@ module AgentCouncil
       puts "\nConsolidating reports:"
       (label, ok, detail), elapsed = timed do
         run_consolidation(consolidator, prompt, run_dir, file_prefix,
-          meta: report_meta, prompt_path: prompt_path)
+          meta: report_meta, prompt_path: prompt_path,
+          source_durations: results.to_h { |label, _, _, elapsed| [label, format_duration(elapsed)] })
       end
       puts format_result_line(label, ok, detail, elapsed)
     end
