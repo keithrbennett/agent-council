@@ -392,7 +392,8 @@ module AgentCouncil
       abort <<~MESSAGE
         No config file given, and neither ./#{CWD_CONFIG_NAME} nor ~/#{HOME_CONFIG_NAME} exists.
         Pass a config path: agent-council PROMPT_FILE CONFIG_FILE
-        See examples/configs/ in the repository for sample configs.
+        Minimal config (agents: [{provider: ..., model: ...}]) and samples:
+        #{u}
       MESSAGE
     end
     abort "Config file not found: #{config_path}" unless File.file?(config_path)

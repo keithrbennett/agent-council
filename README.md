@@ -41,8 +41,21 @@ Create `agent-council.yml` in the directory you will analyze, or
 `~/.agent-council.yml` in your home directory, and put your model configuration
 there. When no config path is passed, the command checks the current working
 directory first, then the home config. See [Discovering and configuring
-models](#discovering-and-configuring-models) and the checkout's
-`examples/configs/` for the config format and samples.
+models](#discovering-and-configuring-models) for the config format; a minimal
+config looks like this:
+
+```yaml
+# agent-council.yml
+agents:
+  - provider: opencode-go
+    model: kimi-k2.6
+consolidator:            # optional; omit to skip consolidation
+  provider: opencode-go
+  model: kimi-k2.6
+```
+
+More samples are at
+<https://github.com/keithrbennett/agent-council/tree/main/examples/configs>.
 
 You can also run `./exe/agent-council` directly from a source checkout; the
 repo-relative invocation below does not require installing the gem.
@@ -59,7 +72,8 @@ Edit the config to choose the ensemble. The config is the optional second
 argument; if omitted, `./agent-council.yml` in the current directory is used
 (only the current directory is checked), else `~/.agent-council.yml` in your
 home directory (hidden, so it doesn't clutter `ls`). It is an error if
-none of these exists. Start from a sample in `examples/configs/`. Each entry becomes one
+none of these exists. Start from the minimal config above or a sample in
+[`examples/configs/`](https://github.com/keithrbennett/agent-council/tree/main/examples/configs). Each entry becomes one
 `pi --provider <provider> --model <model>` invocation. No Ruby changes are
 needed to add, remove, or swap models.
 

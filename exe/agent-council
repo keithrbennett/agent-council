@@ -11,7 +11,7 @@
 # CONFIG_FILE defaults to ./agent-council.yml in the current directory (no
 # upward directory search), else ~/.agent-council.yml, if either exists;
 # otherwise it is required.
-# See examples/configs/ in the repository for sample configs.
+# Sample configs: https://github.com/keithrbennett/agent-council/tree/main/examples/configs
 # Run FROM the repository you want analyzed: the harness analyzes its own cwd.
 
 require_relative '../lib/agent_council'
