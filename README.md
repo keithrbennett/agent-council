@@ -63,6 +63,9 @@ none of these exists. Start from a sample in `examples/configs/`. Each entry bec
 `pi --provider <provider> --model <model>` invocation. No Ruby changes are
 needed to add, remove, or swap models.
 
+For a recommended code-review ensemble, see
+[`code-review-agents.md`](code-review-agents.md).
+
 An optional top-level `consolidator:` entry (provider + model, same
 shape as an agent) runs after all agents finish: that model receives the
 original prompt plus all of the run's reports — each labeled with its
@@ -122,6 +125,10 @@ runtime and not shipped in the gem:
 - `examples/prompts/project-name-prompt.md` + any one-model config —
   a small creative-writing prompt useful for spotting prompt-sensitivity
   differences across models.
+- `examples/prompts/recommend-model-ensemble-prompt.md` — a reusable prompt
+  for recommending a provider-diverse model ensemble for a task; its sample
+  code-review recommendation is in
+  [`examples/results/recommend-model-ensemble-code-review.md`](examples/results/recommend-model-ensemble-code-review.md).
 
 Prompt filenames may end in `-prompt.md` or `_prompt.md`. The file name
 becomes the query slug in report filenames, with either suffix stripped — so
