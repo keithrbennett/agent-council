@@ -119,19 +119,16 @@ module AgentCouncil
         return [label, false, "#{HARNESS::NAME} exited #{status.exitstatus}: #{detail}"]
       end
 
+      error = HARNESS.error_message(stdout)
+      return [label, false, "#{HARNESS::NAME} exited 0 but provider error: #{error.gsub(/\s+/, ' ').slice(0, 300)}"] if error
+
       text = HARNESS.final_response(stdout)
       if text.nil? || text.strip.empty?
-        error = HARNESS.error_message(stdout)
         detail =
-          if error
-            "provider error: #{error.gsub(/\s+/, ' ').slice(0, 300)}"
+          if HARNESS.assistant_messages(stdout).any?
+            'final assistant message had no text content (model may have answered in reasoning only)'
           else
-            saw_assistant = HARNESS.assistant_messages(stdout).any?
-            if saw_assistant
-              'final assistant message had no text content (model may have answered in reasoning only)'
-            else
-              "no assistant message in #{HARNESS::NAME} event stream"
-            end
+            "no assistant message in #{HARNESS::NAME} event stream"
           end
         return [label, false, "#{HARNESS::NAME} exited 0 but #{detail}"]
       end

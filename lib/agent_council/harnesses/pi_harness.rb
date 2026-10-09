@@ -111,13 +111,13 @@ module AgentCouncil
         message && response_text(message)
       end
 
-      # Last provider-reported assistant error in the stream, if any. Pi exits 0
+      # Provider-reported error on the final assistant message, if any. Pi exits 0
       # even when the provider rejects the request, so this is how such failures
-      # are surfaced.
+      # are surfaced. Only the final message counts: an error in an earlier turn
+      # that a later turn recovered from is not a failure, while an error on the
+      # last turn means any earlier text is a partial fragment, not a report.
       module_function def error_message(jsonl)
-        assistant_messages(jsonl).reverse_each.detect do |m|
-          m['errorMessage']
-        end&.fetch('errorMessage')
+        assistant_messages(jsonl).last&.fetch('errorMessage', nil)
       end
     end
   end

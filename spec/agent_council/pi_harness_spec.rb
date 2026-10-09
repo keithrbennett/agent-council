@@ -137,6 +137,22 @@ RSpec.describe AgentCouncil::Harnesses::PiHarness do
       expect(described_class.error_message(stream)).to eq('second')
     end
 
+    it 'reports an error on the final message even if earlier turns had text' do
+      stream = <<~JSONL
+        {"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"I will investigate now"}],"stopReason":"toolUse"}}
+        {"type":"message_end","message":{"role":"assistant","content":[],"stopReason":"error","errorMessage":"quota exceeded"}}
+      JSONL
+      expect(described_class.error_message(stream)).to eq('quota exceeded')
+    end
+
+    it 'ignores an earlier error that a later turn recovered from' do
+      stream = <<~JSONL
+        {"type":"message_end","message":{"role":"assistant","content":[],"stopReason":"error","errorMessage":"transient"}}
+        {"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"report"}],"stopReason":"stop"}}
+      JSONL
+      expect(described_class.error_message(stream)).to be_nil
+    end
+
     it 'returns nil when there are no errors' do
       expect(described_class.error_message(sample_stream)).to be_nil
     end
