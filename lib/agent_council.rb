@@ -120,7 +120,10 @@ module AgentCouncil
       end
 
       error = HARNESS.error_message(stdout)
-      return [label, false, "#{HARNESS::NAME} exited 0 but provider error: #{error.gsub(/\s+/, ' ').slice(0, 300)}"] if error
+      if error
+        summary = error.gsub(/\s+/, ' ').slice(0, 300)
+        return [label, false, "#{HARNESS::NAME} exited 0 but provider error: #{summary}"]
+      end
 
       text = HARNESS.final_response(stdout)
       if text.nil? || text.strip.empty?
@@ -178,13 +181,9 @@ module AgentCouncil
   # --- report front matter ---
 
   module_function def with_front_matter(fields, body)
-    header = fields.flat_map do |key, value|
-      if value.is_a?(Array)
-        ["#{key}:", *value.map { |item| "  - #{item}" }]
-      else
-        ["#{key}: #{yaml_scalar(value)}"]
-      end
-    end.join("\n")
+    header = YAML.dump(fields.transform_keys(&:to_s)).delete_prefix("---\n").chomp
+    # Documented format: ISO 8601 timestamps are unquoted (parse as Time).
+    header = header.sub(/^timestamp: ['"](\d{4}-\d\d-\d\dT[\d:]+)['"]$/, 'timestamp: \\1')
     <<~TEXT
       ---
       #{header}
@@ -192,10 +191,6 @@ module AgentCouncil
 
       #{body}
     TEXT
-  end
-
-  module_function def yaml_scalar(value)
-    value.to_s
   end
 
   # [fields, body] from a report file, or [nil, nil] if it has no YAML

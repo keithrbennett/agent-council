@@ -227,6 +227,16 @@ RSpec.describe AgentCouncil do
       expect(fields['sources']).to eq(['a / one', 'b / two'])
     end
 
+    it 'round-trips #N source labels and a source_durations hash as valid YAML' do
+      fields = {
+        'sources'          => ['#1 zai / glm-5.3', '#2 zai / glm-5.3'],
+        'source_durations' => { '#1 zai / glm-5.3' => '00:03:43', '#2 zai / glm-5.3' => '00:01:05' },
+      }
+      content = described_class.with_front_matter(fields, 'body')
+      parsed, = described_class.parse_front_matter(content)
+      expect(parsed).to eq(fields)
+    end
+
     it 'parses unquoted ISO timestamps safely as UTC Time objects' do
       content = described_class.with_front_matter({ 'timestamp' => '2026-09-04T20:54:39' }, 'body')
       fields, = described_class.parse_front_matter(content)
