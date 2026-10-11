@@ -65,3 +65,5 @@ recommend a small ensemble for the user's task and constraints.
 See [Four agents for code review](../results/recommend-model-ensemble-code-review.md)
 for an example recommendation produced from a model list and the priorities
 of provider diversity, useful code-review findings, and reasonable speed.
+(That file is generated output kept in the source repository only; it is
+not included in the gem.)

@@ -6,7 +6,7 @@ The long-term goal is to collect genuinely different viewpoints on the same ques
 
 This repository is the short-term step: an experiment to validate whether varying only the models under a single harness (Pi) already produces sufficiently diverse and useful results, before harness diversity is added.
 
-It is intentionally not yet a gem or general-purpose framework.
+It is packaged as a gem for easy installation, but it is intentionally not a general-purpose framework.
 
 Build a small Ruby CLI that runs the **same prompt** through several AI model/provider combinations using the Pi coding-agent harness and saves each final response to a deterministic Markdown file.
 
@@ -379,37 +379,48 @@ Keep the experiment small.
 ```text
 README.md
 DESIGN.md
-.gitignore
-exe/
-  agent-council          # executable entry point; all code lives in lib/
+RELEASE_NOTES.md
+LICENSE.txt
+REVIEW_NOTES.md          # settled review findings; not shipped in the gem
+code-review-agents.md    # sample code-review ensemble recommendation
+agent-council.gemspec
+exe/                     # executable entry points; all code lives in lib/
+  agent-council
+  pi-models              # helper: list models configured in pi
 lib/
   agent_council.rb       # harness-agnostic orchestration (AgentCouncil)
   agent_council/
+    version.rb
+    pi_models.rb         # backs exe/pi-models
     harnesses/
       pi_harness.rb      # pi-specific behavior (AgentCouncil::Harnesses::PiHarness)
     templates/           # runtime data files (resolved via __dir__, shipped in the gem)
       consolidate_prompt.md  # instructions template for the consolidator
       analyst_format.md      # report-format addendum for analysts
-spec/
-  agent_council_spec.rb       # RSpec; harness-agnostic logic
-  agent_council/
-    pi_harness_spec.rb        # RSpec; pi invocation + event-stream parsing
+spec/                    # RSpec; not shipped in the gem
 
-examples/                # pure, non-runtime samples (not shipped in the gem)
+examples/                # pure, non-runtime samples (prompts/ and configs/ ship in the gem)
   prompts/
     smoke-test_prompt.md
     code-base-state_prompt.md
     project-name-prompt.md
+    recommend-model-ensemble-prompt.md
+    review-latest-commit-prompt.md
   configs/
     single.yml
     consolidated.yml
+  results/               # sample output; not shipped in the gem
 
 reports/                 # created on demand; gitignored
 ```
 
-Do not create gem infrastructure yet. A flat `lib/` now holds the code;
-do not introduce deeper namespaces (`lib/agent_council/services/...`) unless
-the experiment actually grows enough to require them.
+Dev-only files (Gemfile, Rakefile, lint configs, CI workflow, `bin/setup`,
+`hooks/pre-commit`) are omitted above. The gemspec's `spec.files` is the
+authority on what ships.
+
+Keep `lib/` shallow; do not introduce deeper namespaces
+(`lib/agent_council/services/...`) unless the experiment actually grows
+enough to require them.
 
 A clean, disposable 100–300 line Ruby implementation is preferable to a speculative framework.
 
@@ -449,7 +460,7 @@ The experiment is successful when we can:
 Example:
 
 ```bash
-./exe/agent-council examples/prompts/codebase-review.md
+./exe/agent-council codebase-review.md
 ```
 
 produces:
@@ -481,8 +492,6 @@ The following are not part of this MVP:
 - native OpenCode integration;
 - Gemini CLI integration;
 - generalized runner abstraction;
-- gem packaging;
-- RubyGems publishing;
 - report comparison UI;
 - report scoring;
 - report/process status taxonomy;
@@ -521,7 +530,7 @@ After using it on real tasks, we can then ask:
 
 > Does using different native harnesses such as Claude Code and Codex add enough value beyond Pi-based model diversity to justify a second execution layer?
 
-Only then should we decide whether to integrate `oneharness` or turn the project into a gem.
+Only then should we decide whether to integrate `oneharness`.
 
 ---
 

@@ -7,14 +7,14 @@ harness, and save each model's final response as a separate Markdown report.
 Goal: collect genuinely different viewpoints on the same question from
 multiple harness/model instances. This experiment is the short-term step —
 does varying only the models through one harness (Pi) already produce
-enough useful diversity? See `DESIGN.md` for the rationale and explicit
+enough useful diversity? See [`DESIGN.md`](DESIGN.md) for the rationale and explicit
 non-goals.
 
 ## Prerequisites
 
 - Ruby (standard library only for the tool itself; developed on Ruby 4.0)
 - RSpec for the tests (`gem install rspec`)
-- The `pi` CLI installed (`pi --version`; developed against pi 0.84.4)
+- The `pi` CLI installed (`pi --version`; tested with pi 1.1.0)
 - Credentials for at least two providers, configured through pi itself
   (`/login` in interactive pi, or provider API-key env vars)
 
@@ -36,36 +36,61 @@ bundle add agent-council
 bundle exec agent-council -h
 ```
 
-The gem does not install a config file or the repository's `examples/` files.
-Create `agent-council.yml` in the directory you will analyze, or
-`~/.agent-council.yml` in your home directory, and put your model configuration
-there. When no config path is passed, the command checks the current working
-directory first, then the home config. See [Discovering and configuring
-models](#discovering-and-configuring-models) for the config format; a minimal
-config looks like this:
+The gem does not install a config file. Create `agent-council.yml` in the
+directory you will analyze, or `~/.agent-council.yml` in your home directory,
+and put your model configuration there. When no config path is passed, the
+command checks the current working directory first, then the home config. See
+[Discovering and configuring models](#discovering-and-configuring-models) for
+the config format; a minimal config looks like this:
 
 ```yaml
 # agent-council.yml
 agents:
   - provider: opencode-go
-    model: kimi-k2.6
+    model: kimi-k2.7-code
 consolidator:            # optional; omit to skip consolidation
   provider: opencode-go
-  model: kimi-k2.6
+  model: kimi-k2.7-code
 ```
 
-More samples are at
-<https://github.com/keithrbennett/agent-council/tree/main/examples/configs>.
+More samples are in [`examples/configs/`](examples/configs/), which is
+included in the installed gem.
 
-You can also run `./exe/agent-council` directly from a source checkout; the
-repo-relative invocation below does not require installing the gem.
+To work on agent-council itself, you can run `./exe/agent-council` from a source
+checkout instead. Note that Pi analyzes its working directory, so running it
+from the checkout analyzes agent-council itself; to analyze another project,
+`cd` there and give the full path to the checkout's `exe/agent-council`.
+
+### Finding the installed documentation and examples
+
+The installed gem contains this README, [`DESIGN.md`](DESIGN.md),
+[`code-review-agents.md`](code-review-agents.md), `RELEASE_NOTES.md`, and the
+sample prompts and configs under `examples/`, all matching the installed
+version. The help output shows where they are for the copy of
+`agent-council` you are actually running:
+
+```bash
+agent-council -h               # see "Documentation (Local)" and "Examples (Local)"
+bundle exec agent-council -h   # in a Bundler project: the version in Gemfile.lock
+```
+
+To get the gem's directory in a shell variable:
+
+```bash
+AC_HOME=$(ruby -e 'print Gem::Specification.find_by_name("agent-council").full_gem_path')
+```
+
+If several versions are installed, this finds the newest — the same one a
+plain `agent-council` command runs. In a Bundler project, prefix it with
+`bundle exec` (or use `bundle info agent-council --path`) to get the version
+Bundler selects.
 
 ## Discovering and configuring models
 
 ```bash
 pi --list-models                 # all provider/model pairs in the catalog
 pi --list-models kimi            # fuzzy search
-pi auth check --provider zai     # is this provider authenticated?
+pi auth check --provider openai  # is this provider authenticated?
 ```
 
 Edit the config to choose the ensemble. The config is the optional second
@@ -73,7 +98,7 @@ argument; if omitted, `./agent-council.yml` in the current directory is used
 (only the current directory is checked), else `~/.agent-council.yml` in your
 home directory (hidden, so it doesn't clutter `ls`). It is an error if
 none of these exists. Start from the minimal config above or a sample in
-[`examples/configs/`](https://github.com/keithrbennett/agent-council/tree/main/examples/configs). Each entry becomes one
+[`examples/configs/`](examples/configs/). Each entry becomes one
 `pi --provider <provider> --model <model>` invocation. No Ruby changes are
 needed to add, remove, or swap models.
 
@@ -85,7 +110,7 @@ shape as an agent) runs after all agents finish: that model receives the
 original prompt plus all of the run's reports — each labeled with its
 source model — plus the instructions in
 `lib/agent_council/templates/consolidate_prompt.md` (edit
-this file in a repo checkout to tune the consolidation), and writes a
+this file in a source checkout to tune the consolidation), and writes a
 `<stamp>_<slug>_consolidated_pi_<provider>_<model>.md` report into the
 same run dir. Remove the key to skip consolidation. A consolidation
 failure is reported but does not affect the run's exit status.
@@ -94,37 +119,53 @@ failure is reported but does not affect the run's exit status.
 
 ```bash
 cd /path/to/the/repo/you/want/analyzed
-/path/to/this/repo/exe/agent-council /path/to/prompt.md
+agent-council /path/to/prompt.md
 ```
 
-Pi analyzes its **own working directory**, so run the script from the
-repository under analysis. Reports land in `./reports` under that working
-directory — each analyzed project gets its own reports tree (you'll likely
+Agent Council has no target-directory option: Pi analyzes its **own working
+directory**, which is the directory you run `agent-council` from. Run it from
+the project you want analyzed; the prompt and config files can live anywhere.
+Reports land in `./reports` under that working directory — each analyzed
+project gets its own reports tree (you'll likely
 want `reports/` in that project's `.gitignore`). If that directory has an
 `untracked/` subdirectory, reports go in `untracked/reports` instead.
 
 ```bash
-./exe/agent-council my-analysis-prompt.md                    # requires ./agent-council.yml or ~/.agent-council.yml
-./exe/agent-council my-analysis-prompt.md other-config.yml  # alternate config
-./exe/agent-council -h                                       # usage and options
-rspec                                                        # unit tests (no model calls)
+agent-council my-analysis-prompt.md                    # requires ./agent-council.yml or ~/.agent-council.yml
+agent-council my-analysis-prompt.md other-config.yml  # alternate config
+agent-council -h                                       # usage and options
 ```
 
 (Paths are resolved from the working directory, including the default
 `./agent-council.yml`; `~` is your home directory.)
 
-`exe/agent-council` has a shebang and is executable, so `./exe/agent-council ...`
-(or an absolute path) works identically to `ruby exe/agent-council ...`.
+In a source checkout, run `rspec` for the unit tests (no model calls); there,
+`./exe/agent-council` is equivalent to the installed `agent-council`.
 
-`examples/` holds sample prompts and configs — pure samples, not used at
-runtime and not shipped in the gem:
+Your first run needs only a prompt file and a config (see
+[Installation](#installation)):
+
+```bash
+cd /path/to/the/repo/you/want/analyzed
+echo 'In one paragraph, what does this project do?' > ~/what-is-this-prompt.md
+agent-council ~/what-is-this-prompt.md
+```
+
+[`examples/`](examples/) holds sample prompts and configs — pure samples, not
+used at runtime. `examples/prompts/` and `examples/configs/` are included in
+the installed gem. The commands below use `$AC_HOME`, the installed gem's
+directory (see [Finding the installed documentation and
+examples](#finding-the-installed-documentation-and-examples)); in a source
+checkout, set `AC_HOME` to the checkout's path. They still analyze your
+current directory, and the sample configs name specific providers and
+models — copy and edit one if yours differ.
 
 - `examples/prompts/code-base-state_prompt.md` — a real codebase-analysis
   prompt; with `examples/configs/consolidated.yml` this is the full
   ensemble:
 
 ```bash
-./exe/agent-council examples/prompts/code-base-state_prompt.md examples/configs/consolidated.yml
+agent-council "$AC_HOME/examples/prompts/code-base-state_prompt.md" "$AC_HOME/examples/configs/consolidated.yml"
 ```
 
 - `examples/prompts/smoke-test_prompt.md` +
@@ -133,7 +174,7 @@ runtime and not shipped in the gem:
   config, for verifying your setup in seconds:
 
 ```bash
-./exe/agent-council examples/prompts/smoke-test_prompt.md examples/configs/single.yml
+agent-council "$AC_HOME/examples/prompts/smoke-test_prompt.md" "$AC_HOME/examples/configs/single.yml"
 ```
 
 - `examples/prompts/project-name-prompt.md` + any one-model config —
@@ -142,7 +183,11 @@ runtime and not shipped in the gem:
 - `examples/prompts/recommend-model-ensemble-prompt.md` — a reusable prompt
   for recommending a provider-diverse model ensemble for a task; its sample
   code-review recommendation is in
-  [`examples/results/recommend-model-ensemble-code-review.md`](examples/results/recommend-model-ensemble-code-review.md).
+  [`examples/results/recommend-model-ensemble-code-review.md`](examples/results/recommend-model-ensemble-code-review.md)
+  (generated output, in the source repository only — not in the gem).
+- `examples/prompts/review-latest-commit-prompt.md` — a code-review prompt
+  for the latest commit (plus any uncommitted changes); run it from the
+  repository under review with a multi-model config.
 
 Prompt filenames may end in `-prompt.md` or `_prompt.md`. The file name
 becomes the query slug in report filenames, with either suffix stripped — so
@@ -161,11 +206,11 @@ reports/
       analyst_format.md                                      # format addendum appended to the prompt
       consolidated.yml                                       # copy of the config used
       answers/                                               # analysts' reports
-        2026-09-02-16-21-43_codebase-review_01_pi_openai-codex_gpt-5.4.md
-        2026-09-02-16-21-43_codebase-review_02_pi_github-copilot_claude-sonnet-5.md
-        2026-09-02-16-21-43_codebase-review_03_pi_opencode-go_kimi-k2.6.md
-        2026-09-02-16-21-43_codebase-review_04_pi_zai_glm-5.3.md
-      2026-09-02-16-21-43_codebase-review_consolidated_pi_zai_glm-5.3.md  # if consolidator configured
+        2026-09-02-16-21-43_codebase-review_01_pi_opencode-go_glm-5.3.md
+        2026-09-02-16-21-43_codebase-review_02_pi_opencode-go_kimi-k3.md
+        2026-09-02-16-21-43_codebase-review_03_pi_openai_gpt-6.1-sol.md
+        2026-09-02-16-21-43_codebase-review_04_pi_cursor_claude-sonnet-5-5-high.md
+      2026-09-02-16-21-43_codebase-review_consolidated_pi_opencode-go_glm-5.3.md  # if consolidator configured
     18-05-11/
       ...
   2026-09-03/
@@ -277,19 +322,13 @@ pi — the reverse of what many tools do. Use `pi auth check --provider <name>`
 to see which credential pi will actually use (`authType: oauth` vs
 `api_key`).
 
-Verified on this machine (pi 0.84.4): `openai-codex` and `github-copilot`
-are OAuth/subscription-backed; `opencode-go` and `zai` use API keys.
-`anthropic` is not configured (Claude is reachable via `github-copilot`),
-and `cursor` appears in the model catalog but the provider is not
-installed/authenticated (`provider_not_found`).
-
 ## Limitations (deliberate)
 
 No retries, no timeouts, no cost tracking, no synthesis or comparison of
 reports, no manifests or indexes — the directory layout is the index. This
 is
 an experiment to answer one question: is Pi-based model diversity worth
-building on? See `DESIGN.md` §19–21.
+building on? See [`DESIGN.md`](DESIGN.md) §19–21.
 
 ## Occasional utility: `pi-models`
 

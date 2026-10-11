@@ -22,6 +22,7 @@ module AgentCouncil
   # only for documentation references (e.g. the local README path in help
   # text), not for runtime data.
   PROJECT_ROOT = File.expand_path('..', __dir__)
+  EXAMPLES_DIR = File.join(PROJECT_ROOT, 'examples')
   TEMPLATES_DIR = File.join(__dir__, 'agent_council', 'templates')
   CONSOLIDATE_PROMPT_PATH = File.join(TEMPLATES_DIR, 'consolidate_prompt.md')
   ANALYST_FORMAT_PATH = File.join(TEMPLATES_DIR, 'analyst_format.md')
@@ -347,6 +348,7 @@ module AgentCouncil
         Usage:                 agent-council [options] PROMPT_FILE [CONFIG_FILE]
         Repository:            https://github.com/keithrbennett/agent-council
         Documentation (Local): #{File.join(PROJECT_ROOT, 'README.md')}
+        Examples (Local):      #{EXAMPLES_DIR}
         Version:               #{VERSION}
         -------------------------------------------------------------------------------
 
@@ -392,8 +394,8 @@ module AgentCouncil
       abort <<~MESSAGE
         No config file given, and neither ./#{CWD_CONFIG_NAME} nor ~/#{HOME_CONFIG_NAME} exists.
         Pass a config path: agent-council PROMPT_FILE CONFIG_FILE
-        Minimal config (agents: [{provider: ..., model: ...}]) and samples:
-        #{u}
+        Minimal config: agents: [{provider: ..., model: ...}]
+        Sample configs: #{File.join(EXAMPLES_DIR, 'configs')}
       MESSAGE
     end
     abort "Config file not found: #{config_path}" unless File.file?(config_path)

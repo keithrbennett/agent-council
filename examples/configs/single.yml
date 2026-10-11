@@ -1,7 +1,8 @@
 # Minimal smoke-test config: one inexpensive model, for checking that your
-# setup works (auth, invocation, report writing) without a full ensemble run:
+# setup works (auth, invocation, report writing) without a full ensemble run
+# (AC_HOME is the gem or source checkout directory; see the README):
 #
-#   ruby exe/agent-council examples/prompts/smoke-test_prompt.md examples/configs/single.yml
+#   agent-council "$AC_HOME/examples/prompts/smoke-test_prompt.md" "$AC_HOME/examples/configs/single.yml"
 agents:
   - provider: opencode-go # OPENCODE_API_KEY
-    model: kimi-k2.6
+    model: kimi-k2.7-code

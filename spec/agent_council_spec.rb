@@ -80,7 +80,8 @@ RSpec.describe AgentCouncil do
     end
   end
 
-  describe '.resolve_config_path' do
+  # Runs each example in an empty working directory with an empty, stubbed home.
+  shared_context 'with isolated cwd and home' do
     let(:tmp_root) { Dir.mktmpdir }
     let(:home) { File.join(tmp_root, 'home') }
     let(:work) { File.join(tmp_root, 'work') }
@@ -97,6 +98,10 @@ RSpec.describe AgentCouncil do
     # Stub Dir.home rather than mutating ENV['HOME']: Dir.home's env-var
     # precedence differs by platform (e.g. USERPROFILE on Windows).
     before { allow(Dir).to receive(:home).and_return(home) }
+  end
+
+  describe '.resolve_config_path' do
+    include_context 'with isolated cwd and home'
 
     it 'returns the explicit path when given, even if default configs exist' do
       File.write('agent-council.yml', '')
@@ -152,6 +157,18 @@ RSpec.describe AgentCouncil do
       File.write('agent-council.yml', '')
       Dir.mkdir('sub')
       Dir.chdir('sub') { expect(described_class.resolve_config_path(nil)).to be_nil }
+    end
+  end
+
+  describe '.main' do
+    include_context 'with isolated cwd and home'
+
+    it 'aborts with a pointer to the packaged sample configs when no config exists' do
+      File.write('p_prompt.md', 'hi')
+      samples = File.join(described_class::EXAMPLES_DIR, 'configs')
+      expect { described_class.main(['p_prompt.md']) }
+        .to raise_error(SystemExit)
+        .and output(/Sample configs: #{Regexp.escape(samples)}/).to_stderr
     end
   end
 

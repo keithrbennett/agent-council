@@ -1,17 +1,17 @@
 agents:
   - provider: opencode-go
-    model: glm-5.3-flash
-  - provider: kimi-coding
-    model: kimi-for-coding
-  - provider: openai-codex
-    model: gpt-5.6-luna
+    model: glm-5.3
+  - provider: opencode-go
+    model: kimi-k3
+  - provider: openai
+    model: gpt-6.1-sol
 #  - provider: opencode-go
 #    model: minimax-m3
   - provider: cursor
-    model: claude-sonnet-5-thinking-high
+    model: claude-sonnet-5-5-high
 
 consolidator:
-#  provider: openai-codex
-#  model: gpt-5.5
+#  provider: deepseek
+#  model: deepseek-v4-pro
   provider: opencode-go
-  model: glm-5.3-flash
+  model: glm-5.3
