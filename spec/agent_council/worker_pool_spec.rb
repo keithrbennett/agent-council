@@ -49,6 +49,14 @@ RSpec.describe AgentCouncil::WorkerPool do
       expect([out, err, status.exitstatus]).to eq(['in', "y\n", 3])
     end
 
+    it 'returns output as UTF-8 under a non-UTF-8 locale' do
+      skip 'requires a POSIX shell' if Gem.win_platform?
+      out, err, = with_us_ascii_locale do
+        pool.capture3({}, 'sh', '-c', 'printf é; printf ✓ >&2', stdin_data: '')
+      end
+      expect([out, err]).to eq(%w[é ✓])
+    end
+
     it 'runs the child in its own process group' do
       skip 'process groups are POSIX-only' if Gem.win_platform?
       out, err, status = pool.capture3({}, 'sh', '-c', 'echo $$; ps -o pgid= -p $$', stdin_data: '')

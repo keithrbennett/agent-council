@@ -103,10 +103,12 @@ module AgentCouncil
     end
 
     # Open3.capture3, but with the agent in its own process group and
-    # tracked for #shutdown while it runs. An agent spawned after shutdown
-    # has started signalling gets the same signal at once.
+    # tracked for #shutdown while it runs, and its output read as UTF-8
+    # whatever the locale. An agent spawned after shutdown has started
+    # signalling gets the same signal at once.
     def capture3(env, *argv, stdin_data:)
       Open3.popen3(env, *argv, **SPAWN_OPTIONS) do |stdin, stdout, stderr, wait_thr|
+        [stdout, stderr].each { |io| io.set_encoding(Encoding::UTF_8) }
         pid = wait_thr.pid
         begin
           @children_lock.synchronize { @children[pid] = true }

@@ -24,7 +24,7 @@ module DocumentationLinks
 
   # Repo-relative paths of the relative link targets in doc (anchors dropped).
   def self.targets(doc)
-    targets_in(File.read(File.join(PROJECT_ROOT, doc)), doc)
+    targets_in(File.read(File.join(PROJECT_ROOT, doc), encoding: 'UTF-8'), doc)
   end
 
   def self.targets_in(text, doc)
@@ -38,7 +38,7 @@ module DocumentationLinks
 
   # The blank-line-separated paragraphs of doc that link to target.
   def self.paragraphs_linking(doc, target)
-    File.read(File.join(PROJECT_ROOT, doc)).split(/\n\s*\n/).select do |paragraph|
+    File.read(File.join(PROJECT_ROOT, doc), encoding: 'UTF-8').split(/\n\s*\n/).select do |paragraph|
       targets_in(paragraph, doc).include?(target)
     end
   end

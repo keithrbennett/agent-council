@@ -37,6 +37,11 @@ module AgentCouncil
   # killed (see WorkerPool).
   INTERRUPT_GRACE_SECONDS = 5
 
+  # All text read or captured (prompts, templates, reports, harness output)
+  # is UTF-8, whatever the locale's default external encoding (US-ASCII
+  # under LANG=C or with LANG unset).
+  ENCODING = Encoding::UTF_8
+
   # Reports go under the current working directory — i.e. alongside the
   # repository being analyzed — so the tool can be run from any project.
   # If the working directory has an untracked/ directory (a conventional
@@ -124,6 +129,9 @@ module AgentCouncil
     (stdout, stderr, status), elapsed = timed do
       (pool || Open3).capture3({ 'TMPDIR' => scratch_dir }, *argv, stdin_data: prompt)
     end
+    # Harness output is UTF-8. WorkerPool#capture3 already returns it as such,
+    # but Open3.capture3 (used without a pool) returns the locale's encoding.
+    stdout, stderr = [stdout, stderr].map { |output| String.new(output, encoding: ENCODING) }
     duration = format_duration(elapsed)
 
     unless status.success?
@@ -182,7 +190,7 @@ module AgentCouncil
   # skipped.
   module_function def collect_reports(answers_dir)
     Dir.glob(File.join(answers_dir, '*.md')).filter_map do |path|
-      fields, body = parse_front_matter(File.read(path))
+      fields, body = parse_front_matter(File.read(path, encoding: ENCODING))
       next unless fields && fields['provider'] && fields['model']
 
       index = fields['agent_index']
@@ -233,7 +241,7 @@ module AgentCouncil
   # original prompt every analyst answered, and all reports with their
   # source labels.
   module_function def consolidation_prompt(original_prompt, reports)
-    template = File.read(CONSOLIDATE_PROMPT_PATH)
+    template = File.read(CONSOLIDATE_PROMPT_PATH, encoding: ENCODING)
     body = reports.map { |label, text| "## Report from #{label}\n\n#{text}" }.join("\n\n---\n\n")
     <<~MARKDOWN
       #{template}
@@ -285,8 +293,8 @@ module AgentCouncil
   end
 
   # Runs the configured consolidator model over a run's reports and writes
-  # its report into the same run dir. Returns [label, ok, detail]. pool: as
-  # for run_agent.
+  # its report into the same run dir. Returns [label, ok, detail]; never
+  # raises. pool: as for run_agent.
   module_function def run_consolidation(consolidator, original_prompt, run_dir, file_prefix,
     meta: {}, prompt_path: nil, source_durations: {}, pool: nil)
     provider = consolidator['provider'] if consolidator.is_a?(Hash)
@@ -313,6 +321,8 @@ module AgentCouncil
       meta:     meta,
       pool:     pool)
     ["#{label} (consolidator)", ok, detail]
+  rescue => e
+    ["#{provider} / #{model} (consolidator)", false, "#{e.class}: #{e.message}"]
   end
 
   module_function def relative_path(path)
@@ -419,10 +429,10 @@ module AgentCouncil
     # the report-format addendum; the consolidator cites the prompt alone.
     # Both input files are copied into the run dir, so the exact bytes sent
     # to each harness are recoverable.
-    prompt = File.read(prompt_path)
+    prompt = File.read(prompt_path, encoding: ENCODING)
     abort "Prompt file is empty: #{prompt_path}" if prompt.empty?
     abort "Analyst format addendum missing: #{ANALYST_FORMAT_PATH}" unless File.file?(ANALYST_FORMAT_PATH)
-    analyst_prompt = compose_analyst_prompt(prompt, File.read(ANALYST_FORMAT_PATH))
+    analyst_prompt = compose_analyst_prompt(prompt, File.read(ANALYST_FORMAT_PATH, encoding: ENCODING))
 
     config =
       begin

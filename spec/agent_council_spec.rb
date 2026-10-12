@@ -5,6 +5,8 @@
 # spec/agent_council/pi_harness_spec.rb. Run with: rspec
 
 require 'spec_helper'
+require 'json'
+require 'shellwords'
 require 'tmpdir'
 
 RSpec.describe AgentCouncil do
@@ -196,6 +198,21 @@ RSpec.describe AgentCouncil do
       expect(ok).to be(false)
       expect(detail).to include('exited 1: boom')
       expect(File).not_to exist(scratch_dirs.first)
+    end
+
+    it 'reads harness output as UTF-8 under a non-UTF-8 locale, without a pool' do
+      skip 'requires a POSIX shell' if Gem.win_platform?
+      message = { role: 'assistant', content: [{ type: 'text', text: 'Résumé ✓' }] }
+      event = { type: 'message_end', message: message }
+      allow(described_class::HARNESS).to receive(:argv)
+        .and_return(['sh', '-c', "printf '%s\\n' #{Shellwords.escape(JSON.generate(event))}"])
+
+      _label, ok, detail = with_us_ascii_locale do
+        described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
+      end
+
+      expect(ok).to be(true), detail
+      expect(File.read(File.join(run_dir, detail), encoding: 'UTF-8')).to include('Résumé ✓')
     end
 
     # As when a dying child writes into the dir while it's being removed.
@@ -446,6 +463,21 @@ RSpec.describe AgentCouncil do
         expect(result[0]).to eq('zai / glm-5.3 (consolidator)')
         expect(result[1]).to be(false)
         expect(result[2]).to include('no reports found')
+      end
+    end
+
+    it 'fails cleanly when reading the reports raises' do
+      Dir.mktmpdir do |dir|
+        report = File.join(dir, 'answers', 'analyst.md')
+        FileUtils.mkdir_p(File.dirname(report))
+        File.write(report,
+          described_class.with_front_matter({ 'provider' => 'openai', 'model' => 'gpt-x' }, 'findings'))
+        allow(File).to receive(:read).and_call_original
+        allow(File).to receive(:read).with(report, any_args).and_raise(ArgumentError, 'invalid byte sequence')
+
+        result = described_class.run_consolidation({ 'provider' => 'zai', 'model' => 'glm-5.3' },
+          'prompt', dir, 'prefix')
+        expect(result).to eq(['zai / glm-5.3 (consolidator)', false, 'ArgumentError: invalid byte sequence'])
       end
     end
 

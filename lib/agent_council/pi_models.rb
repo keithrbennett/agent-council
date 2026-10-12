@@ -39,6 +39,8 @@ module AgentCouncil
 
     module_function def fetch_models
       Open3.popen3('pi', '--mode', 'rpc', '--no-session') do |stdin, stdout, stderr, wait_thr|
+        # pi's output is UTF-8, whatever the locale.
+        [stdout, stderr].each { |io| io.set_encoding(Encoding::UTF_8) }
         # Drain stderr concurrently so a chatty pi can't block on a full pipe,
         # and so we can report it if pi fails.
         # An I/O failure while reading is treated as "no diagnostics" so it

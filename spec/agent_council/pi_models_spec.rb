@@ -150,6 +150,14 @@ RSpec.describe AgentCouncil::PiModels do
       end
     end
 
+    it 'reads pi output as UTF-8 under a non-UTF-8 locale' do
+      json = response_json.sub('Claude Sonnet', 'Clàude ✓')
+      with_fake_pi("echo #{Shellwords.escape(json)}") do
+        models = with_us_ascii_locale { described_class.fetch_models }
+        expect(models.map(&:name)).to eq(['Clàude ✓'])
+      end
+    end
+
     it 'includes pi stderr when it exits without responding' do
       with_fake_pi("echo 'no credentials configured' >&2; exit 3") do
         expect { described_class.fetch_models }

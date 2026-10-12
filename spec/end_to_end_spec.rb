@@ -6,6 +6,8 @@
 # SIGTERM agent-council sends them; a fake pi that gets SIGINT records it.
 # The fake pi's behavior is chosen by provider name:
 # - done: answers at once with a report.
+# - utf8: answers at once with a report containing non-ASCII text.
+# - escaped: the same, but \u-escaped, so pi's output itself is ASCII.
 # - dies: waits for SIGTERM, then writes into its TMPDIR as it exits (as
 #   node does with its compile cache).
 # - deaf: survives SIGTERM, so must be killed.
@@ -28,6 +30,8 @@ RSpec.describe 'agent-council end to end' do
   let(:grace) { AgentCouncil::INTERRUPT_GRACE_SECONDS }
   let(:survivors) { [] } # filled in by run_council
   let(:exited_at) { [] } # filled in by run_council
+  # No straight single quotes: the fake pi echoes it inside them.
+  let(:non_ascii_answer) { 'Résumé ✓ “quoted”' }
 
   before do
     skip 'requires a POSIX shell and process groups' if Gem.win_platform?
@@ -38,9 +42,11 @@ RSpec.describe 'agent-council end to end' do
 
   after { FileUtils.remove_entry(tmp_root) }
 
+  def report_event(text)
+    { type: 'message_end', message: { role: 'assistant', content: [{ type: 'text', text: text }] } }
+  end
+
   def write_fake_pi
-    message = { role: 'assistant', content: [{ type: 'text', text: 'Answer.' }] }
-    report_event = { type: 'message_end', message: message }
     dying_writes = 'for i in $(seq 1 100); do mkdir -p "$TMPDIR/c/d$i"; touch "$TMPDIR/c/d$i/f"; done'
     fake_pi = File.join(bin_dir, 'pi')
     File.write(fake_pi, <<~SH)
@@ -48,7 +54,9 @@ RSpec.describe 'agent-council end to end' do
       cat >/dev/null
       trap 'touch "#{sigint_dir}/$$"' INT
       case " $* " in
-        *" --provider done "*) echo '#{JSON.generate(report_event)}'; exit 0 ;;
+        *" --provider done "*) echo '#{JSON.generate(report_event('Answer.'))}'; exit 0 ;;
+        *" --provider utf8 "*) echo '#{JSON.generate(report_event(non_ascii_answer))}'; exit 0 ;;
+        *" --provider escaped "*) echo '#{JSON.generate(report_event(non_ascii_answer), ascii_only: true)}'; exit 0 ;;
         *" --provider dies "*) trap 'touch "#{termed_dir}/$$"; #{dying_writes}; exit 143' TERM ;;
         *" --provider deaf "*) trap 'touch "#{termed_dir}/$$"' TERM ;;
       esac
@@ -82,9 +90,10 @@ RSpec.describe 'agent-council end to end' do
   # With a block, waits until `started` fake agents are waiting, then yields
   # the group's pid for signalling. Afterwards, records in `survivors` the
   # fake agents still running once agent-council has exited, then kills
-  # everything, so a regression fails the spec instead of hanging it.
-  def run_council(started: 0, ignoring_hup: false)
-    env = { 'PATH' => "#{bin_dir}#{File::PATH_SEPARATOR}#{ENV.fetch('PATH')}", 'TMPDIR' => child_tmp }
+  # everything, so a regression fails the spec instead of hanging it. env:
+  # extra child environment (a nil value unsets the variable).
+  def run_council(started: 0, ignoring_hup: false, env: {})
+    env = { 'PATH' => "#{bin_dir}#{File::PATH_SEPARATOR}#{ENV.fetch('PATH')}", 'TMPDIR' => child_tmp, **env }
     exe = File.join(project_root, 'exe', 'agent-council')
     cmd = [RbConfig.ruby, '-I', File.join(project_root, 'lib'), exe, 'prompt.md', 'config.yml']
     cmd = ['sh', '-c', 'trap "" HUP; exec "$@"', 'sh', *cmd] if ignoring_hup # as nohup does
@@ -130,8 +139,9 @@ RSpec.describe 'agent-council end to end' do
     nil
   end
 
-  def out = File.read(out_path)
-  def err = File.read(err_path)
+  # The child's output is UTF-8 whatever the locale (see the LANG=C spec).
+  def out = File.read(out_path, encoding: 'UTF-8')
+  def err = File.read(err_path, encoding: 'UTF-8')
   def output_report = "stdout:\n#{out}\nstderr:\n#{err}"
   def reports(pattern) = Dir.glob(File.join(work_dir, 'reports', '*', '*', pattern))
 
@@ -174,6 +184,22 @@ RSpec.describe 'agent-council end to end' do
     expect(reports('answers/*.md').size).to eq(2)
     expect(reports('*consolidated*.md').size).to eq(1)
     expect(leftover_scratch_dirs).to be_empty
+  end
+
+  # Under LANG=C (or LANG unset) Ruby's default external encoding is
+  # US-ASCII, but reports and pi's output are UTF-8.
+  it 'consolidates non-ASCII reports under a non-UTF-8 locale' do
+    write_config(%w[utf8 escaped], consolidator: 'utf8')
+
+    status = run_council(env: { 'LANG' => 'C', 'LC_ALL' => nil, 'LC_CTYPE' => nil })
+
+    expect(status.exitstatus).to eq(0), output_report
+    expect(err).not_to match(/:\d+:in /), output_report # a backtrace line
+    expect(out).to match(/^  ✓ \d\d:\d\d:\d\d  utf8 \/ c \(consolidator\)/), output_report
+    expect(out).to include('Summary', '2/2 succeeded')
+    consolidated = reports('*consolidated*.md')
+    expect(consolidated.size).to eq(1)
+    expect(File.read(consolidated.first, encoding: 'UTF-8')).to include(non_ascii_answer)
   end
 
   it 'stops quietly on Ctrl-C, keeping finished reports and removing scratch dirs' do
