@@ -41,7 +41,7 @@ RSpec.describe 'agent-council.gemspec' do
 
   it 'fails to load outside a git checkout' do
     expect { expect(load_gemspec).to be_nil }
-      .to output(/`git ls-files` failed; build the gem from a git checkout/).to_stderr
+      .to output(/`git ls-files` failed; build the gem from a git checkout/).to_stderr_from_any_process
   end
 
   it 'fails to load when git tracks no files' do
@@ -49,6 +49,7 @@ RSpec.describe 'agent-council.gemspec' do
     expect(status).to be_success, err
 
     expect { expect(load_gemspec).to be_nil }
-      .to output(/`git ls-files` listed no files; commit or add them before building/).to_stderr
+      .to output(/`git ls-files` listed no files; commit or add them before building/)
+      .to_stderr_from_any_process
   end
 end
