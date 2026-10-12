@@ -160,6 +160,68 @@ RSpec.describe AgentCouncil do
     end
   end
 
+  describe '.run_agent' do
+    let(:agent) { { 'provider' => 'p', 'model' => 'm' } }
+    let(:run_dir) { Dir.mktmpdir }
+    let(:scratch_dirs) { [] }
+
+    after { FileUtils.remove_entry(run_dir) }
+
+    # Records the scratch dir (passed to the child as TMPDIR) and leaves a
+    # file in it, as a real agent would.
+    def stub_capture3(stdout, status)
+      allow(Open3).to receive(:capture3) do |env, *_argv, **_opts|
+        scratch_dirs << env.fetch('TMPDIR')
+        File.write(File.join(env.fetch('TMPDIR'), 'leftover'), 'x')
+        [stdout, 'boom', status]
+      end
+    end
+
+    it 'deletes the scratch dir after a successful run' do
+      stub_capture3('', instance_double(Process::Status, success?: true))
+      allow(described_class::HARNESS).to receive_messages(error_message: nil, final_response: 'answer')
+
+      _label, ok, = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
+
+      expect(ok).to be(true)
+      expect(scratch_dirs.size).to eq(1)
+      expect(File).not_to exist(scratch_dirs.first)
+    end
+
+    it 'deletes the scratch dir after a failed run' do
+      stub_capture3('', instance_double(Process::Status, success?: false, exitstatus: 1))
+
+      _label, ok, detail = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
+
+      expect(ok).to be(false)
+      expect(detail).to include('exited 1: boom')
+      expect(File).not_to exist(scratch_dirs.first)
+    end
+
+    # As when a dying child writes into the dir while it's being removed.
+    it 'ignores errors removing the scratch dir' do
+      skip 'root can remove an unwritable dir' if Process.uid.zero?
+      allow(Open3).to receive(:capture3) do |env, *_argv, **_opts|
+        scratch_dirs << env.fetch('TMPDIR')
+        locked = File.join(env.fetch('TMPDIR'), 'locked')
+        FileUtils.mkdir_p(File.join(locked, 'sub'))
+        File.chmod(0o500, locked)
+        ['', '', instance_double(Process::Status, success?: true)]
+      end
+      allow(described_class::HARNESS).to receive_messages(error_message: nil, final_response: 'answer')
+
+      _label, ok, detail = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
+
+      expect(ok).to be(true), detail
+      expect(File).to exist(File.join(scratch_dirs.first, 'locked')) # removal did fail
+    ensure
+      scratch_dirs.each do |dir|
+        File.chmod(0o700, File.join(dir, 'locked')) if File.exist?(File.join(dir, 'locked'))
+        FileUtils.rm_rf(dir)
+      end
+    end
+  end
+
   describe '.main' do
     include_context 'with isolated cwd and home'
 
@@ -396,7 +458,7 @@ RSpec.describe AgentCouncil do
 
         captured = nil
         allow(described_class).to receive(:run_agent) do |_agent, _prompt, run_dir, _prefix,
-          filename:, meta:, header: nil|
+          filename:, meta:, header: nil, pool: nil|
           captured = { run_dir: run_dir, filename: filename, meta: meta, header: header }
           File.write(File.join(run_dir, filename), 'consolidated body')
           ['zai / glm-5.3', true, filename]

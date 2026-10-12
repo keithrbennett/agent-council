@@ -14,6 +14,7 @@ require 'optparse'
 
 require_relative 'agent_council/version'
 require_relative 'agent_council/harnesses/pi_harness'
+require_relative 'agent_council/worker_pool'
 
 module AgentCouncil
   # Runtime data files (prompt templates) ship inside lib/, resolved
@@ -31,6 +32,10 @@ module AgentCouncil
   # harness would be another module under AgentCouncil::Harnesses,
   # assigned here.
   HARNESS = AgentCouncil::Harnesses::PiHarness
+
+  # After Ctrl-C, how long agents get to exit after SIGTERM before they're
+  # killed (see WorkerPool).
+  INTERRUPT_GRACE_SECONDS = 5
 
   # Reports go under the current working directory — i.e. alongside the
   # repository being analyzed — so the tool can be run from any project.
@@ -101,56 +106,63 @@ module AgentCouncil
   # header: markdown prepended to the report body (or a callable receiving the
   # task's HH:MM:SS duration and returning it). If the response begins
   # with an H1 of its own, it is dropped to avoid a duplicated title.
+  # pool: the WorkerPool to spawn the agent through, so Ctrl-C can stop it;
+  # without one it's spawned untracked.
   module_function def run_agent(agent, prompt, run_dir, file_prefix, index: nil, filename: nil, meta: {},
-    header: nil)
+    header: nil, pool: nil)
     provider = agent['provider'] if agent.is_a?(Hash)
     model = agent['model'] if agent.is_a?(Hash)
     label = index ? "##{index} #{provider} / #{model}" : "#{provider} / #{model}"
     return [label, false, "config entry needs 'provider' and 'model'"] if provider.nil? || model.nil?
 
-    Dir.mktmpdir('agent-council-') do |scratch_dir|
-      argv = HARNESS.argv(provider, model, scratch_dir)
-      (stdout, stderr, status), elapsed = timed do
-        Open3.capture3({ 'TMPDIR' => scratch_dir }, *argv, stdin_data: prompt)
-      end
-      duration = format_duration(elapsed)
-
-      unless status.success?
-        detail = stderr.lines.map(&:strip).reject(&:empty?).first || 'no error output'
-        return [label, false, "#{HARNESS::NAME} exited #{status.exitstatus}: #{detail}"]
-      end
-
-      error = HARNESS.error_message(stdout)
-      if error
-        summary = error.gsub(/\s+/, ' ').slice(0, 300)
-        return [label, false, "#{HARNESS::NAME} exited 0 but provider error: #{summary}"]
-      end
-
-      text = HARNESS.final_response(stdout)
-      if text.nil? || text.strip.empty?
-        detail =
-          if HARNESS.assistant_messages(stdout).any?
-            'final assistant message had no text content (model may have answered in reasoning only)'
-          else
-            "no assistant message in #{HARNESS::NAME} event stream"
-          end
-        return [label, false, "#{HARNESS::NAME} exited 0 but #{detail}"]
-      end
-
-      filename ||= report_filename(file_prefix, provider, model, index: index)
-      if header
-        header = header.call(duration) if header.respond_to?(:call)
-        text = text.sub(/\A\s*#(?!#).+\n+/, '')
-        text = "#{header}\n#{text}"
-      end
-      content = with_front_matter(meta.merge('harness' => HARNESS::NAME,
-        'provider' => provider,
-        'model' => model), text)
-      File.write(File.join(run_dir, filename), content)
-      [label, true, filename]
+    # Removed in the ensure below rather than via Dir.mktmpdir's block form,
+    # with errors ignored: a child that is still exiting (e.g. one just
+    # killed after the Ctrl-C grace period) can still be writing here
+    # (node's compile cache, say). That must not surface as an error.
+    scratch_dir = Dir.mktmpdir('agent-council-')
+    argv = HARNESS.argv(provider, model, scratch_dir)
+    (stdout, stderr, status), elapsed = timed do
+      (pool || Open3).capture3({ 'TMPDIR' => scratch_dir }, *argv, stdin_data: prompt)
     end
+    duration = format_duration(elapsed)
+
+    unless status.success?
+      detail = stderr.lines.map(&:strip).reject(&:empty?).first || 'no error output'
+      return [label, false, "#{HARNESS::NAME} exited #{status.exitstatus}: #{detail}"]
+    end
+
+    error = HARNESS.error_message(stdout)
+    if error
+      summary = error.gsub(/\s+/, ' ').slice(0, 300)
+      return [label, false, "#{HARNESS::NAME} exited 0 but provider error: #{summary}"]
+    end
+
+    text = HARNESS.final_response(stdout)
+    if text.nil? || text.strip.empty?
+      detail =
+        if HARNESS.assistant_messages(stdout).any?
+          'final assistant message had no text content (model may have answered in reasoning only)'
+        else
+          "no assistant message in #{HARNESS::NAME} event stream"
+        end
+      return [label, false, "#{HARNESS::NAME} exited 0 but #{detail}"]
+    end
+
+    filename ||= report_filename(file_prefix, provider, model, index: index)
+    if header
+      header = header.call(duration) if header.respond_to?(:call)
+      text = text.sub(/\A\s*#(?!#).+\n+/, '')
+      text = "#{header}\n#{text}"
+    end
+    content = with_front_matter(meta.merge('harness' => HARNESS::NAME,
+      'provider' => provider,
+      'model' => model), text)
+    File.write(File.join(run_dir, filename), content)
+    [label, true, filename]
   rescue => e
     [label, false, "#{e.class}: #{e.message}"]
+  ensure
+    FileUtils.rm_rf(scratch_dir) if scratch_dir
   end
 
   # Points reports/latest at the newest run dir (relative link, so the
@@ -273,9 +285,10 @@ module AgentCouncil
   end
 
   # Runs the configured consolidator model over a run's reports and writes
-  # its report into the same run dir. Returns [label, ok, detail].
+  # its report into the same run dir. Returns [label, ok, detail]. pool: as
+  # for run_agent.
   module_function def run_consolidation(consolidator, original_prompt, run_dir, file_prefix,
-    meta: {}, prompt_path: nil, source_durations: {})
+    meta: {}, prompt_path: nil, source_durations: {}, pool: nil)
     provider = consolidator['provider'] if consolidator.is_a?(Hash)
     model = consolidator['model'] if consolidator.is_a?(Hash)
     return ['consolidator', false, "config entry needs 'provider' and 'model'"] if provider.nil? || model.nil?
@@ -297,7 +310,8 @@ module AgentCouncil
     label, ok, detail = run_agent(consolidator, prompt, run_dir, file_prefix,
       filename: consolidated_filename(file_prefix, provider, model),
       header:   header,
-      meta:     meta)
+      meta:     meta,
+      pool:     pool)
     ["#{label} (consolidator)", ok, detail]
   end
 
@@ -466,9 +480,11 @@ module AgentCouncil
     end
     puts "\nConsolidator:\n  #{agent_descriptor(consolidator)}" if consolidator
     puts "\nProgress:"
-    results = agents.each_with_index.map do |agent, i|
+    pool = WorkerPool.new(grace: INTERRUPT_GRACE_SECONDS)
+    pool.trap_signals
+    agents.each_with_index do |agent, i|
       index = i + 1
-      Thread.new do
+      pool.start do
         provider = agent.is_a?(Hash) ? agent['provider'] : nil
         model = agent.is_a?(Hash) ? agent['model'] : nil
         meta = report_meta.merge('agent_index' => index)
@@ -476,21 +492,27 @@ module AgentCouncil
           run_agent(agent, analyst_prompt, answers_dir, file_prefix,
             index:  index,
             meta:   meta,
-            header: byline_table(meta, provider, model))
+            header: byline_table(meta, provider, model),
+            pool:   pool)
         end
-        duration = format_duration(elapsed)
-        puts(ok ? "  ✓ #{duration}  #{label}" : "  ✗ #{duration}  #{label}  (#{detail})")
         [label, ok, detail, elapsed]
       end
-    end.map(&:value)
+    end
+    results = pool.collect do |label, ok, detail, elapsed|
+      duration = format_duration(elapsed)
+      puts(ok ? "  ✓ #{duration}  #{label}" : "  ✗ #{duration}  #{label}  (#{detail})")
+    end
 
     if consolidator
       puts "\nConsolidating reports:"
-      (label, ok, detail), elapsed = timed do
-        run_consolidation(consolidator, prompt, run_dir, file_prefix,
-          meta: report_meta, prompt_path: prompt_path,
-          source_durations: results.to_h { |label, _, _, elapsed| [label, format_duration(elapsed)] })
+      source_durations = results.to_h { |label, _, _, elapsed| [label, format_duration(elapsed)] }
+      pool.start do
+        timed do
+          run_consolidation(consolidator, prompt, run_dir, file_prefix,
+            meta: report_meta, prompt_path: prompt_path, source_durations: source_durations, pool: pool)
+        end
       end
+      (label, ok, detail), elapsed = pool.collect.first
       puts format_result_line(label, ok, detail, elapsed)
     end
 
@@ -502,5 +524,18 @@ module AgentCouncil
     failed = results.count { |_, ok, _| !ok }
     puts "\n#{results.size - failed}/#{results.size} succeeded. Reports in: #{relative_path(answers_dir)}"
     exit(failed.zero? ? 0 : 1)
+  rescue Interrupt
+    report = -> do
+      warn "\nInterrupted."
+    rescue IOError, SystemCallError
+      nil # e.g. the terminal hung up
+    end
+    if pool
+      pool.shutdown(&report)
+      pool.exit_by_signal
+    else # before any agent started; only a Ctrl-C can get here
+      report.call
+      WorkerPool.exit_by_signal('INT')
+    end
   end
 end

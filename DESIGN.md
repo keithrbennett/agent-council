@@ -148,6 +148,8 @@ threads.each(&:join)
 
 The exact implementation can use Ruby threads or another comparably simple mechanism.
 
+The implementation, `AgentCouncil::WorkerPool` (`lib/agent_council/worker_pool.rb`), adds what a run needs on Ctrl-C, SIGTERM, SIGHUP or SIGQUIT: it runs each agent in its own process group (on POSIX systems), sends agents SIGTERM, then SIGKILL after a grace period, keeps the main thread free to handle the interrupt, and then exits by the signal.
+
 Do not introduce a job system, daemon, async framework, or workflow engine.
 
 ---
@@ -394,6 +396,7 @@ lib/
   agent_council/
     version.rb
     pi_models.rb         # backs exe/pi-models
+    worker_pool.rb       # worker threads, agent processes and Ctrl-C handling
     harnesses/
       pi_harness.rb      # pi-specific behavior (AgentCouncil::Harnesses::PiHarness)
     templates/           # runtime data files (resolved via __dir__, shipped in the gem)

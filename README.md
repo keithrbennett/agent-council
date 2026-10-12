@@ -262,11 +262,25 @@ ls reports/*/*/answers/*codebase-review*   # every report for one question, all 
 
 The summary printed at the end shows which models succeeded and how long
 each took (`HH:MM:SS`); the consolidator's duration is printed when it
-finishes. One model's failure does not affect the others. Exit status is 0 only if every agent
-succeeded. Output paths are printed relative to the current working
-directory (e.g. `reports/2026-09-04/21-39-01/answers`), regardless of
-where the tool was invoked from — the tool runs in any project, so paths
-are always in *your* tree.
+finishes. One model's failure does not affect the others. Exit status is
+0 only if every agent succeeded. Ctrl-C (SIGINT), SIGTERM, SIGHUP or
+SIGQUIT stops the run, keeping reports already written. agent-council
+sends each running agent, including the consolidator, SIGTERM (pi then
+also stops any commands it started), gives them a shared 5-second grace
+period to exit, and kills any still running. It then dies by that signal,
+as a shell expects (so, e.g., Ctrl-C also stops a loop running it); for
+SIGQUIT it exits with status 131 instead of dumping core. A second SIGINT,
+SIGTERM or SIGQUIT kills the agents at once; further SIGHUPs, which a
+closing terminal can send in pairs, are ignored. A killed agent can't stop
+the commands it started, so those may keep running. A signal agent-council
+was started ignoring (e.g. SIGHUP under `nohup`) stays ignored. On POSIX
+systems agents run in process groups of their own, so Ctrl-Z suspends only
+agent-council, not the agents. (Windows has neither process groups nor
+SIGTERM, so there agents may only be killed, after the grace period.)
+Output paths are printed relative to the current working directory (e.g.
+`reports/2026-09-04/21-39-01/answers`), regardless of where the tool was
+invoked from — the tool runs in any project, so paths are always in
+*your* tree.
 
 ## How it works (and what pi is told)
 
@@ -275,8 +289,10 @@ are always in *your* tree.
   `lib/agent_council/harnesses/pi_harness.rb`
   (`AgentCouncil::Harnesses::PiHarness`); harness-agnostic orchestration
   lives in `lib/agent_council.rb` (`AgentCouncil`), which selects the
-  harness via the single `HARNESS` constant. `exe/agent-council` is
-  just the executable entry point. A future second harness would be
+  harness via the single `HARNESS` constant. Worker threads, agent
+  processes and Ctrl-C handling live in `lib/agent_council/worker_pool.rb`
+  (`AgentCouncil::WorkerPool`). `exe/agent-council` is just the executable
+  entry point. A future second harness would be
   another module under `AgentCouncil::Harnesses`.
 - Every agent receives the **byte-identical contents of the prompt file**,
   piped to pi on stdin (pi merges piped stdin into the initial prompt).
@@ -298,7 +314,8 @@ are always in *your* tree.
   still told to skip commands needing shared services (databases, servers,
   fixed ports, Docker).
 - Each agent gets its own disposable temp directory (exposed via `TMPDIR`
-  and named in the scaffolding), deleted after the run.
+  and named in the scaffolding), deleted after the run. After Ctrl-C, a
+  directory can be left behind if its agent had to be killed.
 - Otherwise pi behaves normally: `AGENTS.md`, skills, extensions, and prompt
   templates from the analyzed repo load as usual. (In non-interactive modes
   pi never shows a project-trust prompt; untrusted project-local resources
