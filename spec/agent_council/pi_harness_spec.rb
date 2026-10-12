@@ -55,7 +55,8 @@ RSpec.describe AgentCouncil::Harnesses::PiHarness do
     # Safety-critical invariants; deliberate rewording should update these.
     it 'states the read-only rules' do
       expect(scaffold).to match(/do not modify/i)
-      expect(scaffold).to match(/test suites/i) # no stateful commands
+      expect(scaffold).to match(/test suites/i) # no stateful commands...
+      expect(scaffold).to match(/unless the user's prompt explicitly permits/i) # ...unless the prompt allows
     end
 
     it 'requires the analysis as the final message, not a file' do

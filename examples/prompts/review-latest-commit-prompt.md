@@ -1,22 +1,41 @@
 # Review Latest Commit
 
-Review the latest commit and report any code changes that are *not*:
+Review the latest commit and any uncommitted changes.
+Report only issues needing addressing.
 
-- correct
-- complete
-- as simple as practical
-- consistent with the commit message
+Evaluate whether the changes are:
 
-The commit message may include implementation strategy and not the higher level issue.
+- Correct and complete.
+- As simple as practical.
+- Consistent with the commit's intent.
+- Accompanied by appropriate tests and documentation updates.
 
-If this is the case, infer the higher level issue and report if another solution would be better.
+The commit message may describe an implementation strategy rather than the
+underlying problem. Infer the intended outcome and assess whether a better
+solution would be appropriate.
 
-If applicable, verify that documentation and tests are updated to match lib/ changes.
+## Scope
 
-The commit may not yet be pushed; feel free to propose improvements to its message.
+- Report only issues introduced by the latest commit or uncommitted changes.
+- Report issues in uncommitted changes separately from those in the commit.
+- Ignore files in `untracked/` and `reports/`.
+- Do not report preexisting issues unless the changes introduce or worsen them.
+- You may suggest improvements to the commit message, particularly if the
+  commit has not been pushed.
 
-If there are uncommitted changes, include those in the analysis but report them separately.
+## Verification
 
-Ignore any files in untracked/ or reports/.
+Investigate thoroughly before reaching conclusions.
 
-Again, report only issues needing addressing.
+You are permitted and encouraged to inspect files, run Git commands, execute
+relevant tests and linters, and reproduce suspected defects.
+
+**DO NOT EDIT ANY CODE OR TRACKED FILES.**
+
+Tests and verification tools that generate temporary files, coverage data,
+or build artifacts are permitted. Avoid unnecessary modifications to the
+working tree.
+
+For each issue, identify the affected file and location, explain the problem
+and its impact, and propose a fix. Say how you verified it (for example, a
+reproduction or a test run), or that it is unverified.

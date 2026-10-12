@@ -289,10 +289,14 @@ are always in *your* tree.
 - `edit`/`write` tools are withheld; `bash` remains for read-only
   investigation (`git log`, dependency inspection, ...). A fixed scaffolding
   text appended to the system prompt (identical for all agents except the
-  scratch path) forbids modifying files, changing git state, installing
-  software, and running tests/builds/servers — concurrent analysts share
-  databases, ports, and tmp paths, so stateful commands are described in
-  the report instead of executed.
+  scratch path) forbids modifying files, changing git state, and installing
+  software. It also forbids running tests/builds/servers unless the prompt
+  explicitly permits it — concurrent analysts share databases, ports, and
+  tmp paths, so by default stateful commands are described in the report
+  instead of executed. When a prompt permits them (as
+  `examples/prompts/review-latest-commit-prompt.md` does), agents are
+  still told to skip commands needing shared services (databases, servers,
+  fixed ports, Docker).
 - Each agent gets its own disposable temp directory (exposed via `TMPDIR`
   and named in the scaffolding), deleted after the run.
 - Otherwise pi behaves normally: `AGENTS.md`, skills, extensions, and prompt

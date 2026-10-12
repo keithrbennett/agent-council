@@ -51,11 +51,14 @@ module AgentCouncil
             software, modify user or system configuration, or start persistent
             services.
           - Do not run test suites, builds, coverage tools, application servers,
-            or database tasks: other analysts are running concurrently and such
-            commands can collide through shared state (databases, ports, Docker,
-            fixed temp paths). If running such a command would materially improve
-            your analysis, describe what you would run and why instead of running
-            it.
+            or database tasks unless the user's prompt explicitly permits it:
+            other analysts are running concurrently and such commands can collide
+            through shared state (databases, ports, Docker, fixed temp paths).
+            Where the prompt permits them, direct their temporary output to the
+            scratch directory below, and still skip any that need shared
+            services (databases, servers, fixed ports, Docker). Otherwise, if
+            running such a command would materially improve your analysis,
+            describe what you would run and why instead of running it.
           - You may run clearly read-only commands: reading, searching and
             listing files; inspecting git history and status; inspecting
             dependency and configuration information.

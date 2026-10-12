@@ -213,11 +213,13 @@ Agents may run clearly read-only investigative commands, including:
 - inspecting dependency and configuration information;
 - other commands known not to modify project or shared state.
 
-Agents **must not run test suites, builds, coverage tools, application servers, database tasks, or other commands that may create or modify shared state** while ensemble members are executing concurrently.
+Agents **must not run test suites, builds, coverage tools, application servers, database tasks, or other commands that may create or modify shared state** while ensemble members are executing concurrently, **unless the user's prompt explicitly permits it**.
 
 This restriction exists because such commands may collide through shared resources even when each agent has its own temporary directory. Examples include shared databases, Redis, fixed ports, Docker resources, hard-coded temporary paths, or other process-global state.
 
-If running tests or another potentially stateful command would materially improve the analysis, the agent should say so in its report and describe what it would run and why, rather than running it.
+A prompt may lift the restriction (as `examples/prompts/review-latest-commit-prompt.md` does), since running tests and reproducing defects can make an analysis much stronger. Where it does, agents should direct temporary output to their scratch directory and still skip commands that need shared services such as databases, servers, fixed ports, or Docker.
+
+Otherwise, if running tests or another potentially stateful command would materially improve the analysis, the agent should say so in its report and describe what it would run and why, rather than running it.
 
 If testing a proposed code change requires modifying project files, the agent should describe the proposed experiment rather than performing the modification.
 
