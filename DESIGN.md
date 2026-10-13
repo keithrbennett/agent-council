@@ -35,7 +35,7 @@ Typical prompts include:
 
 We want each model to receive the same substantive prompt so that differences in results come from the models themselves.
 
-The MVP does not attempt to rank, debate, or synthesize the responses.
+The MVP does not attempt to rank or debate the responses; synthesis is limited to the optional consolidator (§12).
 
 It simply obtains and preserves them.
 
@@ -191,6 +191,8 @@ Use proper subprocess argv/process APIs rather than shell interpolation.
 ## 10. Repository and System Safety
 
 For this experiment, agents are analyzers, not modifiers.
+
+The rules below are instructions in the system prompt, not enforced restrictions: withholding pi's `edit` and `write` tools is the only enforcement, and `bash` remains a full shell running as the user.
 
 Agents must not intentionally:
 

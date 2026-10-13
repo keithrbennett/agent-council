@@ -284,7 +284,7 @@ invoked from — the tool runs in any project, so paths are always in
 
 ## How it works (and what pi is told)
 
-- All pi-specific knowledge — CLI invocation, the read-only tool policy and
+- All pi-specific knowledge — CLI invocation, the tool list and
   scaffolding, and event-stream parsing — is isolated in
   `lib/agent_council/harnesses/pi_harness.rb`
   (`AgentCouncil::Harnesses::PiHarness`); harness-agnostic orchestration
@@ -302,9 +302,11 @@ invoked from — the tool runs in any project, so paths are always in
    --provider P --model M --append-system-prompt <scaffolding>`.
 - `--no-session` keeps runs independent: no conversation state leaks
   between ensemble members.
-- `edit`/`write` tools are withheld; `bash` remains for read-only
-  investigation (`git log`, dependency inspection, ...). A fixed scaffolding
-  text appended to the system prompt (identical for all agents except the
+- `edit`/`write` tools are withheld; `bash` remains for investigation
+  (`git log`, dependency inspection, ...). Withholding those two tools is the
+  only enforced restriction: the rules below are instructions to the model,
+  not a sandbox (see [Safety and privacy](#safety-and-privacy)). A fixed
+  scaffolding text appended to the system prompt (identical for all agents except the
   scratch path) forbids modifying files, changing git state, and installing
   software. It also forbids running tests/builds/servers unless the prompt
   explicitly permits it — concurrent analysts share databases, ports, and
@@ -328,6 +330,35 @@ invoked from — the tool runs in any project, so paths are always in
   `model_not_available_for_integrator`); such failures are detected via the
   assistant message's `errorMessage` and reported, not saved as reports.
 
+## Safety and privacy
+
+agent-council does not sandbox the agents. Before running it, know that:
+
+- **Agents have a shell.** Each agent, the consolidator included, gets pi's
+  `bash` tool, running as you, in the directory you run from, with your
+  environment (including any API keys in it; agent-council only adds
+  `TMPDIR`), your file permissions and your network access. Only the `edit`
+  and `write` tools are withheld. The read-only rules described above are
+  instructions in the system prompt, which a model can ignore or misapply.
+- **The analyzed repository can steer the agents.** Agents read the
+  repository's files, and pi loads its trusted project resources
+  (`AGENTS.md`, skills, extensions), so text in the repository can try to
+  direct what the agents run (prompt injection). Prompts that permit tests,
+  such as `examples/prompts/review-latest-commit-prompt.md`, run the
+  project's own code.
+- **Your code goes to every configured provider.** Whatever an agent reads,
+  and the output of whatever it runs, is sent to that agent's provider. The
+  consolidator's provider receives the prompt and all reports, plus
+  anything the consolidator itself reads or runs. Check those providers'
+  data policies before analyzing private code.
+- **Reports stay in the analyzed project.** They are written under
+  `reports/` (or `untracked/reports/`) in the working directory; add that
+  to the project's `.gitignore` if you don't want them committed.
+
+Run agent-council only on repositories you trust, or inside a container, VM
+or disposable checkout that holds no credentials you aren't willing to
+expose.
+
 ## Authentication caveats
 
 Pi resolves credentials in this order:
@@ -345,11 +376,11 @@ to see which credential pi will actually use (`authType: oauth` vs
 
 ## Limitations (deliberate)
 
-No retries, no timeouts, no cost tracking, no synthesis or comparison of
-reports, no manifests or indexes — the directory layout is the index. This
-is
-an experiment to answer one question: is Pi-based model diversity worth
-building on? See [`DESIGN.md`](DESIGN.md) §19–21.
+No retries, no timeouts, no cost tracking, no ranking or scoring of reports
+(beyond the optional consolidator's synthesis), no manifests or indexes —
+the directory layout is the index. This is an experiment to answer one
+question: is Pi-based model diversity worth building on? See
+[`DESIGN.md`](DESIGN.md) §19–21.
 
 ## Occasional utility: `pi-models`
 
