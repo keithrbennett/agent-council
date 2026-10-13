@@ -249,6 +249,82 @@ RSpec.describe AgentCouncil do
         .to raise_error(SystemExit)
         .and output(/Sample configs: #{Regexp.escape(samples)}/).to_stderr
     end
+
+    it 'aborts before creating a run dir when the harness executable is not on PATH' do
+      File.write('p_prompt.md', 'hi')
+      File.write('config.yml', YAML.dump('agents' => [{ 'provider' => 'p', 'model' => 'm' }]))
+      Dir.mkdir('empty-bin')
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with('PATH', '').and_return(File.expand_path('empty-bin'))
+      expect { described_class.main(['p_prompt.md', 'config.yml']) }
+        .to raise_error(SystemExit)
+        .and output(/pi executable not found; is `pi` installed.*\n.*Prerequisites/).to_stderr
+      expect(File).not_to exist('reports')
+    end
+  end
+
+  describe '.executable_on_path?' do
+    let(:bin_dir) { Dir.mktmpdir }
+
+    before do
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with('PATH', '').and_return(bin_dir)
+    end
+
+    after { FileUtils.remove_entry(bin_dir) }
+
+    def write_file(name, mode)
+      path = File.join(bin_dir, name)
+      File.write(path, "#!/bin/sh\n")
+      File.chmod(mode, path)
+    end
+
+    it 'finds an executable file in a PATH directory' do
+      skip 'Windows executables need a PATHEXT extension' if Gem.win_platform?
+      write_file('tool', 0o755)
+      expect(described_class.executable_on_path?('tool')).to be(true)
+    end
+
+    it 'is false when no PATH directory has the name' do
+      expect(described_class.executable_on_path?('tool')).to be(false)
+    end
+
+    it 'does not count a directory with the name' do
+      Dir.mkdir(File.join(bin_dir, 'tool'))
+      expect(described_class.executable_on_path?('tool')).to be(false)
+    end
+
+    it 'does not count a non-executable file' do
+      skip 'no executable bit on Windows' if Gem.win_platform?
+      write_file('tool', 0o644)
+      expect(described_class.executable_on_path?('tool')).to be(false)
+    end
+
+    it 'searches every PATH directory, not just the first' do
+      skip 'Windows executables need a PATHEXT extension' if Gem.win_platform?
+      write_file('tool', 0o755)
+      allow(ENV).to receive(:fetch).with('PATH', '').and_return("/nonexistent#{File::PATH_SEPARATOR}#{bin_dir}")
+      expect(described_class.executable_on_path?('tool')).to be(true)
+    end
+
+    it 'treats empty PATH entries, including a trailing one, as the current directory' do
+      skip 'Windows executables need a PATHEXT extension' if Gem.win_platform?
+      write_file('tool', 0o755)
+      sep = File::PATH_SEPARATOR
+      Dir.chdir(bin_dir) do
+        ["/nonexistent#{sep}#{sep}/also-nonexistent", "/nonexistent#{sep}"].each do |path|
+          allow(ENV).to receive(:fetch).with('PATH', '').and_return(path)
+          expect(described_class.executable_on_path?('tool')).to be(true), path
+        end
+      end
+    end
+
+    it 'tries PATHEXT extensions on Windows' do
+      allow(described_class).to receive(:windows?).and_return(true)
+      allow(ENV).to receive(:fetch).with('PATHEXT', '').and_return(".EXE#{File::PATH_SEPARATOR}.CMD")
+      write_file('tool.CMD', 0o755)
+      expect(described_class.executable_on_path?('tool')).to be(true)
+    end
   end
 
   describe '.report_filename' do

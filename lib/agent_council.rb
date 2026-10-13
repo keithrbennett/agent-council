@@ -360,6 +360,27 @@ module AgentCouncil
     entry.is_a?(Hash) && entry['provider'].is_a?(String) && entry['model'].is_a?(String)
   end
 
+  # RUBY_PLATFORM rather than Gem.win_platform?, so as not to depend on
+  # RubyGems (as in WorkerPool).
+  module_function def windows?
+    /mswin|mingw/.match?(RUBY_PLATFORM)
+  end
+
+  # True if `name` (a bare command name) is an executable file in a PATH
+  # directory, trying PATHEXT extensions on Windows. Checked up front so a
+  # missing harness fails before any run dir is created, rather than as an
+  # Errno::ENOENT from every agent. An empty PATH entry means the current
+  # directory, as it does for execvp (-1 keeps a trailing empty entry).
+  module_function def executable_on_path?(name)
+    exts = windows? ? ENV.fetch('PATHEXT', '').split(File::PATH_SEPARATOR) : []
+    ENV.fetch('PATH', '').split(File::PATH_SEPARATOR, -1).map { |dir| dir.empty? ? '.' : dir }.any? do |dir|
+      ['', *exts].any? do |ext|
+        path = File.join(dir, name + ext)
+        File.executable?(path) && !File.directory?(path)
+      end
+    end
+  end
+
   # "harness / provider / model" for a validated config entry, printed at
   # startup so it is clear which agents are still running later.
   module_function def agent_descriptor(entry)
@@ -457,6 +478,13 @@ module AgentCouncil
       unless File.file?(CONSOLIDATE_PROMPT_PATH)
         abort "Consolidator configured but template missing: #{CONSOLIDATE_PROMPT_PATH}"
       end
+    end
+
+    unless executable_on_path?(HARNESS::NAME)
+      abort <<~MESSAGE
+        #{HARNESS::NAME} executable not found; is `#{HARNESS::NAME}` installed and on your PATH?
+        See "Prerequisites" in #{File.join(PROJECT_ROOT, 'README.md')}
+      MESSAGE
     end
 
     # One run dir per invocation, day-bucketed so reports/ stays navigable at
