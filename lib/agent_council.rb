@@ -410,6 +410,11 @@ module AgentCouncil
         exit 0
       end
 
+      opts.on('-v', '--version', 'Show the version and exit') do
+        puts "agent-council #{VERSION}"
+        exit 0
+      end
+
       opts.separator ''
       opts.separator 'Examples:'
       opts.separator '  agent-council my-analysis-prompt.md'

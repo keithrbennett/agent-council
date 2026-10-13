@@ -242,6 +242,20 @@ RSpec.describe AgentCouncil do
   describe '.main' do
     include_context 'with isolated cwd and home'
 
+    %w[-v --version].each do |flag|
+      it "prints the version and exits 0 for #{flag}, without a prompt or config" do
+        expect { described_class.main([flag]) }
+          .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
+          .and output("agent-council #{described_class::VERSION}\n").to_stdout
+      end
+    end
+
+    it 'lists --version in the -h options' do
+      expect { described_class.main(['-h']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
+        .and output(/^\s+-v, --version\s+Show the version and exit$/).to_stdout
+    end
+
     it 'aborts with a pointer to the packaged sample configs when no config exists' do
       File.write('p_prompt.md', 'hi')
       samples = File.join(described_class::EXAMPLES_DIR, 'configs')
