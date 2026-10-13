@@ -186,6 +186,20 @@ RSpec.describe 'agent-council end to end' do
     expect(leftover_scratch_dirs).to be_empty
   end
 
+  # Under a non-UTC zone, so the stamp carries a nonzero offset.
+  it 'writes report timestamps that parse as Time' do
+    write_config(%w[done], consolidator: 'done')
+
+    status = run_council(env: { 'TZ' => 'Asia/Bangkok' })
+
+    expect(status.exitstatus).to eq(0), output_report
+    [*reports('answers/*.md'), *reports('*consolidated*.md')].each do |path|
+      fields, = AgentCouncil.parse_front_matter(File.read(path, encoding: 'UTF-8'))
+      expect(fields['timestamp']).to be_a(Time), path
+      expect(fields['timestamp'].utc_offset).to eq(7 * 3600)
+    end
+  end
+
   # Under LANG=C (or LANG unset) Ruby's default external encoding is
   # US-ASCII, but reports and pi's output are UTF-8.
   it 'consolidates non-ASCII reports under a non-UTF-8 locale' do

@@ -340,6 +340,27 @@ RSpec.describe AgentCouncil do
       expect(fields['timestamp'].utc).to eq(Time.utc(2026, 9, 4, 20, 54, 39))
     end
 
+    {
+      '2026-10-12T18:02:09+07:00' => Time.utc(2026, 10, 12, 11, 2, 9),
+      '2026-10-12T18:02:09-05:00' => Time.utc(2026, 10, 12, 23, 2, 9),
+      '2026-10-12T18:02:09Z'      => Time.utc(2026, 10, 12, 18, 2, 9),
+    }.each do |stamp, instant|
+      it "parses the unquoted ISO timestamp #{stamp}, with its UTC offset, as a Time" do
+        content = described_class.with_front_matter({ 'timestamp' => stamp }, 'body')
+        expect(content).to include("timestamp: #{stamp}\n")
+        fields, = described_class.parse_front_matter(content)
+        expect(fields['timestamp']).to be_a(Time)
+        expect(fields['timestamp'].utc).to eq(instant)
+      end
+    end
+
+    it 'leaves other timestamp-like strings quoted' do
+      stamp = '2026-10-12T18:02:09+07:00 or so'
+      content = described_class.with_front_matter({ 'timestamp' => stamp }, 'body')
+      fields, = described_class.parse_front_matter(content)
+      expect(fields['timestamp']).to eq(stamp)
+    end
+
     it 'returns no fields for plain markdown' do
       fields, = described_class.parse_front_matter("# Just markdown\n")
       expect(fields).to be_nil

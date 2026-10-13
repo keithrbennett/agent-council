@@ -203,8 +203,9 @@ module AgentCouncil
 
   module_function def with_front_matter(fields, body)
     header = YAML.dump(fields.transform_keys(&:to_s)).delete_prefix("---\n").chomp
-    # Documented format: ISO 8601 timestamps are unquoted (parse as Time).
-    header = header.sub(/^timestamp: ['"](\d{4}-\d\d-\d\dT[\d:]+)['"]$/, 'timestamp: \\1')
+    # Documented format: ISO 8601 timestamps, with or without a UTC offset,
+    # are unquoted (parse as Time).
+    header = header.sub(/^timestamp: ['"](\d{4}-\d\d-\d\dT[\d:]+(?:Z|[+-]\d\d:\d\d)?)['"]$/, 'timestamp: \\1')
     <<~TEXT
       ---
       #{header}
