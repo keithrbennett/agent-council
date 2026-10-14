@@ -392,8 +392,21 @@ to the installed `agent-council`. To run both checks before each commit,
 install the pre-commit hook in `hooks/`:
 
 ```bash
-git config core.hooksPath hooks
+bin/setup-hooks
 ```
+
+`bundle exec rake security` checks the bundle's gems (bundler-audit) and the
+Ruby and RubyGems versions (ruby-audit) for known vulnerabilities; CI runs it
+on pushes and pull requests to `main`, on demand, and weekly to catch new
+advisories. (GitHub disables scheduled workflows in public repositories after
+60 days without activity; re-enable the Security workflow from the Actions
+tab.) If it reports a vulnerable gem, run `bundle update <gem>` and rerun the
+audit and the tests; if a Gemfile constraint blocks the fixed version, raise
+the constraint (CI resolves fresh, since `Gemfile.lock` isn't committed). A
+ruby-audit finding means upgrading Ruby, or RubyGems with
+`gem update --system`. The RuboCop versions are pinned in the Gemfile and
+bumped deliberately. agent-council has no runtime dependencies, so findings
+concern the development environment, not what users install.
 
 ## Occasional utility: `pi-models`
 

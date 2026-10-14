@@ -1,0 +1,16 @@
+#!/bin/bash
+
+# Points git at the tracked hooks/ directory (core.hooksPath) so hooks are always
+# the committed versions and never go stale. Run once after cloning.
+#
+# Note: core.hooksPath replaces any global hooksPath for this repository only.
+
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+git config core.hooksPath hooks
+chmod +x hooks/*
+
+echo "✅ core.hooksPath set to 'hooks'. Active hooks:"
+ls hooks

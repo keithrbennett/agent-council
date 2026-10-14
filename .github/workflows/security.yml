@@ -1,0 +1,24 @@
+name: Security
+
+# Separate from ci.yml so the weekly run audits for newly published advisories
+# without rerunning the test matrix and RuboCop.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '17 6 * * 1' # Mondays 06:17 UTC
+  workflow_dispatch:
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    name: Security audit
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '4.0'
+          bundler-cache: true
+      - run: bundle exec rake security

@@ -422,9 +422,9 @@ examples/                # pure, non-runtime samples (prompts/ and configs/ ship
 reports/                 # created on demand; gitignored
 ```
 
-Dev-only files (Gemfile, Rakefile, lint configs, CI workflow, `bin/setup`,
-`hooks/pre-commit`) are omitted above. The gemspec's `spec.files` is the
-authority on what ships.
+Dev-only files (Gemfile, Rakefile, lint configs, CI workflows, `bin/setup`,
+`bin/setup-hooks`, `hooks/pre-commit`) are omitted above. The gemspec's
+`spec.files` is the authority on what ships.
 
 Keep `lib/` shallow; do not introduce deeper namespaces
 (`lib/agent_council/services/...`) unless the experiment actually grows
