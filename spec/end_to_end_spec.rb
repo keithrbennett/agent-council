@@ -188,7 +188,7 @@ RSpec.describe 'agent-council end to end' do
 
   # Pre-claims every run dir name for the next several seconds, so the run
   # must take a suffixed one, whatever second it starts in.
-  it 'suffixes a taken run dir name in report filenames and reports/latest' do
+  it 'suffixes a taken run dir name, in report filenames too' do
     write_config(%w[done], consolidator: 'done')
     now = Time.now
     taken = (0..10).map { |s| (now + s).strftime('%Y-%m-%d/%H-%M-%S') }
@@ -197,13 +197,18 @@ RSpec.describe 'agent-council end to end' do
     status = run_council
 
     expect(status.exitstatus).to eq(0), output_report
-    latest = File.readlink(File.join(work_dir, 'reports', 'latest'))
-    expect(taken.map { |name| "#{name}-2" }).to include(latest)
-    day, run_name = latest.split('/')
+    run_dirs = Dir.glob('*/*', base: File.join(work_dir, 'reports')) - taken
+    expect(run_dirs.size).to eq(1), run_dirs.inspect
+    run_dir = run_dirs.first
+    expect(taken.map { |name| "#{name}-2" }).to include(run_dir)
+    expect(out).to include("Run dir: #{File.join('reports', run_dir)}")
+    expect(out.index('Run dir:')).to be < out.index('Progress:') # printed at startup
+    day, run_name = run_dir.split('/')
     [*reports('answers/*.md'), *reports('*consolidated*.md')].each do |path|
-      expect(path).to start_with(File.join(work_dir, 'reports', latest, ''))
+      expect(path).to start_with(File.join(work_dir, 'reports', run_dir, ''))
       expect(File.basename(path)).to start_with("#{day}-#{run_name}_prompt_")
     end
+    expect(File.symlink?(File.join(work_dir, 'reports', 'latest'))).to be(false)
   end
 
   # Under a non-UTC zone, so the stamp carries a nonzero offset.

@@ -188,16 +188,6 @@ module AgentCouncil
     end
   end
 
-  # Points reports/latest at the newest run dir (relative link, so the
-  # reports tree stays movable).
-  module_function def update_latest_symlink(relative_run_dir)
-    link = File.join(reports_dir, 'latest')
-    File.delete(link) if File.symlink?(link)
-    File.symlink(relative_run_dir, link)
-  rescue SystemCallError => e
-    warn "note: could not update reports/latest symlink: #{e.message}"
-  end
-
   # A run's analyst reports as [source_label, body] pairs, sorted by
   # filename. The dir is the run's answers/ subdir; provider/model labels
   # come from the YAML front matter run_agent writes — not from filename
@@ -531,10 +521,8 @@ module AgentCouncil
     FileUtils.cp(ANALYST_FORMAT_PATH, run_dir)
     FileUtils.cp(config_path, run_dir)
 
-    # Convenience pointer to the newest run: reports/latest
-    update_latest_symlink(File.join(day, run_name))
-
     puts "\nPrompt: #{prompt_path}"
+    puts "Run dir: #{relative_path(run_dir)}"
     puts "\nAgents (#{agents.size}):"
     agents.each_with_index do |agent, i|
       puts "  ##{i + 1} #{agent_descriptor(agent)}"

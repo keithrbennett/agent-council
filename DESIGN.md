@@ -275,7 +275,6 @@ reports/
         2026-09-02-16-21-43_codebase-review_pi_opencode-go_kimi-x.md
         2026-09-02-16-21-43_codebase-review_pi_zai_glm-x.md
       2026-09-02-16-21-43_codebase-review_consolidated_pi_zai_glm-x.md  # consolidator output, if configured
-  latest -> 2026-09-02/16-21-43
 ```
 
 Each run gets its own directory: day bucket / `hh-mm-ss`, created
@@ -293,8 +292,8 @@ files may end in `-prompt.md` or `_prompt.md`; either suffix is stripped from
 the slug (`codebase-review-prompt.md` and `codebase-review_prompt.md` both
 become `codebase-review`). Copies of the
 prompt and the config make each run reproducible later (the orchestrator is
-versioned in git and deliberately not copied). A relative `reports/latest`
-symlink points at the newest run.
+versioned in git and deliberately not copied). The run dir is printed
+when the run starts, so an in-progress or interrupted run is easy to find.
 
 The front matter has keys: `role` (`analyst` or `consolidator`),
 `timestamp` (unquoted ISO 8601), `query` (slug), `harness`, `provider`,
@@ -345,7 +344,7 @@ reports/
 If the working directory contains an `untracked/` directory (a conventional
 home for git-ignored scratch files), reports go into `untracked/reports/`
 instead. The check is made at run time and only the base directory changes;
-everything beneath it (day buckets, `latest` symlink) is the same.
+everything beneath it (day buckets, run dirs) is the same.
 
 Each run writes a timestamped, day-bucketed run directory (see §12), so
 repeated runs accumulate without overwriting; no further run management is

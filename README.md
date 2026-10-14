@@ -214,7 +214,6 @@ reports/
   2026-09-03/
     09-14-02/
       ...
-  latest -> 2026-09-03/09-14-02
 ```
 
 - **Run dir name**: `hh-mm-ss` inside a `yyyy-mm-dd` day bucket (local
@@ -236,8 +235,6 @@ reports/
   and `codebase-review_prompt.md` both become `codebase-review`).
 - **Day buckets** keep `reports/` itself navigable when you have hundreds
   of runs.
-- **`reports/latest`** is a relative symlink to the newest run, so the
-  common case is always `open reports/latest/`.
 - Each report file begins with a small **YAML front matter** block — `role`
   (`analyst` or `consolidator`), `timestamp` (unquoted ISO 8601), `query`,
   `harness`, `provider`, `model` (and, for consolidated reports, `sources`:
@@ -253,10 +250,12 @@ reports/
   The orchestrator itself is deliberately not copied: it is versioned in
   git and may grow into multiple files.
 
-Access patterns:
+Each run prints its run directory as it starts
+(`Run dir: reports/2026-09-03/09-14-02`), so you can open it while agents
+are still working, or after a Ctrl-C. Other access patterns:
 
 ```bash
-open reports/latest/answers/               # newest run's analyst reports
+ls -d reports/*/* | tail -1                # last run by name: usually the newest
 ls reports/$(date +%F)/                    # today's runs
 ls reports/*/*/answers/*codebase-review*   # every report for one question, all runs
 ```
