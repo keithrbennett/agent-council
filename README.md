@@ -12,10 +12,11 @@ non-goals.
 
 ## Prerequisites
 
-- Ruby (standard library only for the tool itself; developed on Ruby 4.0)
-- RSpec for the tests (`gem install rspec`)
+- Ruby 3.2 or later (standard library only for the tool itself; CI tests
+  3.2, 3.3, 3.4 and 4.0)
 - The `pi` CLI installed (`pi --version`; tested with pi 1.1.0)
-- Credentials for at least two providers, configured through pi itself
+- Credentials for at least one provider (several give more diverse
+  viewpoints), configured through pi itself
   (`/login` in interactive pi, or provider API-key env vars)
 
 ## Installation
@@ -139,9 +140,6 @@ agent-council -h                                       # usage and options
 (Paths are resolved from the working directory, including the default
 `./agent-council.yml`; `~` is your home directory.)
 
-In a source checkout, run `rspec` for the unit tests (no model calls); there,
-`./exe/agent-council` is equivalent to the installed `agent-council`.
-
 Your first run needs only a prompt file and a config (see
 [Installation](#installation)):
 
@@ -220,8 +218,8 @@ reports/
 ```
 
 - **Run dir name**: `hh-mm-ss` inside a `yyyy-mm-dd` day bucket (local
-  time, second resolution — runs never overwrite each other). Pure time,
-  nothing else.
+  time, second resolution — runs started in different seconds never share
+  a directory). Pure time, nothing else.
 - **Report filenames** carry everything else:
   `<yyyy-mm-dd>-<hh-mm-ss>_<query-slug>_<agent-number>_pi_<provider>_<model>.md`,
   so a report stays self-describing when you copy or attach it outside the
@@ -275,8 +273,9 @@ closing terminal can send in pairs, are ignored. A killed agent can't stop
 the commands it started, so those may keep running. A signal agent-council
 was started ignoring (e.g. SIGHUP under `nohup`) stays ignored. On POSIX
 systems agents run in process groups of their own, so Ctrl-Z suspends only
-agent-council, not the agents. (Windows has neither process groups nor
-SIGTERM, so there agents may only be killed, after the grace period.)
+agent-council, not the agents. (Windows is untested; it has neither
+process groups nor SIGTERM, so there agents may only be killed, after the
+grace period.)
 Output paths are printed relative to the current working directory (e.g.
 `reports/2026-09-04/21-39-01/answers`), regardless of where the tool was
 invoked from — the tool runs in any project, so paths are always in
@@ -303,18 +302,18 @@ invoked from — the tool runs in any project, so paths are always in
 - `--no-session` keeps runs independent: no conversation state leaks
   between ensemble members.
 - `edit`/`write` tools are withheld; `bash` remains for investigation
-  (`git log`, dependency inspection, ...). Withholding those two tools is the
-  only enforced restriction: the rules below are instructions to the model,
-  not a sandbox (see [Safety and privacy](#safety-and-privacy)). A fixed
-  scaffolding text appended to the system prompt (identical for all agents except the
-  scratch path) forbids modifying files, changing git state, and installing
-  software. It also forbids running tests/builds/servers unless the prompt
-  explicitly permits it — concurrent analysts share databases, ports, and
-  tmp paths, so by default stateful commands are described in the report
-  instead of executed. When a prompt permits them (as
-  `examples/prompts/review-latest-commit-prompt.md` does), agents are
-  still told to skip commands needing shared services (databases, servers,
-  fixed ports, Docker).
+  (`git log`, dependency inspection, ...). Withholding those two tools is
+  the only enforced restriction: the rules below are instructions to the
+  model, not a sandbox (see [Safety and privacy](#safety-and-privacy)). A
+  fixed scaffolding text appended to the system prompt (identical for all
+  agents except the scratch path) forbids modifying files, changing git
+  state, and installing software. It also forbids running
+  tests/builds/servers unless the prompt explicitly permits it — concurrent
+  analysts share databases, ports, and tmp paths, so by default stateful
+  commands are described in the report instead of executed. When a prompt
+  permits them (as `examples/prompts/review-latest-commit-prompt.md` does),
+  agents are still told to skip commands needing shared services (databases,
+  servers, fixed ports, Docker).
 - Each agent gets its own disposable temp directory (exposed via `TMPDIR`
   and named in the scaffolding), deleted after the run. After Ctrl-C, a
   directory can be left behind if its agent had to be killed.
@@ -381,6 +380,18 @@ No retries, no timeouts, no cost tracking, no ranking or scoring of reports
 the directory layout is the index. This is an experiment to answer one
 question: is Pi-based model diversity worth building on? See
 [`DESIGN.md`](DESIGN.md) §19–21.
+
+## Development
+
+In a source checkout, run `bin/setup` (which runs `bundle install`), then
+`bundle exec rspec` for the unit tests (no model calls) and
+`bundle exec rubocop` for lint; there, `./exe/agent-council` is equivalent
+to the installed `agent-council`. To run both checks before each commit,
+install the pre-commit hook in `hooks/`:
+
+```bash
+git config core.hooksPath hooks
+```
 
 ## Occasional utility: `pi-models`
 

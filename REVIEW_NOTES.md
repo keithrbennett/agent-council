@@ -12,9 +12,4 @@ Two kinds of entry live here:
   but isn't, for reasons a reviewer wouldn't have context for. Explains
   why it's fine so it stops getting re-flagged.
 
-## No coverage floor / CI gate (accepted risk)
-
-No `minimum_coverage` in `spec/spec_helper.rb`, and Codecov is configured
-with `fail_ci_if_error: false` (`.github/workflows/test.yml:56`), so the
-current 100% line coverage is protected only by reviewer discipline, not
-CI enforcement.
+There are no entries yet.
