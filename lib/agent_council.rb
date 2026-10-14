@@ -173,6 +173,21 @@ module AgentCouncil
     FileUtils.rm_rf(scratch_dir) if scratch_dir
   end
 
+  # Creates a new run dir in day_dir and returns its name: base, or base-2,
+  # base-3, ... if that is taken. Dir.mkdir fails if the dir exists, so the
+  # claim is atomic: runs started in the same second (or whose local time
+  # repeats, e.g. when clocks fall back) never share a dir.
+  module_function def claim_run_dir(day_dir, base)
+    FileUtils.mkdir_p(day_dir)
+    (1..).each do |n|
+      name = n == 1 ? base : "#{base}-#{n}"
+      Dir.mkdir(File.join(day_dir, name))
+      return name
+    rescue Errno::EEXIST
+      next
+    end
+  end
+
   # Points reports/latest at the newest run dir (relative link, so the
   # reports tree stays movable).
   module_function def update_latest_symlink(relative_run_dir)
@@ -493,17 +508,19 @@ module AgentCouncil
     end
 
     # One run dir per invocation, day-bucketed so reports/ stays navigable at
-    # volume: reports/<yyyy-mm-dd>/<hh-mm-ss>/. The dir name is pure time;
-    # full timestamp and query slug go into the report filenames (file_prefix).
+    # volume: reports/<yyyy-mm-dd>/<hh-mm-ss>/. The dir name is pure time
+    # (plus a collision suffix, see claim_run_dir); full timestamp and query
+    # slug go into the report filenames (file_prefix).
     now = Time.now
     day = now.strftime('%Y-%m-%d')
-    run_name = now.strftime('%H-%M-%S')
+    day_dir = File.join(reports_dir, day)
+    run_name = claim_run_dir(day_dir, now.strftime('%H-%M-%S'))
     run_stamp = "#{day}-#{run_name}"
     iso_stamp = now.strftime('%Y-%m-%dT%H:%M:%S%:z')
     slug = query_slug(prompt_path)
     file_prefix = "#{run_stamp}_#{slug}"
     report_meta = { 'role' => 'analyst', 'timestamp' => iso_stamp, 'query' => slug }
-    run_dir = File.join(reports_dir, day, run_name)
+    run_dir = File.join(day_dir, run_name)
     answers_dir = File.join(run_dir, 'answers')
     FileUtils.mkdir_p(answers_dir)
 

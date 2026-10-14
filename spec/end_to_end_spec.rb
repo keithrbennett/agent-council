@@ -186,6 +186,26 @@ RSpec.describe 'agent-council end to end' do
     expect(leftover_scratch_dirs).to be_empty
   end
 
+  # Pre-claims every run dir name for the next several seconds, so the run
+  # must take a suffixed one, whatever second it starts in.
+  it 'suffixes a taken run dir name in report filenames and reports/latest' do
+    write_config(%w[done], consolidator: 'done')
+    now = Time.now
+    taken = (0..10).map { |s| (now + s).strftime('%Y-%m-%d/%H-%M-%S') }
+    taken.each { |name| FileUtils.mkdir_p(File.join(work_dir, 'reports', name)) }
+
+    status = run_council
+
+    expect(status.exitstatus).to eq(0), output_report
+    latest = File.readlink(File.join(work_dir, 'reports', 'latest'))
+    expect(taken.map { |name| "#{name}-2" }).to include(latest)
+    day, run_name = latest.split('/')
+    [*reports('answers/*.md'), *reports('*consolidated*.md')].each do |path|
+      expect(path).to start_with(File.join(work_dir, 'reports', latest, ''))
+      expect(File.basename(path)).to start_with("#{day}-#{run_name}_prompt_")
+    end
+  end
+
   # Under a non-UTC zone, so the stamp carries a nonzero offset.
   it 'writes report timestamps that parse as Time' do
     write_config(%w[done], consolidator: 'done')

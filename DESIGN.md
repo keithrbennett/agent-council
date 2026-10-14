@@ -278,10 +278,12 @@ reports/
   latest -> 2026-09-02/16-21-43
 ```
 
-Each run gets its own directory: day bucket / `hh-mm-ss`. Inputs (prompt
-and config copies) sit at the run dir root; so does the consolidator's
-report, when configured — only the analysts' reports go to `answers/`;
-reports are identified by
+Each run gets its own directory: day bucket / `hh-mm-ss`, created
+atomically with a `-2`, `-3`, ... suffix if that name is already taken
+(same-second runs, or local time repeating when clocks fall back).
+Inputs (prompt and config copies) sit at the run dir root; so does the
+consolidator's report, when configured — only the analysts' reports go
+to `answers/`; reports are identified by
 where they live, and their provider/model metadata comes from YAML front
 matter the orchestrator writes at the top of each file (the body below it
 is the model's verbatim response). Report filenames still carry the

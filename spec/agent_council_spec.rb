@@ -358,6 +358,31 @@ RSpec.describe AgentCouncil do
     end
   end
 
+  describe '.claim_run_dir' do
+    it 'creates the day dir and the run dir, named by the base when free' do
+      Dir.mktmpdir do |dir|
+        day_dir = File.join(dir, '2026-11-01')
+        expect(described_class.claim_run_dir(day_dir, '01-30-00')).to eq('01-30-00')
+        expect(File.directory?(File.join(day_dir, '01-30-00'))).to be(true)
+      end
+    end
+
+    it 'never reuses an existing dir, suffixing -2, -3, ... instead' do
+      Dir.mktmpdir do |dir|
+        names = Array.new(3) { described_class.claim_run_dir(dir, '01-30-00') }
+        expect(names).to eq(%w[01-30-00 01-30-00-2 01-30-00-3])
+        expect(Dir.children(dir).sort).to eq(names)
+      end
+    end
+
+    it 'propagates errors other than an existing dir' do
+      Dir.mktmpdir do |dir|
+        allow(Dir).to receive(:mkdir).and_raise(Errno::EACCES)
+        expect { described_class.claim_run_dir(dir, '01-30-00') }.to raise_error(Errno::EACCES)
+      end
+    end
+  end
+
   describe '.collect_reports' do
     it 'labels reports from front matter, sorted, bodies front-matter-free' do
       Dir.mktmpdir do |dir|

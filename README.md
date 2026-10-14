@@ -218,12 +218,15 @@ reports/
 ```
 
 - **Run dir name**: `hh-mm-ss` inside a `yyyy-mm-dd` day bucket (local
-  time, second resolution — runs started in different seconds never share
-  a directory). Pure time, nothing else.
+  time, second resolution). Pure time, nothing else — except that if that
+  name is already taken (two runs started in the same second, or local
+  time repeating when clocks fall back or are set back), the new run gets
+  `hh-mm-ss-2`, `-3`, ... instead, so each run has its own directory.
 - **Report filenames** carry everything else:
   `<yyyy-mm-dd>-<hh-mm-ss>_<query-slug>_<agent-number>_pi_<provider>_<model>.md`,
   so a report stays self-describing when you copy or attach it outside the
-  tree. `<agent-number>` is the agent's 1-based position in the config's
+  tree; `<hh-mm-ss>` includes the run dir's suffix, if any.
+  `<agent-number>` is the agent's 1-based position in the config's
   `agents` list (`01`, `02`, ...) — it gives every report a stable, unique
   handle even if the same provider/model is configured more than once (e.g.
   to spread load across a rate-limited subscription), and it sits before
