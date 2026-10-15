@@ -117,7 +117,7 @@ module AgentCouncil
     header: nil, pool: nil)
     provider = agent['provider'] if agent.is_a?(Hash)
     model = agent['model'] if agent.is_a?(Hash)
-    label = index ? "##{index} #{provider} / #{model}" : "#{provider} / #{model}"
+    label = agent_label(provider, model, index)
     return [label, false, "config entry needs 'provider' and 'model'"] if provider.nil? || model.nil?
 
     # Removed in the ensure below rather than via Dir.mktmpdir's block form,
@@ -203,9 +203,7 @@ module AgentCouncil
       fields, body = parse_front_matter(File.read(File.join(answers_dir, name), encoding: ENCODING))
       next unless fields && fields['provider'] && fields['model']
 
-      index = fields['agent_index']
-      plain = "#{fields['provider']} / #{fields['model']}"
-      [index ? "##{index} #{plain}" : plain, body, fields]
+      [agent_label(fields['provider'], fields['model'], fields['agent_index']), body, fields]
     end
   end
 
@@ -249,12 +247,22 @@ module AgentCouncil
     "#{prompt.chomp}\n\n#{addendum}"
   end
 
+  # An agent's label in progress lines, report sources and consolidation
+  # prompts: "#<index> <provider> / <model>", or without the index when
+  # there is none (the consolidator). missing_agents matches reports by it.
+  module_function def agent_label(provider, model, index = nil)
+    plain = "#{provider} / #{model}"
+    index ? "##{index} #{plain}" : plain
+  end
+
   # The consolidator's substantive prompt: the instructions template, the
-  # original prompt every analyst answered, and all reports with their
-  # source labels.
-  module_function def consolidation_prompt(original_prompt, reports)
+  # original prompt every analyst answered, all reports with their source
+  # labels, and the agents without a report, as [label, reason] pairs; the
+  # consolidator can't otherwise know about those.
+  module_function def consolidation_prompt(original_prompt, reports, failures = [])
     template = File.read(CONSOLIDATE_PROMPT_PATH, encoding: ENCODING)
     body = reports.map { |label, text| "## Report from #{label}\n\n#{text}" }.join("\n\n---\n\n")
+    failed = failures.empty? ? 'None.' : failures.map { |label, reason| "- #{label}: #{reason}" }.join("\n")
     <<~MARKDOWN
       #{template}
 
@@ -269,6 +277,12 @@ module AgentCouncil
       # Analyst reports
 
       #{body}
+
+      ---
+
+      # Agents without a report
+
+      #{failed}
     MARKDOWN
   end
 
@@ -308,9 +322,9 @@ module AgentCouncil
   # Runs the configured consolidator model over a run's reports and writes
   # its report into the same run dir. Returns [label, ok, detail]; never
   # raises. Each source's duration comes from its report's front matter.
-  # pool: as for run_agent.
+  # failures: as for consolidation_prompt. pool: as for run_agent.
   module_function def run_consolidation(consolidator, original_prompt, run_dir, file_prefix,
-    meta: {}, prompt_path: nil, pool: nil)
+    meta: {}, prompt_path: nil, failures: [], pool: nil)
     provider = consolidator['provider'] if consolidator.is_a?(Hash)
     model = consolidator['model'] if consolidator.is_a?(Hash)
     return ['consolidator', false, "config entry needs 'provider' and 'model'"] if provider.nil? || model.nil?
@@ -321,7 +335,7 @@ module AgentCouncil
         "no reports found in #{relative_path(File.join(run_dir, 'answers'))}"]
     end
 
-    prompt = consolidation_prompt(original_prompt, reports)
+    prompt = consolidation_prompt(original_prompt, reports, failures)
     source_durations = reports.to_h { |label, _, fields| [label, fields['duration']] }.compact
     # timestamp is the run's start; consolidated_at is this consolidation's,
     # which is later when done by --consolidate.
@@ -594,10 +608,11 @@ module AgentCouncil
 
     if consolidator
       puts "\nConsolidating reports:"
+      failures = results.reject { |_, ok, _| ok }.map { |label, _, detail, _| [label, detail] }
       pool.start do
         timed do
           run_consolidation(consolidator, prompt, run_dir, file_prefix,
-            meta: report_meta, prompt_path: prompt_path, pool: pool)
+            meta: report_meta, prompt_path: prompt_path, failures: failures, pool: pool)
         end
       end
       (label, ok, detail), elapsed = pool.collect.first
@@ -678,12 +693,13 @@ module AgentCouncil
     puts "Run dir: #{relative_path(run_dir)}"
     puts "\nConsolidator:\n  #{agent_descriptor(consolidator)}"
     puts "\nConsolidating #{reports.size} reports:"
+    failures = missing_agents(config, reports)
     pool = WorkerPool.new(grace: INTERRUPT_GRACE_SECONDS)
     pool.trap_signals
     pool.start do
       timed do
         run_consolidation(consolidator, prompt, run_dir, file_prefix,
-          meta: meta, prompt_path: relative_path(prompt_path), pool: pool)
+          meta: meta, prompt_path: relative_path(prompt_path), failures: failures, pool: pool)
       end
     end
     (label, ok, detail), elapsed = pool.collect.first
@@ -701,6 +717,24 @@ module AgentCouncil
   module_function def bare_name?(name)
     name.is_a?(String) && !name.include?("\0") && !['', '.', '..'].include?(name) &&
       File.basename(name) == name
+  end
+
+  # What --consolidate tells the consolidator about an agent without a report.
+  MISSING_REPORT_REASON =
+    'reason not recorded (it may have failed, been interrupted, or had its report removed)'
+
+  # For --consolidate: the config copy's agents that have no report, as
+  # [label, reason] pairs. Why wasn't recorded, and needn't be a failure:
+  # the run may have been interrupted, or a report removed.
+  module_function def missing_agents(config, reports)
+    agents = config['agents'].is_a?(Array) ? config['agents'] : []
+    present = reports.map(&:first)
+    agents.each_with_index.filter_map do |agent, i|
+      next unless valid_agent_entry?(agent)
+
+      label = agent_label(agent['provider'], agent['model'], i + 1)
+      [label, MISSING_REPORT_REASON] unless present.include?(label)
+    end
   end
 
   # Checked up front, before any run dir is created or model called.

@@ -9,6 +9,7 @@
 # - utf8: answers at once with a report containing non-ASCII text.
 # - escaped: the same, but \u-escaped, so pi's output itself is ASCII.
 # - fails: exits 1 at once.
+# - capture: like done, but first saves its prompt (stdin) to captured.txt.
 # - dies: waits for SIGTERM, then writes into its TMPDIR as it exits (as
 #   node does with its compile cache).
 # - deaf: survives SIGTERM, so must be killed.
@@ -28,6 +29,7 @@ RSpec.describe 'agent-council end to end' do
   let(:sigint_dir) { File.join(tmp_root, 'sigint') }
   let(:out_path) { File.join(tmp_root, 'out.txt') }
   let(:err_path) { File.join(tmp_root, 'err.txt') }
+  let(:captured_path) { File.join(tmp_root, 'captured.txt') }
   let(:grace) { AgentCouncil::INTERRUPT_GRACE_SECONDS }
   let(:survivors) { [] } # filled in by run_council
   let(:exited_at) { [] } # filled in by run_council
@@ -52,6 +54,9 @@ RSpec.describe 'agent-council end to end' do
     fake_pi = File.join(bin_dir, 'pi')
     File.write(fake_pi, <<~SH)
       #!/usr/bin/env bash
+      case " $* " in
+        *" --provider capture "*) cat >"#{captured_path}"; echo '#{JSON.generate(report_event('Answer.'))}'; exit 0 ;;
+      esac
       cat >/dev/null
       trap 'touch "#{sigint_dir}/$$"' INT
       case " $* " in
@@ -214,9 +219,9 @@ RSpec.describe 'agent-council end to end' do
   describe '--consolidate' do
     # A finished run without consolidation, then its config copy given the
     # consolidator `provider`. Returns the run dir, relative to work_dir.
-    def finished_run(consolidator)
-      write_config(%w[done done])
-      expect(run_council.exitstatus).to eq(0), output_report
+    def finished_run(consolidator, analysts: %w[done done])
+      write_config(analysts)
+      expect(run_council.exitstatus).to eq(analysts.include?('fails') ? 1 : 0), output_report
       run_dir = Dir.glob('reports/*/*', base: work_dir).first
       config = YAML.load_file(File.join(work_dir, run_dir, 'config.yml'))
       config['consolidator'] = { 'provider' => consolidator, 'model' => 'c' }
@@ -260,6 +265,15 @@ RSpec.describe 'agent-council end to end' do
       expect(Dir.children(moved).grep(/_consolidated_pi_done_c\.md\z/).size).to eq(1)
     end
 
+    it 'tells the consolidator which configured agents have no report' do
+      run_dir = finished_run('capture', analysts: %w[done fails])
+
+      expect(run_council(args: ['--consolidate', run_dir]).exitstatus).to eq(0), output_report
+      expect(File.read(captured_path, encoding: 'UTF-8')).to end_with(
+        "# Agents without a report\n\n- #2 fails / m2: #{AgentCouncil::MISSING_REPORT_REASON}\n"
+      )
+    end
+
     it 'exits 1, writing nothing, when the consolidation fails' do
       run_dir = finished_run('fails')
 
@@ -281,6 +295,15 @@ RSpec.describe 'agent-council end to end' do
       expect(leftover_scratch_dirs).to be_empty
       expect_agents_terminated(1)
     end
+  end
+
+  it 'tells the consolidator which agents failed, and why' do
+    write_config(%w[done fails], consolidator: 'capture')
+
+    expect(run_council.exitstatus).to eq(1), output_report
+    captured = File.read(captured_path, encoding: 'UTF-8')
+    expect(captured).to include('## Report from #1 done / m1')
+    expect(captured).to end_with("# Agents without a report\n\n- #2 fails / m2: pi exited 1: boom\n")
   end
 
   # Pre-claims every run dir name for the next several seconds, so the run

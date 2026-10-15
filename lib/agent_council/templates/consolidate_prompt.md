@@ -3,14 +3,18 @@
 You are consolidating several independent analyses of the same repository.
 Every analyst received the identical prompt (included below as "Original
 prompt"). Their reports follow under "Analyst reports", each headed by the
-model that produced it.
+model that produced it. Agents that produced no report are listed last,
+under "Agents without a report", each with the reason shown there (its
+failure, when known).
 
 Produce a consolidated report with exactly these sections:
 
 ## Agent Consultants
 
-A list of provider/model agents consulted; for any that failed to run properly,
-say so and say why.
+A list of provider/model agents consulted. For each agent listed under
+"Agents without a report", say it produced no report and give the reason
+shown there; do not infer failures any other way. If a report shows its
+agent could not properly do the task, say so too.
 
 ## Findings
 

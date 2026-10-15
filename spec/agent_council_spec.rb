@@ -899,5 +899,39 @@ RSpec.describe AgentCouncil do
       expect(text).to include('## Report from zai / glm-5.3', 'findings B')
       expect(text).to match(/consolidat/i) # the instructions template
     end
+
+    it 'lists failed agents, with their reasons, after the reports' do
+      reports = [['#1 zai / glm-5.3', 'findings A']]
+      failures = [['#2 openai / gpt-x', 'pi exited 1: rate limited']]
+      text = described_class.consolidation_prompt('THE QUESTION', reports, failures)
+      expect(text).to end_with(
+        "# Agents without a report\n\n- #2 openai / gpt-x: pi exited 1: rate limited\n"
+      )
+    end
+
+    it 'says none failed when there are no failures' do
+      text = described_class.consolidation_prompt('THE QUESTION', [['#1 zai / glm-5.3', 'findings A']])
+      expect(text).to end_with("# Agents without a report\n\nNone.\n")
+    end
+  end
+
+  describe '.missing_agents' do
+    it 'lists configured agents without a report, labeled as reports are' do
+      zai = { 'provider' => 'zai', 'model' => 'glm-5.3' }
+      config = { 'agents' => [zai, zai, { 'provider' => 'openai', 'model' => 'gpt-x' }] }
+      reports = [['#2 zai / glm-5.3', 'body', {}]]
+      expect(described_class.missing_agents(config, reports).map(&:first))
+        .to eq(['#1 zai / glm-5.3', '#3 openai / gpt-x'])
+      expect(described_class.missing_agents(config, reports).first.last).to include('reason not recorded')
+    end
+
+    it 'is empty when every configured agent has a report' do
+      config = { 'agents' => [{ 'provider' => 'zai', 'model' => 'glm-5.3' }] }
+      expect(described_class.missing_agents(config, [['#1 zai / glm-5.3', 'body', {}]])).to eq([])
+    end
+
+    it 'is empty when the config copy lists no agents' do
+      expect(described_class.missing_agents({}, [])).to eq([])
+    end
   end
 end

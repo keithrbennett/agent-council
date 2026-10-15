@@ -109,7 +109,8 @@ For a recommended code-review ensemble, see
 An optional top-level `consolidator:` entry (provider + model, same
 shape as an agent) runs after all agents finish: that model receives the
 original prompt plus all of the run's reports — each labeled with its
-source model — plus the instructions in
+source model — and a list of the agents without a report, with each
+one's failure reason (in a normal run), plus the instructions in
 `lib/agent_council/templates/consolidate_prompt.md` (edit
 this file in a source checkout to tune the consolidation), and writes a
 `<stamp>_<slug>_consolidated_pi_<provider>_<model>.md` report into the
@@ -128,13 +129,17 @@ This runs only the consolidator, over the reports already in that run's
 analyzed project's directory, as for a normal run: the consolidator
 checks the reports' claims against the current directory. The prompt and
 config are the run's own copies; the consolidator is the one in the
-config copy, so edit that copy to try a different model. It won't
-overwrite an existing report from the same consolidator (delete that
-file to redo it); reports from different consolidators are kept side by
-side, so you can compare their syntheses. Exit status is 0 only if the
-consolidation succeeded. The consolidation instructions are the
-installed template's, which may have changed since the run. Runs made by
-versions without `--consolidate` can't be consolidated this way.
+config copy, so edit that copy's `consolidator:` to try a different
+model (leave its `agents:` as they were: agents without a report are
+found by their position in that list). It won't overwrite an existing
+report from the same consolidator (delete that file to redo it); reports
+from different consolidators are kept side by side, so you can compare
+their syntheses. Exit status is 0 only if the consolidation succeeded.
+The consolidation instructions are the installed template's, which may
+have changed since the run. Runs made by versions without
+`--consolidate` can't be consolidated this way. Failure reasons aren't
+saved in the run dir, so the consolidator is told only which configured
+agents have no report, not why.
 
 ## Running
 
