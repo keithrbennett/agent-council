@@ -128,6 +128,10 @@ The command should:
 5. save each successful result;
 6. print a concise success/failure summary.
 
+`./exe/agent-council --consolidate RUN_DIR` reruns only the
+consolidation of a finished run, using the run dir's own prompt and
+config copies, found through its reports' front matter (§12).
+
 ---
 
 ## 7. Parallel Execution
@@ -297,9 +301,15 @@ when the run starts, so an in-progress or interrupted run is easy to find.
 
 The front matter has keys: `role` (`analyst` or `consolidator`),
 `timestamp` (unquoted ISO 8601), `query` (slug), `harness`, `provider`,
-`model` — and, for consolidated reports, `sources: [...]` listing the
-analyst labels that were synthesized. Unquoted ISO timestamps parse
-directly as `Time` objects. Status printed to the user uses paths
+`model`, `duration` (`HH:MM:SS`), `prompt_file` and `config_file` (the
+basenames of the run dir's input copies) and `run_stamp` (the report
+filenames' `<yyyy-mm-dd>-<hh-mm-ss>[-N]` prefix), the last three so
+`--consolidate` can find what it needs; for analyst reports, `agent_index`; and, for
+consolidated reports, `sources: [...]` listing the analyst labels that
+were synthesized, `source_durations`, and `consolidated_at` (when the
+consolidation ran; later than `timestamp`, the run's start, when done by
+`--consolidate`). Unquoted ISO timestamps parse directly as `Time`
+objects. Status printed to the user uses paths
 relative to the current working directory, not absolute.
 
 The program should sanitize provider/model identifiers sufficiently to make safe filenames.

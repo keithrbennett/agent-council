@@ -116,6 +116,26 @@ this file in a source checkout to tune the consolidation), and writes a
 same run dir. Remove the key to skip consolidation. A consolidation
 failure is reported but does not affect the run's exit status.
 
+To consolidate a finished run again — say its consolidation failed, or
+you want another model's synthesis — pass its run dir:
+
+```bash
+agent-council --consolidate reports/2026-09-03/09-14-02
+```
+
+This runs only the consolidator, over the reports already in that run's
+`answers/`, and writes its report into the same run dir. Run it from the
+analyzed project's directory, as for a normal run: the consolidator
+checks the reports' claims against the current directory. The prompt and
+config are the run's own copies; the consolidator is the one in the
+config copy, so edit that copy to try a different model. It won't
+overwrite an existing report from the same consolidator (delete that
+file to redo it); reports from different consolidators are kept side by
+side, so you can compare their syntheses. Exit status is 0 only if the
+consolidation succeeded. The consolidation instructions are the
+installed template's, which may have changed since the run. Runs made by
+versions without `--consolidate` can't be consolidated this way.
+
 ## Running
 
 ```bash
@@ -237,16 +257,25 @@ reports/
   of runs.
 - Each report file begins with a small **YAML front matter** block — `role`
   (`analyst` or `consolidator`), `timestamp` (unquoted ISO 8601), `query`,
-  `harness`, `provider`, `model` (and, for consolidated reports, `sources`:
-  the analyst labels that were synthesized) — written by the orchestrator
-  (never by the model). It gives tools structured provenance, stays
+  `harness`, `provider`, `model`, `duration` (`HH:MM:SS`), `prompt_file`
+  and `config_file` (the names of the run dir's input copies) and
+  `run_stamp` (the report filenames' date-time prefix, with the run dir's
+  suffix, if any), the last three used by `--consolidate`; for analyst
+  reports, `agent_index`; and for consolidated reports, `sources` (the
+  analyst labels that were synthesized), `source_durations`, and
+  `consolidated_at` (when the consolidation ran; later than `timestamp`,
+  the run's start, when done by `--consolidate`) — written by the
+  orchestrator (never by the model). It gives tools structured provenance, stays
   readable in the terminal, and is how reports are identified:
   consolidation labels come from front matter, not filename parsing, so
   stray `.md` files in `answers/` are ignored. Below it is the model's
   verbatim final message. Unquoted ISO timestamps parse cleanly as `Time`
   objects.
 - The copied prompt and config make every run reproducible after the fact.
-  (An alternate config keeps its own filename, e.g. `single.yml`.)
+  (An alternate config keeps its own filename, e.g. `single.yml`. The
+  prompt, the config and `analyst_format.md` must therefore have
+  different file names; a run that would copy two under one name stops
+  before starting.)
   The orchestrator itself is deliberately not copied: it is versioned in
   git and may grow into multiple files.
 

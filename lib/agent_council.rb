@@ -164,8 +164,11 @@ module AgentCouncil
     end
     content = with_front_matter(meta.merge('harness' => HARNESS::NAME,
       'provider' => provider,
-      'model' => model), text)
-    File.write(File.join(run_dir, filename), content)
+      'model'    => model,
+      'duration' => duration), text)
+    # Exclusive create ('x'): never replaces a report, e.g. one written by
+    # a concurrent --consolidate with the same model; that is a failure.
+    File.write(File.join(run_dir, filename), content, mode: 'wx')
     [label, true, filename]
   rescue => e
     [label, false, "#{e.class}: #{e.message}"]
@@ -188,19 +191,21 @@ module AgentCouncil
     end
   end
 
-  # A run's analyst reports as [source_label, body] pairs, sorted by
-  # filename. The dir is the run's answers/ subdir; provider/model labels
-  # come from the YAML front matter run_agent writes — not from filename
-  # parsing. Files without parseable front matter are not ours and are
-  # skipped.
+  # A run's analyst reports as [source_label, body, fields] triples, sorted
+  # by filename; fields is the report's front matter. The dir is the run's
+  # answers/ subdir; provider/model labels come from the YAML front matter
+  # run_agent writes — not from filename parsing. Files without parseable
+  # front matter are not ours and are skipped.
   module_function def collect_reports(answers_dir)
-    Dir.glob(File.join(answers_dir, '*.md')).filter_map do |path|
-      fields, body = parse_front_matter(File.read(path, encoding: ENCODING))
+    # base: keeps answers_dir from being read as a pattern, so a path with
+    # glob characters (e.g. "[") still finds its reports.
+    Dir.glob('*.md', base: answers_dir).filter_map do |name|
+      fields, body = parse_front_matter(File.read(File.join(answers_dir, name), encoding: ENCODING))
       next unless fields && fields['provider'] && fields['model']
 
       index = fields['agent_index']
       plain = "#{fields['provider']} / #{fields['model']}"
-      [index ? "##{index} #{plain}" : plain, body]
+      [index ? "##{index} #{plain}" : plain, body, fields]
     end
   end
 
@@ -210,7 +215,8 @@ module AgentCouncil
     header = YAML.dump(fields.transform_keys(&:to_s)).delete_prefix("---\n").chomp
     # Documented format: ISO 8601 timestamps, with or without a UTC offset,
     # are unquoted (parse as Time).
-    header = header.sub(/^timestamp: ['"](\d{4}-\d\d-\d\dT[\d:]+(?:Z|[+-]\d\d:\d\d)?)['"]$/, 'timestamp: \\1')
+    iso = /\d{4}-\d\d-\d\dT[\d:]+(?:Z|[+-]\d\d:\d\d)?/
+    header = header.gsub(/^(timestamp|consolidated_at): ['"](#{iso})['"]$/, '\\1: \\2')
     <<~TEXT
       ---
       #{header}
@@ -276,14 +282,15 @@ module AgentCouncil
   # under the report title; one row per consulted agent, when present.
   module_function def byline_table(meta, provider, model)
     fields = {
-      'role'      => meta['role'],
-      'agent'     => (meta['agent_index'] ? "##{meta['agent_index']}" : nil),
-      'query'     => meta['query'],
-      'harness'   => HARNESS::NAME,
-      'provider'  => provider,
-      'model'     => model,
-      'timestamp' => meta['timestamp'],
-      'duration'  => meta['duration'],
+      'role'            => meta['role'],
+      'agent'           => (meta['agent_index'] ? "##{meta['agent_index']}" : nil),
+      'query'           => meta['query'],
+      'harness'         => HARNESS::NAME,
+      'provider'        => provider,
+      'model'           => model,
+      'timestamp'       => meta['timestamp'],
+      'consolidated_at' => meta['consolidated_at'],
+      'duration'        => meta['duration'],
     }.compact
     rows = fields.map { |field, value| "| #{field} | #{value} |" }
     source_durations = meta['source_durations'] || {}
@@ -300,9 +307,10 @@ module AgentCouncil
 
   # Runs the configured consolidator model over a run's reports and writes
   # its report into the same run dir. Returns [label, ok, detail]; never
-  # raises. pool: as for run_agent.
+  # raises. Each source's duration comes from its report's front matter.
+  # pool: as for run_agent.
   module_function def run_consolidation(consolidator, original_prompt, run_dir, file_prefix,
-    meta: {}, prompt_path: nil, source_durations: {}, pool: nil)
+    meta: {}, prompt_path: nil, pool: nil)
     provider = consolidator['provider'] if consolidator.is_a?(Hash)
     model = consolidator['model'] if consolidator.is_a?(Hash)
     return ['consolidator', false, "config entry needs 'provider' and 'model'"] if provider.nil? || model.nil?
@@ -314,8 +322,11 @@ module AgentCouncil
     end
 
     prompt = consolidation_prompt(original_prompt, reports)
-    meta = meta.merge('role' => 'consolidator', 'sources' => reports.map(&:first),
-      'source_durations' => source_durations)
+    source_durations = reports.to_h { |label, _, fields| [label, fields['duration']] }.compact
+    # timestamp is the run's start; consolidated_at is this consolidation's,
+    # which is later when done by --consolidate.
+    meta = meta.merge('role' => 'consolidator', 'consolidated_at' => iso_timestamp(Time.now),
+      'sources' => reports.map(&:first), 'source_durations' => source_durations)
     prompt_line = prompt_path ? "### Prompt: #{prompt_path}\n\n" : ''
     header = ->(duration) do
       "# Consolidated Report\n\n#{prompt_line}" \
@@ -337,6 +348,11 @@ module AgentCouncil
     return path unless path == cwd || path.start_with?(cwd + File::SEPARATOR)
 
     path.delete_prefix(cwd + File::SEPARATOR)
+  end
+
+  # The front matter's timestamp format: ISO 8601 with the UTC offset.
+  module_function def iso_timestamp(time)
+    time.strftime('%Y-%m-%dT%H:%M:%S%:z')
   end
 
   # Whole seconds as HH:MM:SS (hours may exceed 99); rounds to the nearest second.
@@ -392,11 +408,13 @@ module AgentCouncil
     "#{HARNESS::NAME} / #{entry['provider']} / #{entry['model']}"
   end
 
-  module_function def option_parser
+  # options: receives the parsed option values (:consolidate).
+  module_function def option_parser(options = {})
     OptionParser.new do |opts|
       opts.banner = <<~BANNER
         -------------------------------------------------------------------------------
         Usage:                 agent-council [options] PROMPT_FILE [CONFIG_FILE]
+                               agent-council --consolidate RUN_DIR
         Repository:            https://github.com/keithrbennett/agent-council
         Documentation (Local): #{File.join(PROJECT_ROOT, 'README.md')}
         Examples (Local):      #{EXAMPLES_DIR}
@@ -409,6 +427,11 @@ module AgentCouncil
 
         Options:
       BANNER
+
+      opts.on('--consolidate RUN_DIR',
+        'Consolidate an existing run\'s reports again; runs no analysts') do |dir|
+        options[:consolidate] = dir
+      end
 
       opts.on('-h', '--help', 'Show this help and exit') do
         puts opts
@@ -424,17 +447,27 @@ module AgentCouncil
       opts.separator 'Examples:'
       opts.separator '  agent-council my-analysis-prompt.md'
       opts.separator '  agent-council my-analysis-prompt.md other-config.yml'
+      opts.separator '  agent-council --consolidate reports/2026-09-03/09-14-02'
     end
   end
 
   module_function def main(argv)
-    parser = option_parser
+    options = {}
+    parser = option_parser(options)
     begin
       argv = parser.parse(argv)
     rescue OptionParser::ParseError => e
       warn e.message
       warn parser
       exit 1
+    end
+
+    if options[:consolidate]
+      unless argv.empty?
+        warn parser
+        exit 1
+      end
+      consolidate_run(options[:consolidate])
     end
 
     prompt_path = argv[0]
@@ -464,6 +497,13 @@ module AgentCouncil
     prompt = File.read(prompt_path, encoding: ENCODING)
     abort "Prompt file is empty: #{prompt_path}" if prompt.empty?
     abort "Analyst format addendum missing: #{ANALYST_FORMAT_PATH}" unless File.file?(ANALYST_FORMAT_PATH)
+    # All three are copied into the run dir under their own names, so a
+    # shared name would leave one copy in place of another.
+    copied_names = [prompt_path, ANALYST_FORMAT_PATH, config_path].map { |path| File.basename(path) }
+    unless copied_names.uniq.size == copied_names.size
+      abort "The prompt, config and #{File.basename(ANALYST_FORMAT_PATH)} need different file names, " \
+        "since all three are copied into the run dir: #{copied_names.join(', ')}"
+    end
     analyst_prompt = compose_analyst_prompt(prompt, File.read(ANALYST_FORMAT_PATH, encoding: ENCODING))
 
     config =
@@ -490,12 +530,7 @@ module AgentCouncil
       end
     end
 
-    unless executable_on_path?(HARNESS::NAME)
-      abort <<~MESSAGE
-        #{HARNESS::NAME} executable not found; is `#{HARNESS::NAME}` installed and on your PATH?
-        See "Prerequisites" in #{File.join(PROJECT_ROOT, 'README.md')}
-      MESSAGE
-    end
+    abort_unless_harness_installed
 
     # One run dir per invocation, day-bucketed so reports/ stays navigable at
     # volume: reports/<yyyy-mm-dd>/<hh-mm-ss>/. The dir name is pure time
@@ -506,10 +541,15 @@ module AgentCouncil
     day_dir = File.join(reports_dir, day)
     run_name = claim_run_dir(day_dir, now.strftime('%H-%M-%S'))
     run_stamp = "#{day}-#{run_name}"
-    iso_stamp = now.strftime('%Y-%m-%dT%H:%M:%S%:z')
+    iso_stamp = iso_timestamp(now)
     slug = query_slug(prompt_path)
     file_prefix = "#{run_stamp}_#{slug}"
-    report_meta = { 'role' => 'analyst', 'timestamp' => iso_stamp, 'query' => slug }
+    # prompt_file and config_file name the input copies in the run dir, and
+    # run_stamp gives the report filenames' prefix, so --consolidate needn't
+    # rely on the run dir's path.
+    report_meta = { 'role' => 'analyst', 'timestamp' => iso_stamp, 'query' => slug,
+      'prompt_file' => File.basename(prompt_path), 'config_file' => File.basename(config_path),
+      'run_stamp' => run_stamp }
     run_dir = File.join(day_dir, run_name)
     answers_dir = File.join(run_dir, 'answers')
     FileUtils.mkdir_p(answers_dir)
@@ -541,7 +581,7 @@ module AgentCouncil
           run_agent(agent, analyst_prompt, answers_dir, file_prefix,
             index:  index,
             meta:   meta,
-            header: byline_table(meta, provider, model),
+            header: ->(duration) { byline_table(meta.merge('duration' => duration), provider, model) },
             pool:   pool)
         end
         [label, ok, detail, elapsed]
@@ -554,11 +594,10 @@ module AgentCouncil
 
     if consolidator
       puts "\nConsolidating reports:"
-      source_durations = results.to_h { |label, _, _, elapsed| [label, format_duration(elapsed)] }
       pool.start do
         timed do
           run_consolidation(consolidator, prompt, run_dir, file_prefix,
-            meta: report_meta, prompt_path: prompt_path, source_durations: source_durations, pool: pool)
+            meta: report_meta, prompt_path: prompt_path, pool: pool)
         end
       end
       (label, ok, detail), elapsed = pool.collect.first
@@ -574,6 +613,109 @@ module AgentCouncil
     puts "\n#{results.size - failed}/#{results.size} succeeded. Reports in: #{relative_path(answers_dir)}"
     exit(failed.zero? ? 0 : 1)
   rescue Interrupt
+    exit_interrupted(pool)
+  end
+
+  # --consolidate RUN_DIR: runs the consolidator again over an existing
+  # run's reports, writing its report into that run dir. The prompt,
+  # config, and run's identity (timestamp, query, run_stamp) all come from
+  # the run itself: its analysts' front matter names the prompt and config
+  # copies.
+  # The consolidator is the config copy's; edit that copy to try another.
+  # Exits 0 only if the consolidation succeeded.
+  module_function def consolidate_run(run_dir)
+    abort "Run dir not found: #{run_dir}" unless File.directory?(run_dir)
+    answers_dir = File.join(run_dir, 'answers')
+    reports = File.directory?(answers_dir) ? collect_reports(answers_dir) : []
+    abort "No analyst reports found in #{answers_dir}" if reports.empty?
+
+    fields = reports.first[2]
+    unless fields.values_at('prompt_file', 'config_file', 'run_stamp', 'query').all?
+      abort "Reports in #{answers_dir} lack prompt_file, config_file, run_stamp or query; " \
+        'runs made before --consolidate existed cannot be consolidated'
+    end
+    %w[prompt_file config_file].each do |key|
+      abort "Invalid #{key} in #{answers_dir}: #{fields[key].inspect}" unless bare_name?(fields[key])
+    end
+    prompt_path = File.join(run_dir, fields['prompt_file'])
+    config_path = File.join(run_dir, fields['config_file'])
+    abort "Prompt copy not found: #{prompt_path}" unless File.file?(prompt_path)
+    abort "Config copy not found: #{config_path}" unless File.file?(config_path)
+
+    config =
+      begin
+        YAML.safe_load_file(config_path)
+      rescue Psych::Exception => e
+        abort "Invalid YAML in #{config_path}: #{e.message}"
+      end
+    consolidator = config['consolidator'] if config.is_a?(Hash)
+    abort "No consolidator in #{config_path}; add one to consolidate" unless consolidator
+    unless valid_agent_entry?(consolidator)
+      abort "Consolidator in #{config_path} needs string 'provider' and 'model' fields"
+    end
+    unless File.file?(CONSOLIDATE_PROMPT_PATH)
+      abort "Consolidation template missing: #{CONSOLIDATE_PROMPT_PATH}"
+    end
+
+    file_prefix = "#{fields['run_stamp']}_#{fields['query']}" # as in a normal run
+    filename = consolidated_filename(file_prefix, consolidator['provider'], consolidator['model'])
+    unless bare_name?(filename)
+      abort "Invalid run_stamp or query in #{answers_dir}: #{fields.values_at('run_stamp', 'query').inspect}"
+    end
+    if File.exist?(File.join(run_dir, filename))
+      abort "Consolidated report already exists: #{relative_path(File.join(run_dir, filename))}\n" \
+        'Delete it to consolidate again with the same model.'
+    end
+
+    abort_unless_harness_installed
+
+    # In the same key order as a normal run's front matter.
+    meta = fields.slice('role', 'timestamp', 'query', 'prompt_file', 'config_file', 'run_stamp')
+    meta['timestamp'] = iso_timestamp(meta['timestamp']) if meta['timestamp'].is_a?(Time)
+    prompt = File.read(prompt_path, encoding: ENCODING)
+    abort "Prompt copy is empty: #{prompt_path}" if prompt.empty?
+
+    puts "Run dir: #{relative_path(run_dir)}"
+    puts "\nConsolidator:\n  #{agent_descriptor(consolidator)}"
+    puts "\nConsolidating #{reports.size} reports:"
+    pool = WorkerPool.new(grace: INTERRUPT_GRACE_SECONDS)
+    pool.trap_signals
+    pool.start do
+      timed do
+        run_consolidation(consolidator, prompt, run_dir, file_prefix,
+          meta: meta, prompt_path: relative_path(prompt_path), pool: pool)
+      end
+    end
+    (label, ok, detail), elapsed = pool.collect.first
+    puts format_result_line(label, ok, detail, elapsed)
+    exit(ok ? 0 : 1)
+  rescue Interrupt
+    exit_interrupted(pool)
+  end
+
+  # True if name is a plain file name: no directory part or null byte, and
+  # not empty, "." or "..".
+  # Applied to every front matter value that becomes part of a path, so a
+  # crafted report can't make --consolidate read or write outside the run
+  # dir.
+  module_function def bare_name?(name)
+    name.is_a?(String) && !name.include?("\0") && !['', '.', '..'].include?(name) &&
+      File.basename(name) == name
+  end
+
+  # Checked up front, before any run dir is created or model called.
+  module_function def abort_unless_harness_installed
+    return if executable_on_path?(HARNESS::NAME)
+
+    abort <<~MESSAGE
+      #{HARNESS::NAME} executable not found; is `#{HARNESS::NAME}` installed and on your PATH?
+      See "Prerequisites" in #{File.join(PROJECT_ROOT, 'README.md')}
+    MESSAGE
+  end
+
+  # After Ctrl-C (or SIGTERM, SIGHUP, SIGQUIT; see WorkerPool#trap_signals):
+  # stops pool's agents, if any, and dies by the signal.
+  module_function def exit_interrupted(pool)
     report = -> do
       warn "\nInterrupted."
     rescue IOError, SystemCallError

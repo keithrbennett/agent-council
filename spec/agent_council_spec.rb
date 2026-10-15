@@ -190,6 +190,29 @@ RSpec.describe AgentCouncil do
       expect(File).not_to exist(scratch_dirs.first)
     end
 
+    it 'records the duration in the front matter, as an HH:MM:SS string' do
+      stub_capture3('', instance_double(Process::Status, success?: true))
+      allow(described_class::HARNESS).to receive_messages(error_message: nil, final_response: 'answer')
+
+      _label, ok, filename = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
+
+      expect(ok).to be(true)
+      fields, = described_class.parse_front_matter(File.read(File.join(run_dir, filename)))
+      expect(fields['duration']).to match(/\A\d\d:\d\d:\d\d\z/)
+    end
+
+    it 'fails rather than replace an existing report' do
+      stub_capture3('', instance_double(Process::Status, success?: true))
+      allow(described_class::HARNESS).to receive_messages(error_message: nil, final_response: 'answer')
+      File.write(File.join(run_dir, 'taken.md'), 'earlier')
+
+      _label, ok, detail = described_class.run_agent(agent, 'prompt', run_dir, 'prefix', filename: 'taken.md')
+
+      expect(ok).to be(false)
+      expect(detail).to start_with('Errno::EEXIST')
+      expect(File.read(File.join(run_dir, 'taken.md'))).to eq('earlier')
+    end
+
     it 'deletes the scratch dir after a failed run' do
       stub_capture3('', instance_double(Process::Status, success?: false, exitstatus: 1))
 
@@ -256,12 +279,33 @@ RSpec.describe AgentCouncil do
         .and output(/^\s+-v, --version\s+Show the version and exit$/).to_stdout
     end
 
+    it 'lists --consolidate in the -h options' do
+      expect { described_class.main(['-h']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
+        .and output(/^\s+--consolidate RUN_DIR\s+\S/).to_stdout
+    end
+
     it 'aborts with a pointer to the packaged sample configs when no config exists' do
       File.write('p_prompt.md', 'hi')
       samples = File.join(described_class::EXAMPLES_DIR, 'configs')
       expect { described_class.main(['p_prompt.md']) }
         .to raise_error(SystemExit)
         .and output(/Sample configs: #{Regexp.escape(samples)}/).to_stderr
+    end
+
+    {
+      'the prompt is named like the format addendum' => ['analyst_format.md', 'config.yml'],
+      'the prompt and config share a file name'      => ['p/same.yml', 'c/same.yml'],
+    }.each do |situation, (prompt, config)|
+      it "aborts before creating a run dir when #{situation}" do
+        FileUtils.mkdir_p(%w[p c])
+        File.write(prompt, 'hi')
+        File.write(config, YAML.dump('agents' => [{ 'provider' => 'p', 'model' => 'm' }]))
+        expect { described_class.main([prompt, config]) }
+          .to raise_error(SystemExit)
+          .and output(/need different file names, since all three are copied into the run dir/).to_stderr
+        expect(File).not_to exist('reports')
+      end
     end
 
     it 'aborts before creating a run dir when the harness executable is not on PATH' do
@@ -274,6 +318,150 @@ RSpec.describe AgentCouncil do
         .to raise_error(SystemExit)
         .and output(/pi executable not found; is `pi` installed.*\n.*Prerequisites/).to_stderr
       expect(File).not_to exist('reports')
+    end
+  end
+
+  describe '.main --consolidate' do
+    include_context 'with isolated cwd and home'
+
+    let(:run_dir) { 'reports/2026-09-03/09-14-02' }
+    let(:consolidator_config) { { 'consolidator' => { 'provider' => 'c', 'model' => 'cm' } } }
+    let(:analyst_fields) do
+      { 'role' => 'analyst', 'query' => 'review', 'prompt_file' => 'review_prompt.md',
+        'config_file' => 'config.yml', 'run_stamp' => '2026-09-03-09-14-02',
+        'provider' => 'p', 'model' => 'm' }
+    end
+
+    # A run dir as a normal run leaves it: prompt and config copies, and one
+    # analyst report.
+    def write_run(fields: analyst_fields, config: consolidator_config)
+      FileUtils.mkdir_p(File.join(run_dir, 'answers'))
+      File.write(File.join(run_dir, 'review_prompt.md'), 'Question?')
+      File.write(File.join(run_dir, 'config.yml'), YAML.dump(config))
+      File.write(File.join(run_dir, 'answers', 'a.md'), described_class.with_front_matter(fields, 'findings'))
+    end
+
+    def expect_abort(message)
+      expect { described_class.main(['--consolidate', run_dir]) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+        .and output(message).to_stderr
+    end
+
+    it 'aborts when the run dir does not exist' do
+      expect_abort(/Run dir not found/)
+    end
+
+    it 'aborts when the run dir has no analyst reports' do
+      FileUtils.mkdir_p(run_dir)
+      expect_abort(/No analyst reports found/)
+    end
+
+    it 'aborts when the reports predate --consolidate (no prompt_file, config_file, run_stamp or query)' do
+      write_run(fields: analyst_fields.except('prompt_file', 'config_file', 'run_stamp'))
+      expect_abort(/runs made before --consolidate existed cannot be consolidated/)
+    end
+
+    it 'aborts when query is missing' do
+      write_run(fields: analyst_fields.except('query'))
+      expect_abort(/lack prompt_file, config_file, run_stamp or query/)
+    end
+
+    %w[prompt_file config_file].each do |key|
+      it "aborts when #{key} is not a bare file name, rather than read outside the run dir" do
+        write_run(fields: analyst_fields.merge(key => '../secret.md'))
+        expect_abort(/Invalid #{key} in .*: "\.\.\/secret\.md"/)
+      end
+
+      it "aborts cleanly when #{key} contains a null byte" do
+        write_run(fields: analyst_fields.merge(key => "a\0b.md"))
+        expect_abort(/Invalid #{key} in .*: "a\\u0000b\.md"/)
+      end
+    end
+
+    { 'run_stamp' => '../../escaped', 'query' => 'x/../../escaped' }.each do |key, value|
+      it "aborts when #{key} would put the report outside the run dir, before any model call" do
+        write_run(fields: analyst_fields.merge(key => value))
+        expect(described_class).not_to receive(:run_consolidation)
+        expect_abort(/Invalid run_stamp or query in /)
+        expect(Dir.glob('**/*escaped*', base: '.')).to be_empty
+      end
+    end
+
+    it 'aborts cleanly when run_stamp contains a null byte' do
+      write_run(fields: analyst_fields.merge('run_stamp' => "2026\0"))
+      expect_abort(/Invalid run_stamp or query in /)
+    end
+
+    it 'aborts when the consolidation template is missing' do
+      write_run
+      stub_const("#{described_class}::CONSOLIDATE_PROMPT_PATH", File.expand_path('missing.md'))
+      expect_abort(/Consolidation template missing: .*missing\.md/)
+    end
+
+    it 'aborts when the prompt copy is empty' do
+      write_run
+      File.write(File.join(run_dir, 'review_prompt.md'), '')
+      expect_abort(/Prompt copy is empty: .*review_prompt\.md/)
+    end
+
+    ['', '.', '..'].each do |name|
+      it "aborts when prompt_file is #{name.inspect}" do
+        write_run(fields: analyst_fields.merge('prompt_file' => name))
+        expect_abort(/Invalid prompt_file in .*: #{Regexp.escape(name.inspect)}/)
+      end
+    end
+
+    it 'aborts when the prompt copy is missing' do
+      write_run
+      File.delete(File.join(run_dir, 'review_prompt.md'))
+      expect_abort(/Prompt copy not found: .*review_prompt\.md/)
+    end
+
+    it 'aborts when the config copy is missing' do
+      write_run
+      File.delete(File.join(run_dir, 'config.yml'))
+      expect_abort(/Config copy not found: .*config\.yml/)
+    end
+
+    it 'aborts when the config copy is not valid YAML' do
+      write_run
+      File.write(File.join(run_dir, 'config.yml'), "consolidator: [oops\n")
+      expect_abort(/Invalid YAML in .*config\.yml/)
+    end
+
+    it 'aborts when the consolidator entry is malformed' do
+      write_run(config: { 'consolidator' => { 'provider' => 'c' } })
+      expect_abort(/Consolidator in .*config\.yml needs string 'provider' and 'model' fields/)
+    end
+
+    it 'aborts when the harness executable is not on PATH' do
+      write_run
+      Dir.mkdir('empty-bin')
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with('PATH', '').and_return(File.expand_path('empty-bin'))
+      expect_abort(/pi executable not found/)
+    end
+
+    it 'aborts when the config copy has no consolidator' do
+      write_run(config: { 'agents' => [] })
+      expect_abort(/No consolidator in .*config\.yml; add one/)
+    end
+
+    # The name comes from run_stamp, not the run dir's path, which may have
+    # been moved or renamed.
+    it 'aborts without overwriting an existing report from the same consolidator' do
+      write_run(fields: analyst_fields.merge('run_stamp' => '2026-09-03-09-14-02-2'))
+      existing = File.join(run_dir, '2026-09-03-09-14-02-2_review_consolidated_pi_c_cm.md')
+      File.write(existing, 'earlier')
+      expect_abort(/Consolidated report already exists: #{Regexp.escape(existing)}\nDelete it/)
+      expect(File.read(existing)).to eq('earlier')
+    end
+
+    it 'prints usage and exits 1 when given positional arguments too' do
+      write_run
+      expect { described_class.main(['--consolidate', run_dir, 'prompt.md']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+        .and output(/Usage:/).to_stderr
     end
   end
 
@@ -391,7 +579,7 @@ RSpec.describe AgentCouncil do
         File.write(File.join(dir, 'b_pi_zai_glm-5.3.md'),
           "---\nprovider: zai\nmodel: glm-5.3\n---\n\nbody A")
 
-        reports = described_class.collect_reports(dir)
+        reports = described_class.collect_reports(dir).map { |label, body, _fields| [label, body] }
         expect(reports).to eq([['openai-codex / gpt-5.4', 'body B'], ['zai / glm-5.3', 'body A']])
       end
     end
@@ -400,6 +588,15 @@ RSpec.describe AgentCouncil do
       Dir.mktmpdir do |dir|
         File.write(File.join(dir, 'notes.md'), 'just markdown')
         expect(described_class.collect_reports(dir)).to eq([])
+      end
+    end
+
+    it 'finds reports in a dir whose path has glob characters' do
+      Dir.mktmpdir do |tmp|
+        dir = File.join(tmp, 'runs [old] {x}*?')
+        Dir.mkdir(dir)
+        File.write(File.join(dir, 'a.md'), "---\nprovider: zai\nmodel: glm-5.3\n---\n\nbody")
+        expect(described_class.collect_reports(dir).map(&:first)).to eq(['zai / glm-5.3'])
       end
     end
 
@@ -417,8 +614,17 @@ RSpec.describe AgentCouncil do
         File.write(File.join(dir, 'b_02_pi_zai_glm-5.3.md'),
           "---\nprovider: zai\nmodel: glm-5.3\nagent_index: 2\n---\n\nbody B")
 
-        reports = described_class.collect_reports(dir)
+        reports = described_class.collect_reports(dir).map { |label, body, _fields| [label, body] }
         expect(reports).to eq([['#1 zai / glm-5.3', 'body A'], ['#2 zai / glm-5.3', 'body B']])
+      end
+    end
+
+    it 'includes each report\'s front matter fields' do
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, 'a.md'),
+          "---\nprovider: zai\nmodel: glm-5.3\nduration: '00:01:05'\n---\n\nbody")
+        _label, _body, fields = described_class.collect_reports(dir).first
+        expect(fields).to eq('provider' => 'zai', 'model' => 'glm-5.3', 'duration' => '00:01:05')
       end
     end
   end
@@ -467,6 +673,15 @@ RSpec.describe AgentCouncil do
         expect(fields['timestamp']).to be_a(Time)
         expect(fields['timestamp'].utc).to eq(instant)
       end
+    end
+
+    it 'leaves consolidated_at unquoted too, so it parses as a Time' do
+      fields = { 'timestamp'       => '2026-10-12T18:02:09+07:00',
+                 'consolidated_at' => '2026-10-12T18:30:00+07:00' }
+      content = described_class.with_front_matter(fields, 'body')
+      expect(content).to include("consolidated_at: 2026-10-12T18:30:00+07:00\n")
+      fields, = described_class.parse_front_matter(content)
+      expect(fields['consolidated_at']).to eq(Time.new(2026, 10, 12, 18, 30, 0, '+07:00'))
     end
 
     it 'leaves other timestamp-like strings quoted' do
@@ -622,8 +837,10 @@ RSpec.describe AgentCouncil do
         answers = File.join(dir, 'answers')
         FileUtils.mkdir_p(answers)
         File.write(File.join(answers, 'analyst.md'),
-          described_class.with_front_matter({ 'provider' => 'openai', 'model' => 'gpt-x' }, 'findings'))
+          described_class.with_front_matter(
+            { 'provider' => 'openai', 'model' => 'gpt-x', 'duration' => '00:01:05' }, 'findings'))
 
+        allow(Time).to receive(:now).and_return(Time.new(2026, 9, 3, 19, 40, 5, '+07:00'))
         captured = nil
         allow(described_class).to receive(:run_agent) do |_agent, _prompt, run_dir, _prefix,
           filename:, meta:, header: nil, pool: nil|
@@ -633,7 +850,7 @@ RSpec.describe AgentCouncil do
         end
 
         label, ok, = described_class.run_consolidation({ 'provider' => 'zai', 'model' => 'glm-5.3' },
-          'prompt', dir, 'prefix', source_durations: { 'openai / gpt-x' => '00:01:05' }, meta: {
+          'prompt', dir, 'prefix', meta: {
             'query'     => 'check-prev-commits',
             'timestamp' => '2026-09-03T19:23:57',
           }, prompt_path: 'prompts/check-prev-commits_prompt.md')
@@ -642,6 +859,7 @@ RSpec.describe AgentCouncil do
         expect(captured[:run_dir]).to eq(dir)
         expect(captured[:filename]).to eq('prefix_consolidated_pi_zai_glm-5.3.md')
         expect(captured[:meta]['role']).to eq('consolidator')
+        expect(captured[:meta]['consolidated_at']).to eq('2026-09-03T19:40:05+07:00')
         expect(captured[:header].call('00:02:10')).to eq(<<~HEADER)
           # Consolidated Report
 
@@ -655,6 +873,7 @@ RSpec.describe AgentCouncil do
           | provider | zai |
           | model | glm-5.3 |
           | timestamp | 2026-09-03T19:23:57 |
+          | consolidated_at | 2026-09-03T19:40:05+07:00 |
           | duration | 00:02:10 |
           | source | openai / gpt-x (00:01:05) |
         HEADER

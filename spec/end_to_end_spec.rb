@@ -8,6 +8,7 @@
 # - done: answers at once with a report.
 # - utf8: answers at once with a report containing non-ASCII text.
 # - escaped: the same, but \u-escaped, so pi's output itself is ASCII.
+# - fails: exits 1 at once.
 # - dies: waits for SIGTERM, then writes into its TMPDIR as it exits (as
 #   node does with its compile cache).
 # - deaf: survives SIGTERM, so must be killed.
@@ -57,6 +58,7 @@ RSpec.describe 'agent-council end to end' do
         *" --provider done "*) echo '#{JSON.generate(report_event('Answer.'))}'; exit 0 ;;
         *" --provider utf8 "*) echo '#{JSON.generate(report_event(non_ascii_answer))}'; exit 0 ;;
         *" --provider escaped "*) echo '#{JSON.generate(report_event(non_ascii_answer), ascii_only: true)}'; exit 0 ;;
+        *" --provider fails "*) echo 'boom' >&2; exit 1 ;;
         *" --provider dies "*) trap 'touch "#{termed_dir}/$$"; #{dying_writes}; exit 143' TERM ;;
         *" --provider deaf "*) trap 'touch "#{termed_dir}/$$"' TERM ;;
       esac
@@ -91,11 +93,12 @@ RSpec.describe 'agent-council end to end' do
   # the group's pid for signalling. Afterwards, records in `survivors` the
   # fake agents still running once agent-council has exited, then kills
   # everything, so a regression fails the spec instead of hanging it. env:
-  # extra child environment (a nil value unsets the variable).
-  def run_council(started: 0, ignoring_hup: false, env: {})
+  # extra child environment (a nil value unsets the variable). args:
+  # agent-council's arguments.
+  def run_council(started: 0, ignoring_hup: false, env: {}, args: %w[prompt.md config.yml])
     env = { 'PATH' => "#{bin_dir}#{File::PATH_SEPARATOR}#{ENV.fetch('PATH')}", 'TMPDIR' => child_tmp, **env }
     exe = File.join(project_root, 'exe', 'agent-council')
-    cmd = [RbConfig.ruby, '-I', File.join(project_root, 'lib'), exe, 'prompt.md', 'config.yml']
+    cmd = [RbConfig.ruby, '-I', File.join(project_root, 'lib'), exe, *args]
     cmd = ['sh', '-c', 'trap "" HUP; exec "$@"', 'sh', *cmd] if ignoring_hup # as nohup does
     pid = Process.spawn(env, *cmd, chdir: work_dir, pgroup: true, out: out_path, err: err_path)
     status = nil
@@ -186,6 +189,100 @@ RSpec.describe 'agent-council end to end' do
     expect(leftover_scratch_dirs).to be_empty
   end
 
+  it 'names the prompt and config copies and records durations in analyst front matter' do
+    write_config(%w[done])
+
+    expect(run_council.exitstatus).to eq(0), output_report
+    text = File.read(reports('answers/*.md').first, encoding: 'UTF-8')
+    fields, = AgentCouncil.parse_front_matter(text)
+    expect(fields).to include('prompt_file' => 'prompt.md', 'config_file' => 'config.yml')
+    expect(fields['run_stamp']).to match(/\A\d{4}-\d\d-\d\d-\d\d-\d\d-\d\d\z/)
+    expect(fields['duration']).to match(/\A\d\d:\d\d:\d\d\z/)
+    expect(text).to include("| duration | #{fields['duration']} |") # in the byline too
+  end
+
+  it 'lists only the reports consolidated, not failed agents, in source_durations' do
+    write_config(%w[done fails], consolidator: 'done')
+
+    expect(run_council.exitstatus).to eq(1), output_report
+    consolidated = File.read(reports('*consolidated*.md').first, encoding: 'UTF-8')
+    fields, = AgentCouncil.parse_front_matter(consolidated)
+    expect(fields['sources']).to eq(['#1 done / m1'])
+    expect(fields['source_durations'].keys).to eq(['#1 done / m1'])
+  end
+
+  describe '--consolidate' do
+    # A finished run without consolidation, then its config copy given the
+    # consolidator `provider`. Returns the run dir, relative to work_dir.
+    def finished_run(consolidator)
+      write_config(%w[done done])
+      expect(run_council.exitstatus).to eq(0), output_report
+      run_dir = Dir.glob('reports/*/*', base: work_dir).first
+      config = YAML.load_file(File.join(work_dir, run_dir, 'config.yml'))
+      config['consolidator'] = { 'provider' => consolidator, 'model' => 'c' }
+      File.write(File.join(work_dir, run_dir, 'config.yml'), YAML.dump(config))
+      run_dir
+    end
+
+    def answers_snapshot = reports('answers/*.md').to_h { |path| [path, File.read(path)] }
+
+    it 'consolidates an existing run in place, running no analysts' do
+      run_dir = finished_run('done')
+      answers = answers_snapshot
+
+      status = run_council(args: ['--consolidate', run_dir])
+
+      expect(status.exitstatus).to eq(0), output_report
+      expect(out).to match(/^  ✓ \d\d:\d\d:\d\d  done \/ c \(consolidator\)  ->  /), output_report
+      expect(Dir.glob('reports/*/*', base: work_dir)).to eq([run_dir])
+      expect(answers_snapshot).to eq(answers)
+      consolidated = reports('*consolidated*.md')
+      expect(consolidated.map { |path| File.basename(path) })
+        .to eq(["#{run_dir.delete_prefix('reports/').tr('/', '-')}_prompt_consolidated_pi_done_c.md"])
+      text = File.read(consolidated.first, encoding: 'UTF-8')
+      expect(text).to include("### Prompt: #{File.join(run_dir, 'prompt.md')}")
+      fields, = AgentCouncil.parse_front_matter(text)
+      analyst, = AgentCouncil.parse_front_matter(File.read(reports('answers/*.md').first, encoding: 'UTF-8'))
+      expect(fields['timestamp']).to eq(analyst['timestamp']) # the run's
+      expect(fields['consolidated_at']).to be >= fields['timestamp']
+      expect(text).to match(/^\| source \| #1 done \/ m1 \(\d\d:\d\d:\d\d\) \|$/)
+      expect(leftover_scratch_dirs).to be_empty
+    end
+
+    it 'consolidates a run dir that has been moved' do
+      run_dir = finished_run('done')
+      moved = File.join(tmp_root, 'moved-run')
+      FileUtils.mv(File.join(work_dir, run_dir), moved)
+
+      status = run_council(args: ['--consolidate', moved])
+
+      expect(status.exitstatus).to eq(0), output_report
+      expect(Dir.children(moved).grep(/_consolidated_pi_done_c\.md\z/).size).to eq(1)
+    end
+
+    it 'exits 1, writing nothing, when the consolidation fails' do
+      run_dir = finished_run('fails')
+
+      status = run_council(args: ['--consolidate', run_dir])
+
+      expect(status.exitstatus).to eq(1), output_report
+      expect(out).to match(/✗ .*fails \/ c \(consolidator\)/), output_report
+      expect(reports('*consolidated*.md')).to be_empty
+    end
+
+    it 'stops quietly on Ctrl-C, writing nothing' do
+      run_dir = finished_run('dies')
+
+      status = run_council(started: 1, args: ['--consolidate', run_dir]) { |pid| Process.kill('INT', -pid) }
+
+      expect_died_by(status, 'INT')
+      expect_quiet_interrupt
+      expect(reports('*consolidated*.md')).to be_empty
+      expect(leftover_scratch_dirs).to be_empty
+      expect_agents_terminated(1)
+    end
+  end
+
   # Pre-claims every run dir name for the next several seconds, so the run
   # must take a suffixed one, whatever second it starts in.
   it 'suffixes a taken run dir name, in report filenames too' do
@@ -223,6 +320,10 @@ RSpec.describe 'agent-council end to end' do
       expect(fields['timestamp']).to be_a(Time), path
       expect(fields['timestamp'].utc_offset).to eq(7 * 3600)
     end
+    consolidated_text = File.read(reports('*consolidated*.md').first, encoding: 'UTF-8')
+    consolidated, = AgentCouncil.parse_front_matter(consolidated_text)
+    expect(consolidated['consolidated_at']).to be_a(Time)
+    expect(consolidated['consolidated_at'].utc_offset).to eq(7 * 3600)
   end
 
   # Under LANG=C (or LANG unset) Ruby's default external encoding is

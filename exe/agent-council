@@ -7,6 +7,7 @@
 #
 # Usage:
 #   agent-council PROMPT_FILE [CONFIG_FILE]
+#   agent-council --consolidate RUN_DIR
 #
 # CONFIG_FILE defaults to ./agent-council.yml in the current directory (no
 # upward directory search), else ~/.agent-council.yml, if either exists;
