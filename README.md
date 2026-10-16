@@ -125,7 +125,7 @@ agent-council --consolidate reports/2026-09-03/09-14-02
 ```
 
 This runs only the consolidator, over the reports already in that run's
-`answers/`, and writes its report into the same run dir. Run it from the
+`reviews/`, and writes its report into the same run dir. Run it from the
 analyzed project's directory, as for a normal run: the consolidator
 checks the reports' claims against the current directory. The prompt and
 config are the run's own copies; the consolidator is the one in the
@@ -228,7 +228,7 @@ reports/
       codebase-review.md                                     # copy of the prompt, as asked
       analyst_format.md                                      # format addendum appended to the prompt
       consolidated.yml                                       # copy of the config used
-      answers/                                               # analysts' reports
+      reviews/                                               # analysts' reports
         2026-09-02-16-21-43_codebase-review_01_pi_opencode-go_glm-5.3.md
         2026-09-02-16-21-43_codebase-review_02_pi_opencode-go_kimi-k3.md
         2026-09-02-16-21-43_codebase-review_03_pi_openai_gpt-6.1-sol.md
@@ -273,7 +273,7 @@ reports/
   orchestrator (never by the model). It gives tools structured provenance, stays
   readable in the terminal, and is how reports are identified:
   consolidation labels come from front matter, not filename parsing, so
-  stray `.md` files in `answers/` are ignored. Below it is the model's
+  stray `.md` files in `reviews/` are ignored. Below it is the model's
   verbatim final message. Unquoted ISO timestamps parse cleanly as `Time`
   objects.
 - The copied prompt and config make every run reproducible after the fact.
@@ -285,19 +285,23 @@ reports/
   git and may grow into multiple files.
 
 Each run prints its run directory as it starts
-(`Run dir: reports/2026-09-03/09-14-02`), so you can open it while agents
+(`Run Dir: reports/2026-09-03/09-14-02`), so you can open it while agents
 are still working, or after a Ctrl-C. Other access patterns:
 
 ```bash
 ls -d reports/*/* | tail -1                # last run by name: usually the newest
 ls reports/$(date +%F)/                    # today's runs
-ls reports/*/*/answers/*codebase-review*   # every report for one question, all runs
+ls reports/*/*/reviews/*codebase-review*   # every report for one question, all runs
 ```
 
-The summary printed at the end shows which models succeeded and how long
-each took (`HH:MM:SS`); the consolidator's duration is printed when it
-finishes. One model's failure does not affect the others. Exit status is
-0 only if every agent succeeded. Ctrl-C (SIGINT), SIGTERM, SIGHUP or
+When all reviews finish, a `Reviews` table shows which models succeeded,
+how long each took (`HH:MM:SS`), and its report file, followed by a
+`--- Reviews complete (N/M succeeded) ---` line. With a consolidator,
+the `Consolidation Report (in <run dir>):` heading then prints while it
+runs, its result row when it finishes, and finally `--- Consolidation
+complete ---` (or `--- Consolidation error ---`). One model's failure
+does not affect the others. Exit status is 0 only if every analyst
+agent succeeded; the consolidator's result doesn't affect it. Ctrl-C (SIGINT), SIGTERM, SIGHUP or
 SIGQUIT stops the run, keeping reports already written. agent-council
 sends each running agent, including the consolidator, SIGTERM (pi then
 also stops any commands it started), gives them a shared 5-second grace
@@ -313,9 +317,11 @@ agent-council, not the agents. (Windows is untested; it has neither
 process groups nor SIGTERM, so there agents may only be killed, after the
 grace period.)
 Output paths are printed relative to the current working directory (e.g.
-`reports/2026-09-04/21-39-01/answers`), regardless of where the tool was
+`reports/2026-09-04/21-39-01/reviews`), regardless of where the tool was
 invoked from — the tool runs in any project, so paths are always in
-*your* tree.
+*your* tree. Paths outside it are printed absolute, as is a default
+config's (`Config:  [default] /path/to/agent-council.yml`), to show
+which default was picked up.
 
 ## How it works (and what pi is told)
 

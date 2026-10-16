@@ -335,10 +335,10 @@ RSpec.describe AgentCouncil do
     # A run dir as a normal run leaves it: prompt and config copies, and one
     # analyst report.
     def write_run(fields: analyst_fields, config: consolidator_config)
-      FileUtils.mkdir_p(File.join(run_dir, 'answers'))
+      FileUtils.mkdir_p(File.join(run_dir, 'reviews'))
       File.write(File.join(run_dir, 'review_prompt.md'), 'Question?')
       File.write(File.join(run_dir, 'config.yml'), YAML.dump(config))
-      File.write(File.join(run_dir, 'answers', 'a.md'), described_class.with_front_matter(fields, 'findings'))
+      File.write(File.join(run_dir, 'reviews', 'a.md'), described_class.with_front_matter(fields, 'findings'))
     end
 
     def expect_abort(message)
@@ -721,15 +721,31 @@ RSpec.describe AgentCouncil do
     end
   end
 
-  describe '.format_result_line' do
-    it 'shows the report path after an arrow on success' do
-      expect(described_class.format_result_line('claude/opus', true, 'answers/a.md', 61))
-        .to eq('  ✓ 00:01:01  claude/opus  ->  answers/a.md')
+  describe '.format_result_table' do
+    it 'aligns columns under headings, with the report on success and the error on failure' do
+      results = [['claude/opus', true, 'a.md', 61], ['#2 openai/gpt-x', false, 'exit 1', 3]]
+      expect(described_class.format_result_table(results)).to eq([
+        '  Ok  Duration  Agent            Report',
+        '  ✓   00:01:01  claude/opus      a.md',
+        '  ✗   00:00:03  #2 openai/gpt-x  (exit 1)',
+      ])
     end
 
-    it 'shows the error in parentheses on failure' do
-      expect(described_class.format_result_line('claude/opus', false, 'exit 1', 3))
-        .to eq('  ✗ 00:00:03  claude/opus  (exit 1)')
+    it 'aligns by display width, so wide characters take two columns' do
+      results = [['模型', true, 'a.md', 1], ['abcd', true, 'b.md', 1]]
+      expect(described_class.format_result_table(results).drop(1)).to eq([
+        '  ✓   00:00:01  模型   a.md',
+        '  ✓   00:00:01  abcd   b.md',
+      ])
+    end
+  end
+
+  describe '.display_width' do
+    it 'counts wide characters as two columns and combining marks as none' do
+      expect(described_class.display_width('a c')).to eq(3)
+      expect(described_class.display_width('模型x')).to eq(5)
+      expect(described_class.display_width("e\u0301")).to eq(1)
+      expect(described_class.display_width('✓')).to eq(1)
     end
   end
 
@@ -819,7 +835,7 @@ RSpec.describe AgentCouncil do
 
     it 'fails cleanly when reading the reports raises' do
       Dir.mktmpdir do |dir|
-        report = File.join(dir, 'answers', 'analyst.md')
+        report = File.join(dir, 'reviews', 'analyst.md')
         FileUtils.mkdir_p(File.dirname(report))
         File.write(report,
           described_class.with_front_matter({ 'provider' => 'openai', 'model' => 'gpt-x' }, 'findings'))
@@ -834,9 +850,9 @@ RSpec.describe AgentCouncil do
 
     it 'writes the consolidated report at the top level of the run dir' do
       Dir.mktmpdir do |dir|
-        answers = File.join(dir, 'answers')
-        FileUtils.mkdir_p(answers)
-        File.write(File.join(answers, 'analyst.md'),
+        reviews = File.join(dir, 'reviews')
+        FileUtils.mkdir_p(reviews)
+        File.write(File.join(reviews, 'analyst.md'),
           described_class.with_front_matter(
             { 'provider' => 'openai', 'model' => 'gpt-x', 'duration' => '00:01:05' }, 'findings'))
 

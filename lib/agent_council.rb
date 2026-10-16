@@ -191,16 +191,19 @@ module AgentCouncil
     end
   end
 
+  # The run dir's subdir holding the analysts' reports.
+  REVIEWS_DIR_NAME = 'reviews'
+
   # A run's analyst reports as [source_label, body, fields] triples, sorted
   # by filename; fields is the report's front matter. The dir is the run's
-  # answers/ subdir; provider/model labels come from the YAML front matter
+  # reviews/ subdir; provider/model labels come from the YAML front matter
   # run_agent writes — not from filename parsing. Files without parseable
   # front matter are not ours and are skipped.
-  module_function def collect_reports(answers_dir)
-    # base: keeps answers_dir from being read as a pattern, so a path with
+  module_function def collect_reports(reviews_dir)
+    # base: keeps reviews_dir from being read as a pattern, so a path with
     # glob characters (e.g. "[") still finds its reports.
-    Dir.glob('*.md', base: answers_dir).filter_map do |name|
-      fields, body = parse_front_matter(File.read(File.join(answers_dir, name), encoding: ENCODING))
+    Dir.glob('*.md', base: reviews_dir).filter_map do |name|
+      fields, body = parse_front_matter(File.read(File.join(reviews_dir, name), encoding: ENCODING))
       next unless fields && fields['provider'] && fields['model']
 
       [agent_label(fields['provider'], fields['model'], fields['agent_index']), body, fields]
@@ -329,10 +332,10 @@ module AgentCouncil
     model = consolidator['model'] if consolidator.is_a?(Hash)
     return ['consolidator', false, "config entry needs 'provider' and 'model'"] if provider.nil? || model.nil?
 
-    reports = collect_reports(File.join(run_dir, 'answers'))
+    reports = collect_reports(File.join(run_dir, REVIEWS_DIR_NAME))
     if reports.empty?
       return ["#{provider} / #{model} (consolidator)", false,
-        "no reports found in #{relative_path(File.join(run_dir, 'answers'))}"]
+        "no reports found in #{relative_path(File.join(run_dir, REVIEWS_DIR_NAME))}"]
     end
 
     prompt = consolidation_prompt(original_prompt, reports, failures)
@@ -382,11 +385,45 @@ module AgentCouncil
     [result, Process.clock_gettime(Process::CLOCK_MONOTONIC) - started]
   end
 
-  # One result line: "✓ duration  label  ->  report_path" on success,
-  # "✗ duration  label  (error)" on failure.
-  module_function def format_result_line(label, ok, detail, elapsed)
-    duration = format_duration(elapsed)
-    ok ? "  ✓ #{duration}  #{label}  ->  #{detail}" : "  ✗ #{duration}  #{label}  (#{detail})"
+  RESULT_HEADINGS = %w[Ok Duration Agent Report].freeze
+
+  # Indented result table lines for [label, ok, detail, elapsed] results:
+  # a heading row, then one row per result, with ✓ and the report filename
+  # on success, ✗ and the error in parentheses on failure.
+  module_function def format_result_table(results)
+    rows = results.map do |label, ok, detail, elapsed|
+      [ok ? '✓' : '✗', format_duration(elapsed), label, ok ? detail : "(#{detail})"]
+    end
+    table = [RESULT_HEADINGS, *rows]
+    # The last column is left unpadded, so lines have no trailing spaces.
+    widths = table.transpose[0...-1].map { |column| column.map { |cell| display_width(cell) }.max }
+    table.map do |row|
+      cells = row[0...-1].zip(widths).map { |cell, width| cell + (' ' * (width - display_width(cell))) }
+      "  #{[*cells, row.last].join('  ')}"
+    end
+  end
+
+  # East Asian wide and fullwidth characters (CJK, Hangul, fullwidth forms,
+  # most emoji), which terminals show two columns wide.
+  WIDE_CHAR = Regexp.new(
+    '[\u1100-\u115F\u2E80-\u303E\u3041-\u33FF\u3400-\u4DBF\u4E00-\u9FFF' \
+    '\uA000-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60' \
+    '\uFFE0-\uFFE6\u{1F300}-\u{1F64F}\u{1F900}-\u{1F9FF}\u{20000}-\u{3FFFD}]'
+  )
+  # Combining marks and zero-width characters, which take no column.
+  ZERO_WIDTH_CHAR = /[\p{Mn}\p{Me}\u200B-\u200F\uFEFF]/
+
+  # The number of terminal columns text takes: as String#length, but
+  # counting wide characters as two and zero-width ones as none.
+  # Approximate (e.g. ambiguous-width characters count as one), but enough
+  # to keep result tables aligned.
+  module_function def display_width(text)
+    text.length + text.scan(WIDE_CHAR).size - text.scan(ZERO_WIDTH_CHAR).size
+  end
+
+  # Prints the "--- Consolidation complete ---" (or error) marker.
+  module_function def puts_consolidation_status(ok)
+    puts "\n--- Consolidation #{ok ? 'complete' : 'error'} ---"
   end
 
   # True if a config entry (agent or consolidator) has the required string
@@ -502,7 +539,6 @@ module AgentCouncil
       MESSAGE
     end
     abort "Config file not found: #{config_path}" unless File.file?(config_path)
-    warn "No config file given; using default config file: #{File.expand_path(config_path)}" unless argv[1]
 
     # Read once. Analysts receive the user's prompt verbatim, followed by
     # the report-format addendum; the consolidator cites the prompt alone.
@@ -565,8 +601,8 @@ module AgentCouncil
       'prompt_file' => File.basename(prompt_path), 'config_file' => File.basename(config_path),
       'run_stamp' => run_stamp }
     run_dir = File.join(day_dir, run_name)
-    answers_dir = File.join(run_dir, 'answers')
-    FileUtils.mkdir_p(answers_dir)
+    reviews_dir = File.join(run_dir, REVIEWS_DIR_NAME)
+    FileUtils.mkdir_p(reviews_dir)
 
     # Self-contained run: preserve the exact inputs — prompt, format
     # addendum, and config. (The orchestrator is not copied: it is
@@ -575,14 +611,18 @@ module AgentCouncil
     FileUtils.cp(ANALYST_FORMAT_PATH, run_dir)
     FileUtils.cp(config_path, run_dir)
 
-    puts "\nPrompt: #{prompt_path}"
-    puts "Run dir: #{relative_path(run_dir)}"
-    puts "\nAgents (#{agents.size}):"
+    # A default config's path is absolute (resolve_config_path makes it
+    # so), to show which of the defaults was picked up.
+    puts
+    puts(argv[1] ? "Config:  #{relative_path(config_path)}" : "Config:  [default] #{config_path}")
+    puts "Prompt:  #{relative_path(prompt_path)}"
+    puts "Run Dir: #{relative_path(run_dir)}"
+    puts "\nReview Agents (#{agents.size}):"
     agents.each_with_index do |agent, i|
       puts "  ##{i + 1} #{agent_descriptor(agent)}"
     end
-    puts "\nConsolidator:\n  #{agent_descriptor(consolidator)}" if consolidator
-    puts "\nProgress:"
+    puts "\nConsolidator Agent:\n  #{agent_descriptor(consolidator)}" if consolidator
+    puts "\nReview Progress:"
     pool = WorkerPool.new(grace: INTERRUPT_GRACE_SECONDS)
     pool.trap_signals
     agents.each_with_index do |agent, i|
@@ -592,7 +632,7 @@ module AgentCouncil
         model = agent.is_a?(Hash) ? agent['model'] : nil
         meta = report_meta.merge('agent_index' => index)
         (label, ok, detail), elapsed = timed do
-          run_agent(agent, analyst_prompt, answers_dir, file_prefix,
+          run_agent(agent, analyst_prompt, reviews_dir, file_prefix,
             index:  index,
             meta:   meta,
             header: ->(duration) { byline_table(meta.merge('duration' => duration), provider, model) },
@@ -606,8 +646,13 @@ module AgentCouncil
       puts(ok ? "  ✓ #{duration}  #{label}" : "  ✗ #{duration}  #{label}  (#{detail})")
     end
 
+    failed = results.count { |_, ok, _| !ok }
+    puts "\nReviews (in #{relative_path(reviews_dir)}):"
+    puts format_result_table(results)
+    puts "\n--- Reviews complete (#{results.size - failed}/#{results.size} succeeded) ---"
+
     if consolidator
-      puts "\nConsolidating reports:"
+      puts "\nConsolidation Report (in #{relative_path(run_dir)}):"
       failures = results.reject { |_, ok, _| ok }.map { |label, _, detail, _| [label, detail] }
       pool.start do
         timed do
@@ -616,16 +661,10 @@ module AgentCouncil
         end
       end
       (label, ok, detail), elapsed = pool.collect.first
-      puts format_result_line(label, ok, detail, elapsed)
+      puts format_result_table([[label, ok, detail, elapsed]])
+      puts_consolidation_status(ok)
     end
 
-    puts "\nSummary (duration, agent, report):"
-    results.each do |label, ok, detail, elapsed|
-      puts format_result_line(label, ok, detail, elapsed)
-    end
-
-    failed = results.count { |_, ok, _| !ok }
-    puts "\n#{results.size - failed}/#{results.size} succeeded. Reports in: #{relative_path(answers_dir)}"
     exit(failed.zero? ? 0 : 1)
   rescue Interrupt
     exit_interrupted(pool)
@@ -640,17 +679,17 @@ module AgentCouncil
   # Exits 0 only if the consolidation succeeded.
   module_function def consolidate_run(run_dir)
     abort "Run dir not found: #{run_dir}" unless File.directory?(run_dir)
-    answers_dir = File.join(run_dir, 'answers')
-    reports = File.directory?(answers_dir) ? collect_reports(answers_dir) : []
-    abort "No analyst reports found in #{answers_dir}" if reports.empty?
+    reviews_dir = File.join(run_dir, REVIEWS_DIR_NAME)
+    reports = File.directory?(reviews_dir) ? collect_reports(reviews_dir) : []
+    abort "No analyst reports found in #{reviews_dir}" if reports.empty?
 
     fields = reports.first[2]
     unless fields.values_at('prompt_file', 'config_file', 'run_stamp', 'query').all?
-      abort "Reports in #{answers_dir} lack prompt_file, config_file, run_stamp or query; " \
+      abort "Reports in #{reviews_dir} lack prompt_file, config_file, run_stamp or query; " \
         'runs made before --consolidate existed cannot be consolidated'
     end
     %w[prompt_file config_file].each do |key|
-      abort "Invalid #{key} in #{answers_dir}: #{fields[key].inspect}" unless bare_name?(fields[key])
+      abort "Invalid #{key} in #{reviews_dir}: #{fields[key].inspect}" unless bare_name?(fields[key])
     end
     prompt_path = File.join(run_dir, fields['prompt_file'])
     config_path = File.join(run_dir, fields['config_file'])
@@ -675,7 +714,7 @@ module AgentCouncil
     file_prefix = "#{fields['run_stamp']}_#{fields['query']}" # as in a normal run
     filename = consolidated_filename(file_prefix, consolidator['provider'], consolidator['model'])
     unless bare_name?(filename)
-      abort "Invalid run_stamp or query in #{answers_dir}: #{fields.values_at('run_stamp', 'query').inspect}"
+      abort "Invalid run_stamp or query in #{reviews_dir}: #{fields.values_at('run_stamp', 'query').inspect}"
     end
     if File.exist?(File.join(run_dir, filename))
       abort "Consolidated report already exists: #{relative_path(File.join(run_dir, filename))}\n" \
@@ -690,9 +729,12 @@ module AgentCouncil
     prompt = File.read(prompt_path, encoding: ENCODING)
     abort "Prompt copy is empty: #{prompt_path}" if prompt.empty?
 
-    puts "Run dir: #{relative_path(run_dir)}"
-    puts "\nConsolidator:\n  #{agent_descriptor(consolidator)}"
-    puts "\nConsolidating #{reports.size} reports:"
+    puts "Config:  #{relative_path(config_path)}"
+    puts "Prompt:  #{relative_path(prompt_path)}"
+    puts "Run Dir: #{relative_path(run_dir)}"
+    puts "\nConsolidator Agent:\n  #{agent_descriptor(consolidator)}"
+    puts "\nConsolidation Report (in #{relative_path(run_dir)}, " \
+      "from #{reports.size} review#{'s' unless reports.size == 1}):"
     failures = missing_agents(config, reports)
     pool = WorkerPool.new(grace: INTERRUPT_GRACE_SECONDS)
     pool.trap_signals
@@ -703,7 +745,8 @@ module AgentCouncil
       end
     end
     (label, ok, detail), elapsed = pool.collect.first
-    puts format_result_line(label, ok, detail, elapsed)
+    puts format_result_table([[label, ok, detail, elapsed]])
+    puts_consolidation_status(ok)
     exit(ok ? 0 : 1)
   rescue Interrupt
     exit_interrupted(pool)

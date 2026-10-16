@@ -272,12 +272,13 @@ reports/
   2026-09-02/
     16-21-43/
       codebase-review.md            # copy of the prompt, as asked
+      analyst_format.md             # format addendum appended to the prompt
       consolidated.yml              # copy of the config used
-      answers/                      # analysts' reports
-        2026-09-02-16-21-43_codebase-review_pi_anthropic_claude-x.md
-        2026-09-02-16-21-43_codebase-review_pi_openai_gpt-x.md
-        2026-09-02-16-21-43_codebase-review_pi_opencode-go_kimi-x.md
-        2026-09-02-16-21-43_codebase-review_pi_zai_glm-x.md
+      reviews/                      # analysts' reports
+        2026-09-02-16-21-43_codebase-review_01_pi_anthropic_claude-x.md
+        2026-09-02-16-21-43_codebase-review_02_pi_openai_gpt-x.md
+        2026-09-02-16-21-43_codebase-review_03_pi_opencode-go_kimi-x.md
+        2026-09-02-16-21-43_codebase-review_04_pi_zai_glm-x.md
       2026-09-02-16-21-43_codebase-review_consolidated_pi_zai_glm-x.md  # consolidator output, if configured
 ```
 
@@ -286,7 +287,7 @@ atomically with a `-2`, `-3`, ... suffix if that name is already taken
 (same-second runs, or local time repeating when clocks fall back).
 Inputs (prompt and config copies) sit at the run dir root; so does the
 consolidator's report, when configured — only the analysts' reports go
-to `answers/`; reports are identified by
+to `reviews/`; reports are identified by
 where they live, and their provider/model metadata comes from YAML front
 matter the orchestrator writes at the top of each file (the body below it
 is the model's verbatim response). Report filenames still carry the
@@ -310,7 +311,9 @@ were synthesized, `source_durations`, and `consolidated_at` (when the
 consolidation ran; later than `timestamp`, the run's start, when done by
 `--consolidate`). Unquoted ISO timestamps parse directly as `Time`
 objects. Status printed to the user uses paths
-relative to the current working directory, not absolute.
+relative to the current working directory, not absolute — except paths
+outside it, and a default config's path, which is printed absolute to
+show which default was picked up.
 
 The program should sanitize provider/model identifiers sufficiently to make safe filenames.
 
@@ -375,12 +378,11 @@ If a Pi invocation fails:
 Example:
 
 ```text
-Running 4 models...
-
-✓ anthropic / claude-x
-✓ openai / gpt-x
-✗ zai / glm-x
-✓ opencode-go / kimi-x
+Review Progress:
+  ✓ 00:01:12  #1 anthropic / claude-x
+  ✓ 00:01:40  #2 openai / gpt-x
+  ✗ 00:00:03  #4 zai / glm-x  (pi exited 1: ...)
+  ✓ 00:02:05  #3 opencode-go / kimi-x
 ```
 
 One failed model must not discard successful results from others.
@@ -488,11 +490,13 @@ reports/
   2026-09-02/
     16-21-43/
       codebase-review.md
+      analyst_format.md
       consolidated.yml
-      2026-09-02-16-21-43_codebase-review_pi_anthropic_claude-x.md
-      2026-09-02-16-21-43_codebase-review_pi_openai_gpt-x.md
-      2026-09-02-16-21-43_codebase-review_pi_opencode-go_kimi-x.md
-      2026-09-02-16-21-43_codebase-review_pi_zai_glm-x.md
+      reviews/
+        2026-09-02-16-21-43_codebase-review_01_pi_anthropic_claude-x.md
+        2026-09-02-16-21-43_codebase-review_02_pi_openai_gpt-x.md
+        2026-09-02-16-21-43_codebase-review_03_pi_opencode-go_kimi-x.md
+        2026-09-02-16-21-43_codebase-review_04_pi_zai_glm-x.md
 ```
 
 That is the first useful product.
