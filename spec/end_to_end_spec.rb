@@ -10,8 +10,9 @@
 # - escaped: the same, but \u-escaped, so pi's output itself is ASCII.
 # - fails: exits 1 at once.
 # - capture: like done, but first saves its prompt (stdin) to captured.txt.
-# - dies: waits for SIGTERM, then writes into its TMPDIR as it exits (as
-#   node does with its compile cache).
+# - dies: waits for SIGTERM, then writes into its TMPDIR a moment later as
+#   it exits (as node does with its compile cache), so a scratch dir
+#   removed before the agent has exited would be left behind.
 # - deaf: survives SIGTERM, so must be killed.
 require 'spec_helper'
 require 'fileutils'
@@ -50,7 +51,7 @@ RSpec.describe 'agent-council end to end' do
   end
 
   def write_fake_pi
-    dying_writes = 'for i in $(seq 1 100); do mkdir -p "$TMPDIR/c/d$i"; touch "$TMPDIR/c/d$i/f"; done'
+    dying_writes = 'sleep 0.1; mkdir -p "$TMPDIR/c/d"; echo >"$TMPDIR/c/d/f"'
     fake_pi = File.join(bin_dir, 'pi')
     File.write(fake_pi, <<~SH)
       #!/usr/bin/env bash

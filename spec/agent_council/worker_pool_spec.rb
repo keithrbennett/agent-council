@@ -111,10 +111,14 @@ RSpec.describe AgentCouncil::WorkerPool do
       expect(termsigs).to eq([Signal.list['TERM']])
     end
 
-    it 'kills children that survive SIGTERM once the grace period expires' do
-      wait_for(start_child("trap '' TERM"))
-      expect(timed_shutdown).to be_between(grace, grace + 2)
-      expect(termsigs).to eq([Signal.list['KILL']])
+    context 'when children survive SIGTERM' do
+      let(:grace) { 0.2 } # waited out in full, so kept short
+
+      it 'kills them once the grace period expires' do
+        wait_for(start_child("trap '' TERM"))
+        expect(timed_shutdown).to be_between(grace, grace + 2)
+        expect(termsigs).to eq([Signal.list['KILL']])
+      end
     end
 
     it 'sends SIGTERM to a child spawned after shutdown has started' do
