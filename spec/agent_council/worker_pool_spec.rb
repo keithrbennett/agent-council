@@ -43,14 +43,12 @@ RSpec.describe AgentCouncil::WorkerPool do
 
   describe '#capture3' do
     it 'returns stdout, stderr and status, feeding stdin' do
-      skip 'requires a POSIX shell' if Gem.win_platform?
       script = 'cat; echo "$X" >&2; exit 3'
       out, err, status = pool.capture3({ 'X' => 'y' }, 'sh', '-c', script, stdin_data: 'in')
       expect([out, err, status.exitstatus]).to eq(['in', "y\n", 3])
     end
 
     it 'returns output as UTF-8 under a non-UTF-8 locale' do
-      skip 'requires a POSIX shell' if Gem.win_platform?
       out, err, = with_us_ascii_locale do
         pool.capture3({}, 'sh', '-c', 'printf é; printf ✓ >&2', stdin_data: '')
       end
@@ -58,7 +56,6 @@ RSpec.describe AgentCouncil::WorkerPool do
     end
 
     it 'runs the child in its own process group' do
-      skip 'process groups are POSIX-only' if Gem.win_platform?
       out, err, status = pool.capture3({}, 'sh', '-c', 'echo $$; ps -o pgid= -p $$', stdin_data: '')
       expect(status).to be_success, err
       pid, pgid = out.split.map(&:to_i)
@@ -67,12 +64,7 @@ RSpec.describe AgentCouncil::WorkerPool do
   end
 
   describe '#shutdown' do
-    around do |example|
-      skip 'requires a POSIX shell and process groups' if Gem.win_platform?
-      example.run
-    ensure
-      FileUtils.remove_entry(dir)
-    end
+    after { FileUtils.remove_entry(dir) }
 
     let(:dir) { Dir.mktmpdir }
 

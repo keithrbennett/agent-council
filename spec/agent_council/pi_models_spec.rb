@@ -110,12 +110,6 @@ RSpec.describe AgentCouncil::PiModels do
   end
 
   describe '.fetch_models' do
-    before do
-      # The fake `pi` below is a #!/bin/sh script (and one variant sends
-      # itself a POSIX signal), so it can't run on Windows.
-      skip 'requires a POSIX shell to build the fake pi executable' if Gem.win_platform?
-    end
-
     def with_fake_pi(script)
       Dir.mktmpdir do |dir|
         path = File.join(dir, 'pi')
@@ -263,6 +257,17 @@ RSpec.describe AgentCouncil::PiModels do
       expect(status).to be_success, err
       expect(out).to eq(described_class.help_text)
       expect(err).to be_empty
+    end
+
+    it 'aborts on native Windows, pointing to WSL' do
+      allow(AgentCouncil).to receive(:windows?).and_return(true)
+      # Runs in-process, so give the script an ARGV it can't do harm with if
+      # the abort ever stops coming first (--help would just exit 0).
+      stub_const('ARGV', ['--help'])
+      executable = File.expand_path('../../exe/pi-models', __dir__)
+      expect { load executable }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+        .and output(/does not support native Windows; please run it inside WSL\.\n.*README\.md/).to_stderr
     end
   end
 end

@@ -8,3 +8,5 @@ consolidation by another model. `--consolidate RUN_DIR` reruns just the
 consolidation of a finished run. Reports go under `./agent-council-reports`,
 or under the directory given with `-o` / `--output-dir`. Includes sample
 prompts and configs under `examples/`.
+
+Native Windows is not supported; on Windows, run agent-council inside WSL.

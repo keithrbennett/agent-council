@@ -38,7 +38,6 @@ RSpec.describe 'agent-council end to end' do
   let(:non_ascii_answer) { 'Résumé ✓ “quoted”' }
 
   before do
-    skip 'requires a POSIX shell and process groups' if Gem.win_platform?
     [bin_dir, work_dir, child_tmp, started_dir, termed_dir, sigint_dir].each { |dir| FileUtils.mkdir_p(dir) }
     File.write(File.join(work_dir, 'prompt.md'), "Question?\n")
     write_fake_pi

@@ -95,8 +95,8 @@ RSpec.describe AgentCouncil do
       FileUtils.remove_entry(tmp_root)
     end
 
-    # Stub Dir.home rather than mutating ENV['HOME']: Dir.home's env-var
-    # precedence differs by platform (e.g. USERPROFILE on Windows).
+    # Stub Dir.home rather than mutating ENV['HOME'], so there is no global
+    # state to restore.
     before { allow(Dir).to receive(:home).and_return(home) }
   end
 
@@ -222,7 +222,6 @@ RSpec.describe AgentCouncil do
     end
 
     it 'reads harness output as UTF-8 under a non-UTF-8 locale, without a pool' do
-      skip 'requires a POSIX shell' if Gem.win_platform?
       message = { role: 'assistant', content: [{ type: 'text', text: 'Résumé ✓' }] }
       event = { type: 'message_end', message: message }
       allow(described_class::HARNESS).to receive(:argv)
@@ -262,6 +261,13 @@ RSpec.describe AgentCouncil do
 
   describe '.main' do
     include_context 'with isolated cwd and home'
+
+    it 'aborts on native Windows, pointing to WSL' do
+      allow(described_class).to receive(:windows?).and_return(true)
+      expect { described_class.main(['-h']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+        .and output(/does not support native Windows; please run it inside WSL\.\n.*README\.md/).to_stderr
+    end
 
     %w[-v --version].each do |flag|
       it "prints the version and exits 0 for #{flag}, without a prompt or config" do
@@ -530,7 +536,6 @@ RSpec.describe AgentCouncil do
     end
 
     it 'finds an executable file in a PATH directory' do
-      skip 'Windows executables need a PATHEXT extension' if Gem.win_platform?
       write_file('tool', 0o755)
       expect(described_class.executable_on_path?('tool')).to be(true)
     end
@@ -545,20 +550,17 @@ RSpec.describe AgentCouncil do
     end
 
     it 'does not count a non-executable file' do
-      skip 'no executable bit on Windows' if Gem.win_platform?
       write_file('tool', 0o644)
       expect(described_class.executable_on_path?('tool')).to be(false)
     end
 
     it 'searches every PATH directory, not just the first' do
-      skip 'Windows executables need a PATHEXT extension' if Gem.win_platform?
       write_file('tool', 0o755)
       allow(ENV).to receive(:fetch).with('PATH', '').and_return("/nonexistent#{File::PATH_SEPARATOR}#{bin_dir}")
       expect(described_class.executable_on_path?('tool')).to be(true)
     end
 
     it 'treats empty PATH entries, including a trailing one, as the current directory' do
-      skip 'Windows executables need a PATHEXT extension' if Gem.win_platform?
       write_file('tool', 0o755)
       sep = File::PATH_SEPARATOR
       Dir.chdir(bin_dir) do
@@ -567,13 +569,6 @@ RSpec.describe AgentCouncil do
           expect(described_class.executable_on_path?('tool')).to be(true), path
         end
       end
-    end
-
-    it 'tries PATHEXT extensions on Windows' do
-      allow(described_class).to receive(:windows?).and_return(true)
-      allow(ENV).to receive(:fetch).with('PATHEXT', '').and_return(".EXE#{File::PATH_SEPARATOR}.CMD")
-      write_file('tool.CMD', 0o755)
-      expect(described_class.executable_on_path?('tool')).to be(true)
     end
   end
 

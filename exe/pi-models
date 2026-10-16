@@ -1,6 +1,10 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+require_relative '../lib/agent_council/platform'
+
+AgentCouncil.abort_if_native_windows
+
 require_relative '../lib/agent_council/pi_models'
 
 help_output = ARGV.delete('-h') || ARGV.delete('--help')

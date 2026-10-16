@@ -7,12 +7,12 @@ module AgentCouncil
   # SIGTERM, SIGHUP or SIGQUIT) does to them. main's rescue Interrupt calls
   # into this class for everything but its own message.
   #
-  # On POSIX systems each agent process runs in its own process group (see
-  # #capture3), so a terminal's Ctrl-C reaches only agent-council, never the
-  # agents. Once #trap_signals is installed, the first INT, TERM, HUP or
-  # QUIT raises Interrupt in the main thread, whose rescue calls #shutdown:
-  # it sends every agent SIGTERM (pi then also stops any commands its bash
-  # tool started, which run detached and so would survive the agent), waits
+  # Each agent process runs in its own process group (see #capture3), so a
+  # terminal's Ctrl-C reaches only agent-council, never the agents. Once
+  # #trap_signals is installed, the first INT, TERM, HUP or QUIT raises
+  # Interrupt in the main thread, whose rescue calls #shutdown: it sends
+  # every agent SIGTERM (pi then also stops any commands its bash tool
+  # started, which run detached and so would survive the agent), waits
   # up to the grace period for the workers to finish, and SIGKILLs agents
   # still running. A second INT, TERM or QUIT SIGKILLs them at once. Any HUP
   # after the first signal is ignored: a closing terminal can deliver two at
@@ -26,11 +26,11 @@ module AgentCouncil
   # a queue and only the main thread prints, so nothing more is printed once
   # the Interrupt has been taken.
   class WorkerPool
-    TERMINATING_SIGNALS = %w[INT TERM HUP QUIT].select { |name| Signal.list.key?(name) }.freeze
+    TERMINATING_SIGNALS = %w[INT TERM HUP QUIT].freeze
 
-    # Process groups are POSIX-only. (RUBY_PLATFORM rather than
-    # Gem.win_platform?, so as not to depend on RubyGems.)
-    SPAWN_OPTIONS = (/mswin|mingw/.match?(RUBY_PLATFORM) ? {} : { pgroup: true }).freeze
+    # Each agent leads a new process group, so terminal signals skip it and
+    # #signal_child can reach any processes it starts.
+    SPAWN_OPTIONS = { pgroup: true }.freeze
 
     # Ends the process as the signal would have, so the caller (e.g. a shell
     # running agent-council in a loop) sees it was killed by the signal, not
@@ -166,7 +166,7 @@ module AgentCouncil
     end
 
     private def signal_child(pid, signal)
-      Process.kill(signal, SPAWN_OPTIONS[:pgroup] ? -pid : pid)
+      Process.kill(signal, -pid)
     rescue SystemCallError
       nil # already gone
     end

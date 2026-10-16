@@ -18,6 +18,11 @@ non-goals.
 - Credentials for at least one provider (several give more diverse
   viewpoints), configured through pi itself
   (`/login` in interactive pi, or provider API-key env vars)
+- On Windows, WSL (e.g. Ubuntu): native Windows is not supported. Install
+  and run Ruby, pi and agent-council inside WSL, from a WSL shell. Windows
+  drives are reachable at `/mnt/c/...`, but file access there is much
+  slower than in the Linux filesystem (e.g. `~/projects`). Set up pi's
+  provider credentials inside WSL too; WSL doesn't share them with Windows.
 
 ## Installation
 
@@ -314,11 +319,9 @@ SIGQUIT it exits with status 131 instead of dumping core. A second SIGINT,
 SIGTERM or SIGQUIT kills the agents at once; further SIGHUPs, which a
 closing terminal can send in pairs, are ignored. A killed agent can't stop
 the commands it started, so those may keep running. A signal agent-council
-was started ignoring (e.g. SIGHUP under `nohup`) stays ignored. On POSIX
-systems agents run in process groups of their own, so Ctrl-Z suspends only
-agent-council, not the agents. (Windows is untested; it has neither
-process groups nor SIGTERM, so there agents may only be killed, after the
-grace period.)
+was started ignoring (e.g. SIGHUP under `nohup`) stays ignored. Agents run
+in process groups of their own, so Ctrl-Z suspends only agent-council, not
+the agents.
 Output paths are printed relative to the current working directory (e.g.
 `agent-council-reports/2026-09-04/21-39-01/reviews`), regardless of where the tool was
 invoked from — the tool runs in any project, so paths are always in

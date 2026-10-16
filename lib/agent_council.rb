@@ -13,6 +13,7 @@ require 'tmpdir'
 require 'optparse'
 
 require_relative 'agent_council/version'
+require_relative 'agent_council/platform'
 require_relative 'agent_council/harnesses/pi_harness'
 require_relative 'agent_council/worker_pool'
 
@@ -433,24 +434,15 @@ module AgentCouncil
     entry.is_a?(Hash) && entry['provider'].is_a?(String) && entry['model'].is_a?(String)
   end
 
-  # RUBY_PLATFORM rather than Gem.win_platform?, so as not to depend on
-  # RubyGems (as in WorkerPool).
-  module_function def windows?
-    /mswin|mingw/.match?(RUBY_PLATFORM)
-  end
-
   # True if `name` (a bare command name) is an executable file in a PATH
-  # directory, trying PATHEXT extensions on Windows. Checked up front so a
-  # missing harness fails before any run dir is created, rather than as an
-  # Errno::ENOENT from every agent. An empty PATH entry means the current
-  # directory, as it does for execvp (-1 keeps a trailing empty entry).
+  # directory. Checked up front so a missing harness fails before any run
+  # dir is created, rather than as an Errno::ENOENT from every agent. An
+  # empty PATH entry means the current directory, as it does for execvp (-1
+  # keeps a trailing empty entry).
   module_function def executable_on_path?(name)
-    exts = windows? ? ENV.fetch('PATHEXT', '').split(File::PATH_SEPARATOR) : []
     ENV.fetch('PATH', '').split(File::PATH_SEPARATOR, -1).map { |dir| dir.empty? ? '.' : dir }.any? do |dir|
-      ['', *exts].any? do |ext|
-        path = File.join(dir, name + ext)
-        File.executable?(path) && !File.directory?(path)
-      end
+      path = File.join(dir, name)
+      File.executable?(path) && !File.directory?(path)
     end
   end
 
@@ -511,6 +503,7 @@ module AgentCouncil
   end
 
   module_function def main(argv)
+    abort_if_native_windows
     options = {}
     parser = option_parser(options)
     begin
