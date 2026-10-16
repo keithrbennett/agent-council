@@ -6,7 +6,7 @@
 #   lib/agent_council/harnesses/pi_harness.rb  pi-specific behavior (AgentCouncil::Harnesses::PiHarness)
 #
 # Usage:
-#   agent-council PROMPT_FILE [CONFIG_FILE]
+#   agent-council [-o OUTPUT_DIR] PROMPT_FILE [CONFIG_FILE]
 #   agent-council --consolidate RUN_DIR
 #
 # CONFIG_FILE defaults to ./agent-council.yml in the current directory (no

@@ -67,18 +67,16 @@ RSpec.describe AgentCouncil do
       Dir.mktmpdir { |dir| Dir.chdir(dir) { example.run } }
     end
 
-    it 'is ./reports under the current working directory (the analyzed repo)' do
-      expect(described_class.reports_dir).to eq(File.join(Dir.pwd, 'reports'))
+    it 'is ./agent-council-reports under the working directory (the analyzed repo)' do
+      expect(described_class.reports_dir).to eq(File.join(Dir.pwd, 'agent-council-reports'))
     end
 
-    it 'is ./untracked/reports when the working directory has an untracked/ directory' do
-      Dir.mkdir('untracked')
-      expect(described_class.reports_dir).to eq(File.join(Dir.pwd, 'untracked', 'reports'))
+    it 'resolves an explicit relative path against the current working directory' do
+      expect(described_class.reports_dir('out/reports')).to eq(File.join(Dir.pwd, 'out', 'reports'))
     end
 
-    it 'ignores a plain file named untracked' do
-      File.write('untracked', '')
-      expect(described_class.reports_dir).to eq(File.join(Dir.pwd, 'reports'))
+    it 'returns an explicit absolute path unchanged' do
+      expect(described_class.reports_dir('/var/council')).to eq('/var/council')
     end
   end
 
@@ -285,6 +283,48 @@ RSpec.describe AgentCouncil do
         .and output(/^\s+--consolidate RUN_DIR\s+\S/).to_stdout
     end
 
+    it 'lists --output-dir in the -h options' do
+      expect { described_class.main(['-h']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
+        .and output(/^\s+-o, --output-dir DIR\s+\S/).to_stdout
+    end
+
+    ['', ' '].each do |blank|
+      it "aborts on a blank --output-dir (#{blank.inspect}) instead of writing into the cwd" do
+        expect { described_class.main(['-o', blank, 'p_prompt.md']) }
+          .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+          .and output(/--output-dir needs a directory; got an empty value/).to_stderr
+      end
+    end
+
+    {
+      'names an existing file'    => 'afile',
+      'is under an existing file' => 'afile/sub/dir',
+    }.each do |situation, dir|
+      it "aborts before checking the prompt when --output-dir #{situation}" do
+        File.write('afile', '')
+        expect { described_class.main(['-o', dir, 'missing_prompt.md']) }
+          .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+          .and output("Output dir #{dir} can't be created: afile is not a directory\n").to_stderr
+      end
+    end
+
+    it 'aborts when --output-dir names an unknown user home' do
+      expect { described_class.main(['-o', '~no-such-user-agent-council/x', 'p_prompt.md']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+        .and output(/Invalid --output-dir ~no-such-user-agent-council\/x: /).to_stderr
+    end
+
+    it 'aborts with a message, not a backtrace, when the run dir cannot be created' do
+      File.write('p_prompt.md', 'hi')
+      File.write('config.yml', YAML.dump('agents' => [{ 'provider' => 'p', 'model' => 'm' }]))
+      allow(described_class).to receive(:abort_unless_harness_installed)
+      allow(described_class).to receive(:claim_run_dir).and_raise(Errno::EACCES, 'out')
+      expect { described_class.main(['-o', 'out', 'p_prompt.md', 'config.yml']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+        .and output("Cannot create a run dir under out: Permission denied - out\n").to_stderr
+    end
+
     it 'aborts with a pointer to the packaged sample configs when no config exists' do
       File.write('p_prompt.md', 'hi')
       samples = File.join(described_class::EXAMPLES_DIR, 'configs')
@@ -304,7 +344,7 @@ RSpec.describe AgentCouncil do
         expect { described_class.main([prompt, config]) }
           .to raise_error(SystemExit)
           .and output(/need different file names, since all three are copied into the run dir/).to_stderr
-        expect(File).not_to exist('reports')
+        expect(File).not_to exist('agent-council-reports')
       end
     end
 
@@ -317,14 +357,14 @@ RSpec.describe AgentCouncil do
       expect { described_class.main(['p_prompt.md', 'config.yml']) }
         .to raise_error(SystemExit)
         .and output(/pi executable not found; is `pi` installed.*\n.*Prerequisites/).to_stderr
-      expect(File).not_to exist('reports')
+      expect(File).not_to exist('agent-council-reports')
     end
   end
 
   describe '.main --consolidate' do
     include_context 'with isolated cwd and home'
 
-    let(:run_dir) { 'reports/2026-09-03/09-14-02' }
+    let(:run_dir) { 'agent-council-reports/2026-09-03/09-14-02' }
     let(:consolidator_config) { { 'consolidator' => { 'provider' => 'c', 'model' => 'cm' } } }
     let(:analyst_fields) do
       { 'role' => 'analyst', 'query' => 'review', 'prompt_file' => 'review_prompt.md',
@@ -462,6 +502,14 @@ RSpec.describe AgentCouncil do
       expect { described_class.main(['--consolidate', run_dir, 'prompt.md']) }
         .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
         .and output(/Usage:/).to_stderr
+    end
+
+    it 'aborts when given --output-dir too, since it writes into the run dir' do
+      write_run
+      expect { described_class.main(['--consolidate', run_dir, '-o', 'elsewhere']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+        .and output(/--output-dir cannot be used with --consolidate/).to_stderr
+      expect(File).not_to exist('elsewhere')
     end
   end
 

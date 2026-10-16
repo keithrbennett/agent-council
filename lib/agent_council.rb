@@ -42,14 +42,16 @@ module AgentCouncil
   # under LANG=C or with LANG unset).
   ENCODING = Encoding::UTF_8
 
-  # Reports go under the current working directory — i.e. alongside the
-  # repository being analyzed — so the tool can be run from any project.
-  # If the working directory has an untracked/ directory (a conventional
-  # home for git-ignored scratch files), reports go in untracked/reports
-  # instead of reports, so they don't clutter the project root.
-  module_function def reports_dir
-    base = File.directory?(File.join(Dir.pwd, 'untracked')) ? File.join(Dir.pwd, 'untracked') : Dir.pwd
-    File.join(base, 'reports')
+  # By default, reports go under the current working directory — i.e.
+  # alongside the repository being analyzed — so the tool can be run from
+  # any project. The name says which tool wrote them, since they land in
+  # someone else's tree.
+  DEFAULT_REPORTS_DIR_NAME = 'agent-council-reports'
+
+  # The reports root: the --output-dir value if given (relative paths
+  # resolve against the cwd), else ./agent-council-reports.
+  module_function def reports_dir(explicit = nil)
+    File.expand_path(explicit || DEFAULT_REPORTS_DIR_NAME)
   end
 
   # Config file names picked up when no CONFIG_FILE argument is given: a
@@ -60,7 +62,7 @@ module AgentCouncil
 
   # The explicit CONFIG_FILE argument if given, else ./agent-council.yml if
   # it exists, else ~/.agent-council.yml if it exists; nil when none apply.
-  # Only the cwd is checked (no upward walk), consistent with reports_dir.
+  # Only the cwd is checked (no upward walk).
   module_function def resolve_config_path(explicit)
     return explicit if explicit
 
@@ -458,7 +460,7 @@ module AgentCouncil
     "#{HARNESS::NAME} / #{entry['provider']} / #{entry['model']}"
   end
 
-  # options: receives the parsed option values (:consolidate).
+  # options: receives the parsed option values (:consolidate, :output_dir).
   module_function def option_parser(options = {})
     OptionParser.new do |opts|
       opts.banner = <<~BANNER
@@ -479,8 +481,14 @@ module AgentCouncil
       BANNER
 
       opts.on('--consolidate RUN_DIR',
-        'Consolidate an existing run\'s reports again; runs no analysts') do |dir|
+        'Consolidate an existing run\'s reports again, in place; runs no analysts') do |dir|
         options[:consolidate] = dir
+      end
+
+      opts.on('-o', '--output-dir DIR',
+        "Directory to write run dirs under (default: ./#{DEFAULT_REPORTS_DIR_NAME})",
+        'Not allowed with --consolidate') do |dir|
+        options[:output_dir] = dir
       end
 
       opts.on('-h', '--help', 'Show this help and exit') do
@@ -497,7 +505,8 @@ module AgentCouncil
       opts.separator 'Examples:'
       opts.separator '  agent-council my-analysis-prompt.md'
       opts.separator '  agent-council my-analysis-prompt.md other-config.yml'
-      opts.separator '  agent-council --consolidate reports/2026-09-03/09-14-02'
+      opts.separator '  agent-council -o tmp/council my-analysis-prompt.md'
+      opts.separator "  agent-council --consolidate #{DEFAULT_REPORTS_DIR_NAME}/2026-09-03/09-14-02"
     end
   end
 
@@ -517,7 +526,32 @@ module AgentCouncil
         warn parser
         exit 1
       end
+      # The consolidation report goes into RUN_DIR itself.
+      if options[:output_dir]
+        abort '--output-dir cannot be used with --consolidate, which writes into RUN_DIR'
+      end
       consolidate_run(options[:consolidate])
+    end
+
+    # Checked up front, so a bad value fails before any work, with a message
+    # rather than a backtrace. A blank value (e.g. -o "$UNSET_VAR") would
+    # otherwise resolve to the cwd and scatter day dirs over the project.
+    if options[:output_dir]&.strip&.empty?
+      abort '--output-dir needs a directory; got an empty value'
+    end
+    reports_root =
+      begin
+        reports_dir(options[:output_dir])
+      rescue ArgumentError => e # e.g. ~nosuchuser/x
+        abort "Invalid --output-dir #{options[:output_dir]}: #{e.message}"
+      end
+    # mkdir_p would fail on a file anywhere along the path, so check the
+    # nearest part that exists, which is the dir itself if it exists.
+    existing = reports_root
+    existing = File.dirname(existing) until File.exist?(existing)
+    unless File.directory?(existing)
+      abort "Output dir #{relative_path(reports_root)} can't be created: " \
+        "#{relative_path(existing)} is not a directory"
     end
 
     prompt_path = argv[0]
@@ -581,14 +615,19 @@ module AgentCouncil
 
     abort_unless_harness_installed
 
-    # One run dir per invocation, day-bucketed so reports/ stays navigable at
-    # volume: reports/<yyyy-mm-dd>/<hh-mm-ss>/. The dir name is pure time
+    # One run dir per invocation, day-bucketed so the reports dir stays
+    # navigable at volume: <reports dir>/<yyyy-mm-dd>/<hh-mm-ss>/. The dir name is pure time
     # (plus a collision suffix, see claim_run_dir); full timestamp and query
     # slug go into the report filenames (file_prefix).
     now = Time.now
     day = now.strftime('%Y-%m-%d')
-    day_dir = File.join(reports_dir, day)
-    run_name = claim_run_dir(day_dir, now.strftime('%H-%M-%S'))
+    day_dir = File.join(reports_root, day)
+    run_name =
+      begin
+        claim_run_dir(day_dir, now.strftime('%H-%M-%S'))
+      rescue SystemCallError => e # e.g. no write permission
+        abort "Cannot create a run dir under #{relative_path(reports_root)}: #{e.message}"
+      end
     run_stamp = "#{day}-#{run_name}"
     iso_stamp = iso_timestamp(now)
     slug = query_slug(prompt_path)

@@ -121,7 +121,7 @@ To consolidate a finished run again — say its consolidation failed, or
 you want another model's synthesis — pass its run dir:
 
 ```bash
-agent-council --consolidate reports/2026-09-03/09-14-02
+agent-council --consolidate agent-council-reports/2026-09-03/09-14-02
 ```
 
 This runs only the consolidator, over the reports already in that run's
@@ -148,18 +148,21 @@ cd /path/to/the/repo/you/want/analyzed
 agent-council /path/to/prompt.md
 ```
 
-Agent Council has no target-directory option: Pi analyzes its **own working
-directory**, which is the directory you run `agent-council` from. Run it from
+There is no option to choose the directory analyzed: Pi analyzes its **own
+working directory**, which is the directory you run `agent-council` from. Run it from
 the project you want analyzed; the prompt and config files can live anywhere.
-Reports land in `./reports` under that working directory — each analyzed
-project gets its own reports tree (you'll likely
-want `reports/` in that project's `.gitignore`). If that directory has an
-`untracked/` subdirectory, reports go in `untracked/reports` instead.
+Reports land in `./agent-council-reports` under that working directory —
+each analyzed project gets its own reports tree (you'll likely want
+`agent-council-reports/` in that project's `.gitignore`). To put them
+elsewhere, pass `-o DIR` / `--output-dir DIR`; a relative `DIR` is
+resolved against the working directory. (`--output-dir` can't be combined
+with `--consolidate`, which writes into the run dir it is given.)
 
 ```bash
-agent-council my-analysis-prompt.md                    # requires ./agent-council.yml or ~/.agent-council.yml
+agent-council my-analysis-prompt.md                   # requires ./agent-council.yml or ~/.agent-council.yml
 agent-council my-analysis-prompt.md other-config.yml  # alternate config
-agent-council -h                                       # usage and options
+agent-council -o tmp/council my-analysis-prompt.md    # reports under ./tmp/council
+agent-council -h                                      # usage and options
 ```
 
 (Paths are resolved from the working directory, including the default
@@ -222,7 +225,7 @@ slug `code-base-state`.
 Each invocation creates one self-contained run directory, day-bucketed:
 
 ```text
-reports/
+agent-council-reports/
   2026-09-02/
     16-21-43/
       codebase-review.md                                     # copy of the prompt, as asked
@@ -258,7 +261,7 @@ reports/
   harness is in play. The query slug comes from the prompt file name, with
   either `-prompt` or `_prompt` suffix stripped (`codebase-review-prompt.md`
   and `codebase-review_prompt.md` both become `codebase-review`).
-- **Day buckets** keep `reports/` itself navigable when you have hundreds
+- **Day buckets** keep the reports directory itself navigable when you have hundreds
   of runs.
 - Each report file begins with a small **YAML front matter** block — `role`
   (`analyst` or `consolidator`), `timestamp` (unquoted ISO 8601), `query`,
@@ -285,13 +288,13 @@ reports/
   git and may grow into multiple files.
 
 Each run prints its run directory as it starts
-(`Run Dir: reports/2026-09-03/09-14-02`), so you can open it while agents
+(`Run Dir: agent-council-reports/2026-09-03/09-14-02`), so you can open it while agents
 are still working, or after a Ctrl-C. Other access patterns:
 
 ```bash
-ls -d reports/*/* | tail -1                # last run by name: usually the newest
-ls reports/$(date +%F)/                    # today's runs
-ls reports/*/*/reviews/*codebase-review*   # every report for one question, all runs
+ls -d agent-council-reports/*/* | tail -1                # last run by name: usually the newest
+ls agent-council-reports/$(date +%F)/                    # today's runs
+ls agent-council-reports/*/*/reviews/*codebase-review*   # every report for one question, all runs
 ```
 
 When all reviews finish, a `Reviews` table shows which models succeeded,
@@ -317,7 +320,7 @@ agent-council, not the agents. (Windows is untested; it has neither
 process groups nor SIGTERM, so there agents may only be killed, after the
 grace period.)
 Output paths are printed relative to the current working directory (e.g.
-`reports/2026-09-04/21-39-01/reviews`), regardless of where the tool was
+`agent-council-reports/2026-09-04/21-39-01/reviews`), regardless of where the tool was
 invoked from — the tool runs in any project, so paths are always in
 *your* tree. Paths outside it are printed absolute, as is a default
 config's (`Config:  [default] /path/to/agent-council.yml`), to show
@@ -393,8 +396,9 @@ agent-council does not sandbox the agents. Before running it, know that:
   anything the consolidator itself reads or runs. Check those providers'
   data policies before analyzing private code.
 - **Reports stay in the analyzed project.** They are written under
-  `reports/` (or `untracked/reports/`) in the working directory; add that
-  to the project's `.gitignore` if you don't want them committed.
+  `agent-council-reports/` in the working directory (or the `--output-dir`
+  you give); add that to the project's `.gitignore` if you don't want them
+  committed.
 
 Run agent-council only on repositories you trust, or inside a container, VM
 or disposable checkout that holds no credentials you aren't willing to

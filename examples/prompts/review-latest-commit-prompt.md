@@ -18,7 +18,7 @@ solution would be appropriate.
 
 - Report only issues introduced by the latest commit or uncommitted changes.
 - Report issues in uncommitted changes separately from those in the commit.
-- Ignore files in `untracked/` and `reports/`.
+- Ignore files in `untracked/` and `agent-council-reports/`.
 - Do not report preexisting issues unless the changes introduce or worsen them.
 - You may suggest improvements to the commit message, particularly if the
   commit has not been pushed.
