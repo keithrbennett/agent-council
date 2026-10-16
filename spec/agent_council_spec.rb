@@ -827,7 +827,7 @@ RSpec.describe AgentCouncil do
       Dir.mktmpdir do |dir|
         result = described_class.run_consolidation({ 'provider' => 'zai', 'model' => 'glm-5.3' },
           'prompt', dir, 'prefix')
-        expect(result[0]).to eq('zai / glm-5.3 (consolidator)')
+        expect(result[0]).to eq('zai / glm-5.3')
         expect(result[1]).to be(false)
         expect(result[2]).to include('no reports found')
       end
@@ -844,7 +844,7 @@ RSpec.describe AgentCouncil do
 
         result = described_class.run_consolidation({ 'provider' => 'zai', 'model' => 'glm-5.3' },
           'prompt', dir, 'prefix')
-        expect(result).to eq(['zai / glm-5.3 (consolidator)', false, 'ArgumentError: invalid byte sequence'])
+        expect(result).to eq(['zai / glm-5.3', false, 'ArgumentError: invalid byte sequence'])
       end
     end
 
@@ -871,7 +871,7 @@ RSpec.describe AgentCouncil do
             'timestamp' => '2026-09-03T19:23:57',
           }, prompt_path: 'prompts/check-prev-commits_prompt.md')
         expect(ok).to be(true)
-        expect(label).to eq('zai / glm-5.3 (consolidator)')
+        expect(label).to eq('zai / glm-5.3')
         expect(captured[:run_dir]).to eq(dir)
         expect(captured[:filename]).to eq('prefix_consolidated_pi_zai_glm-5.3.md')
         expect(captured[:meta]['role']).to eq('consolidator')

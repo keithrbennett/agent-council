@@ -213,7 +213,7 @@ RSpec.describe 'agent-council end to end' do
 
     expect(run_council.exitstatus).to eq(0), output_report
     expect(out)
-      .to match(/^  ✗   \d\d:\d\d:\d\d  fails \/ c \(consolidator\)  \(pi exited 1: boom\)$/), output_report
+      .to match(/^  ✗   \d\d:\d\d:\d\d  fails \/ c  \(pi exited 1: boom\)$/), output_report
     expect(out).to end_with("\n--- Consolidation error ---\n")
     expect(reports('*consolidated*.md')).to be_empty
   end
@@ -264,7 +264,7 @@ RSpec.describe 'agent-council end to end' do
       status = run_council(args: ['--consolidate', run_dir])
 
       expect(status.exitstatus).to eq(0), output_report
-      expect(out).to match(/^  ✓   \d\d:\d\d:\d\d  done \/ c \(consolidator\)  \S/), output_report
+      expect(out).to match(/^  ✓   \d\d:\d\d:\d\d  done \/ c  \S+_consolidated_pi_done_c\.md$/), output_report
       expect(out).to include('--- Consolidation complete ---')
       expect(out).to include(
         "Config:  #{run_dir}/config.yml\nPrompt:  #{run_dir}/prompt.md\nRun Dir: #{run_dir}\n",
@@ -313,7 +313,7 @@ RSpec.describe 'agent-council end to end' do
       status = run_council(args: ['--consolidate', run_dir])
 
       expect(status.exitstatus).to eq(1), output_report
-      expect(out).to match(/✗ .*fails \/ c \(consolidator\)/), output_report
+      expect(out).to match(/^  ✗   \d\d:\d\d:\d\d  fails \/ c  \(pi exited 1: boom\)$/), output_report
       expect(out).to include('--- Consolidation error ---')
       expect(reports('*consolidated*.md')).to be_empty
     end
@@ -392,7 +392,7 @@ RSpec.describe 'agent-council end to end' do
 
     expect(status.exitstatus).to eq(0), output_report
     expect(err).not_to match(/:\d+:in /), output_report # a backtrace line
-    expect(out).to match(/^  ✓   \d\d:\d\d:\d\d  utf8 \/ c \(consolidator\)/), output_report
+    expect(out).to match(/^  ✓   \d\d:\d\d:\d\d  utf8 \/ c  \S+_consolidated_pi_utf8_c\.md$/), output_report
     expect(out).to include('Reviews (in ', '2/2 succeeded')
     consolidated = reports('*consolidated*.md')
     expect(consolidated.size).to eq(1)

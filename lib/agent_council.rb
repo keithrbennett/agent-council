@@ -334,7 +334,7 @@ module AgentCouncil
 
     reports = collect_reports(File.join(run_dir, REVIEWS_DIR_NAME))
     if reports.empty?
-      return ["#{provider} / #{model} (consolidator)", false,
+      return [agent_label(provider, model), false,
         "no reports found in #{relative_path(File.join(run_dir, REVIEWS_DIR_NAME))}"]
     end
 
@@ -349,14 +349,13 @@ module AgentCouncil
       "# Consolidated Report\n\n#{prompt_line}" \
         "#{byline_table(meta.merge('duration' => duration), provider, model)}"
     end
-    label, ok, detail = run_agent(consolidator, prompt, run_dir, file_prefix,
+    run_agent(consolidator, prompt, run_dir, file_prefix,
       filename: consolidated_filename(file_prefix, provider, model),
       header:   header,
       meta:     meta,
       pool:     pool)
-    ["#{label} (consolidator)", ok, detail]
   rescue => e
-    ["#{provider} / #{model} (consolidator)", false, "#{e.class}: #{e.message}"]
+    [agent_label(provider, model), false, "#{e.class}: #{e.message}"]
   end
 
   module_function def relative_path(path)
