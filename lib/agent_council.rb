@@ -751,14 +751,14 @@ module AgentCouncil
       abort "Consolidated report already exists: #{relative_path(File.join(run_dir, filename))}\n" \
         'Delete it to consolidate again with the same model.'
     end
+    prompt = File.read(prompt_path, encoding: ENCODING)
+    abort "Prompt copy is empty: #{prompt_path}" if prompt.empty?
 
     abort_unless_harness_installed
 
     # In the same key order as a normal run's front matter.
     meta = fields.slice('role', 'timestamp', 'query', 'prompt_file', 'config_file', 'run_stamp')
     meta['timestamp'] = iso_timestamp(meta['timestamp']) if meta['timestamp'].is_a?(Time)
-    prompt = File.read(prompt_path, encoding: ENCODING)
-    abort "Prompt copy is empty: #{prompt_path}" if prompt.empty?
 
     puts "Config:  #{relative_path(config_path)}"
     puts "Prompt:  #{relative_path(prompt_path)}"
