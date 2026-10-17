@@ -57,7 +57,9 @@ module AgentCouncil
           # through so the exit-status/diagnostics check below explains why.
         end
 
-        events = stdout.each_line(chomp: true).lazy.filter_map { |line| parse_event(line) }
+        # No chomp: true: JRuby rejects it on a blockless each_line, and
+        # JSON.parse ignores the newline anyway.
+        events = stdout.each_line.lazy.filter_map { |line| parse_event(line) }
         response = events.detect { |event| event['id'] == RPC_REQUEST_ID && event['type'] == 'response' }
         return event_to_models(response) if response
 

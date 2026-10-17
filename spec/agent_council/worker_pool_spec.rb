@@ -12,6 +12,56 @@ RSpec.describe AgentCouncil::WorkerPool do
 
   def monotonic_now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
+  describe 'TERMINATING_SIGNALS' do
+    it 'includes QUIT except on JRuby, whose JVM keeps it for thread dumps' do
+      expected = RUBY_ENGINE == 'jruby' ? %w[INT TERM HUP] : %w[INT TERM HUP QUIT]
+      expect(described_class::TERMINATING_SIGNALS).to eq(expected)
+    end
+  end
+
+  # JRuby can run traps for different signals at once, so exactly one may
+  # start the shutdown.
+  describe 'the first-signal claim' do
+    it 'goes to exactly one of several threads claiming it at once' do
+      claims = Array.new(8) { Thread.new { pool.send(:first_signal?) } }.map(&:value)
+      expect(claims.count(true)).to eq(1)
+    end
+  end
+
+  describe '#trap_signals' do
+    # The trap blocks, captured instead of installed.
+    let(:handlers) { {} }
+
+    before do
+      allow(pool).to receive(:trap) do |name, &block|
+        handlers[name] = block
+        'DEFAULT'
+      end
+      allow(Thread.main).to receive(:raise)
+      pool.trap_signals
+    end
+
+    it 'starts the shutdown on the first signal' do
+      handlers.fetch('TERM').call
+      expect(Thread.main).to have_received(:raise).with(Interrupt)
+    end
+
+    it 'leaves the shutdown to whichever signal took the first-signal claim' do
+      allow(pool).to receive(:first_signal?).and_return(false)
+      handlers.fetch('HUP').call
+      expect(Thread.main).not_to have_received(:raise)
+    end
+
+    it "exits by its own signal if it lost the claim before the winner recorded the winner's" do
+      allow(pool).to receive(:first_signal?).and_return(false)
+      allow(pool).to receive(:signal_children)
+      allow(described_class).to receive(:exit_by_signal)
+      handlers.fetch('TERM').call
+      expect(pool).to have_received(:signal_children).with('KILL')
+      expect(described_class).to have_received(:exit_by_signal).with('TERM')
+    end
+  end
+
   describe '#collect' do
     it 'yields values as workers finish and returns them in start order' do
       gate = Queue.new

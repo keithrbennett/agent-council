@@ -1,13 +1,15 @@
 # frozen_string_literal: true
 
-# Kept free of other requires so both executables can load it: pi-models
-# doesn't load lib/agent_council.rb.
+# Kept free of other project requires so both executables can load it:
+# pi-models doesn't load lib/agent_council.rb.
+
+require 'rbconfig'
 
 module AgentCouncil
-  # RUBY_PLATFORM rather than Gem.win_platform?, so as not to depend on
-  # RubyGems.
+  # host_os rather than RUBY_PLATFORM, which is "java" on JRuby whatever the
+  # OS, and rather than Gem.win_platform?, so as not to depend on RubyGems.
   module_function def windows?
-    /mswin|mingw/.match?(RUBY_PLATFORM)
+    /mswin|mingw/.match?(RbConfig::CONFIG['host_os'])
   end
 
   # Native Windows is unsupported; WSL works as Linux does. Ruby runs npm's

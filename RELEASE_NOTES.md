@@ -9,4 +9,6 @@ consolidation of a finished run. Reports go under `./agent-council-reports`,
 or under the directory given with `-o` / `--output-dir`. Includes sample
 prompts and configs under `examples/`.
 
-Native Windows is not supported; on Windows, run agent-council inside WSL.
+Runs on Ruby 3.2 or later and on JRuby 10 or later (where SIGQUIT is left
+to the JVM, so it doesn't stop a run). Native Windows is not supported; on
+Windows, run agent-council inside WSL.

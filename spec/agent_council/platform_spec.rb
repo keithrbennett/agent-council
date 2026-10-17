@@ -4,16 +4,21 @@ require 'spec_helper'
 
 RSpec.describe AgentCouncil do
   describe '.windows?' do
-    %w[x64-mingw-ucrt x64-mingw32 i386-mswin32].each do |platform|
-      it "is true for #{platform}" do
-        stub_const('RUBY_PLATFORM', platform)
+    def stub_host_os(host_os)
+      stub_const('RbConfig::CONFIG', RbConfig::CONFIG.merge('host_os' => host_os))
+    end
+
+    # mswin32 is also what JRuby reports on Windows.
+    %w[mingw32 mswin64 mswin32].each do |host_os|
+      it "is true for host_os #{host_os}" do
+        stub_host_os(host_os)
         expect(described_class.windows?).to be(true)
       end
     end
 
-    %w[x86_64-linux aarch64-linux arm64-darwin23].each do |platform|
-      it "is false for #{platform}" do
-        stub_const('RUBY_PLATFORM', platform)
+    %w[linux linux-gnu darwin23].each do |host_os|
+      it "is false for host_os #{host_os}" do
+        stub_host_os(host_os)
         expect(described_class.windows?).to be(false)
       end
     end

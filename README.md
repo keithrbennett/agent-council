@@ -12,8 +12,9 @@ non-goals.
 
 ## Prerequisites
 
-- Ruby 3.2 or later (standard library only for the tool itself; CI tests
-  3.2, 3.3, 3.4 and 4.0)
+- Ruby 3.2 or later, or JRuby 10 or later (standard library only for the
+  tool itself; CI tests 3.2, 3.3, 3.4, 4.0, JRuby 10.0 and the latest
+  JRuby)
 - The `pi` CLI installed (`pi --version`; tested with pi 1.1.0)
 - Credentials for at least one provider (several give more diverse
   viewpoints), configured through pi itself
@@ -310,7 +311,7 @@ runs, its result row when it finishes, and finally `--- Consolidation
 complete ---` (or `--- Consolidation error ---`). One model's failure
 does not affect the others. Exit status is 0 only if every analyst
 agent succeeded; the consolidator's result doesn't affect it. Ctrl-C (SIGINT), SIGTERM, SIGHUP or
-SIGQUIT stops the run, keeping reports already written. agent-council
+SIGQUIT (but see JRuby below) stops the run, keeping reports already written. agent-council
 sends each running agent, including the consolidator, SIGTERM (pi then
 also stops any commands it started), gives them a shared 5-second grace
 period to exit, and kills any still running. It then dies by that signal,
@@ -319,7 +320,10 @@ SIGQUIT it exits with status 131 instead of dumping core. A second SIGINT,
 SIGTERM or SIGQUIT kills the agents at once; further SIGHUPs, which a
 closing terminal can send in pairs, are ignored. A killed agent can't stop
 the commands it started, so those may keep running. A signal agent-council
-was started ignoring (e.g. SIGHUP under `nohup`) stays ignored. Agents run
+was started ignoring (e.g. SIGHUP under `nohup`) stays ignored. Under
+JRuby none of this applies to SIGQUIT, a first or a second: it is left to
+the JVM, which prints a thread dump and carries on, so use another signal
+to stop the run there. Agents run
 in process groups of their own, so Ctrl-Z suspends only agent-council, not
 the agents.
 Output paths are printed relative to the current working directory (e.g.

@@ -7,6 +7,10 @@
 # point.
 
 require 'yaml'
+# Psych requires stringio lazily, on first emit. On JRuby, worker threads
+# emitting front matter at once can then see a half-loaded StringIO
+# (ArgumentError from StringIO.new), so load it before any threads start.
+require 'stringio'
 require 'open3'
 require 'fileutils'
 require 'tmpdir'
@@ -821,7 +825,7 @@ module AgentCouncil
     MESSAGE
   end
 
-  # After Ctrl-C (or SIGTERM, SIGHUP, SIGQUIT; see WorkerPool#trap_signals):
+  # After Ctrl-C (or another signal WorkerPool#trap_signals traps):
   # stops pool's agents, if any, and dies by the signal.
   module_function def exit_interrupted(pool)
     report = -> do

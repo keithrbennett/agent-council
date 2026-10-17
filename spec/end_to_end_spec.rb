@@ -84,8 +84,16 @@ RSpec.describe 'agent-council end to end' do
 
   def monotonic_now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
-  def wait_until(timeout, what)
-    deadline = monotonic_now + timeout
+  # Each run starts a JVM for agent-council on JRuby, which under load (e.g.
+  # several suites at once) can take several times as long.
+  def timeout_scale = RUBY_ENGINE == 'jruby' ? 4 : 1
+
+  # How long run_council lets agent-council take, before scaling.
+  def exit_timeout = 15
+
+  # scale: 1 for waits agent-council's speed doesn't affect.
+  def wait_until(timeout, what, scale: timeout_scale)
+    deadline = monotonic_now + (timeout * scale)
     until yield
       raise "timed out waiting for #{what}" if monotonic_now > deadline
 
@@ -112,13 +120,17 @@ RSpec.describe 'agent-council end to end' do
         wait_until(10, 'agents to start') { Dir.children(started_dir).size == started }
         yield pid
       end
-      wait_until(15, 'agent-council to exit') { status = Process.wait2(pid, Process::WNOHANG)&.last }
+      wait_until(exit_timeout, 'agent-council to exit') { status = Process.wait2(pid, Process::WNOHANG)&.last }
       exited_at << monotonic_now
       survivors.replace(agents_alive_after(2))
     ensure
       # Each fake agent leads its own process group.
       [pid, *agent_pids].each { |group| kill_group(group) }
-      Process.wait(pid) if status.nil?
+      begin
+        Process.wait(pid) if status.nil?
+      rescue Errno::ECHILD
+        nil # already reaped by a failing expectation in the block
+      end
     end
     status
   end
@@ -135,7 +147,7 @@ RSpec.describe 'agent-council end to end' do
   # The fake agents still alive after up to `timeout` seconds (killed agents
   # are reaped by init once agent-council has exited).
   def agents_alive_after(timeout)
-    wait_until(timeout, 'agents to exit') { agent_pids.none? { |pid| alive?(pid) } }
+    wait_until(timeout, 'agents to exit', scale: 1) { agent_pids.none? { |pid| alive?(pid) } }
     []
   rescue RuntimeError
     agent_pids.select { |pid| alive?(pid) }
@@ -170,7 +182,7 @@ RSpec.describe 'agent-council end to end' do
 
   # agent-council died by the signal, as a shell expects (so, e.g., a loop
   # running it stops on Ctrl-C), except QUIT, which exits 131 instead of
-  # dumping core.
+  # dumping core (MRI only; JRuby leaves QUIT to the JVM).
   def expect_died_by(status, signal)
     if signal == 'QUIT'
       expect(status.exitstatus).to eq(131), output_report
@@ -353,12 +365,12 @@ RSpec.describe 'agent-council end to end' do
     expect(captured).to end_with("# Agents without a report\n\n- #2 fails / m2: pi exited 1: boom\n")
   end
 
-  # Pre-claims every run dir name for the next several seconds, so the run
-  # must take a suffixed one, whatever second it starts in.
+  # Pre-claims every run dir name until run_council's exit deadline, so the
+  # run must take a suffixed one, whatever second it starts in.
   it 'suffixes a taken run dir name, in report filenames too' do
     write_config(%w[done], consolidator: 'done')
     now = Time.now
-    taken = (0..10).map { |s| (now + s).strftime('%Y-%m-%d/%H-%M-%S') }
+    taken = (0..(exit_timeout * timeout_scale)).map { |s| (now + s).strftime('%Y-%m-%d/%H-%M-%S') }
     taken.each { |name| FileUtils.mkdir_p(File.join(work_dir, 'agent-council-reports', name)) }
 
     status = run_council
@@ -451,6 +463,7 @@ RSpec.describe 'agent-council end to end' do
 
   %w[TERM HUP QUIT].each do |signal|
     it "treats SIG#{signal} sent to agent-council alone like Ctrl-C" do
+      skip 'JRuby leaves QUIT to the JVM' if signal == 'QUIT' && RUBY_ENGINE == 'jruby'
       write_config(%w[dies dies])
 
       status = run_council(started: 2) { |pid| Process.kill(signal, pid) }
@@ -485,6 +498,21 @@ RSpec.describe 'agent-council end to end' do
 
     status = run_council(started: 1, ignoring_hup: true) do |pid|
       Process.kill('HUP', pid)
+      sleep 0.5
+      expect(Process.wait2(pid, Process::WNOHANG)).to be_nil, output_report
+      Process.kill('INT', pid)
+    end
+
+    expect_died_by(status, 'INT')
+    expect_agents_terminated(1)
+  end
+
+  it 'keeps running on SIGQUIT under JRuby, whose JVM takes it' do
+    skip 'JRuby only' unless RUBY_ENGINE == 'jruby'
+    write_config(%w[dies])
+
+    status = run_council(started: 1) do |pid|
+      Process.kill('QUIT', pid)
       sleep 0.5
       expect(Process.wait2(pid, Process::WNOHANG)).to be_nil, output_report
       Process.kill('INT', pid)

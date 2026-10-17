@@ -9,24 +9,27 @@ module AgentCouncil
   #
   # Each agent process runs in its own process group (see #capture3), so a
   # terminal's Ctrl-C reaches only agent-council, never the agents. Once
-  # #trap_signals is installed, the first INT, TERM, HUP or QUIT raises
-  # Interrupt in the main thread, whose rescue calls #shutdown: it sends
-  # every agent SIGTERM (pi then also stops any commands its bash tool
-  # started, which run detached and so would survive the agent), waits
-  # up to the grace period for the workers to finish, and SIGKILLs agents
-  # still running. A second INT, TERM or QUIT SIGKILLs them at once. Any HUP
-  # after the first signal is ignored: a closing terminal can deliver two at
-  # once (one forwarded by the shell, one from the kernel), which must not
-  # skip the graceful stop. A signal agent-council was started ignoring
-  # (e.g. HUP under nohup) stays ignored. Either way, agent-council then
-  # dies by the signal (see .exit_by_signal).
+  # #trap_signals is installed, the first INT, TERM, HUP or QUIT (not on
+  # JRuby; see TERMINATING_SIGNALS) raises Interrupt in the main thread,
+  # whose rescue calls #shutdown: it sends every agent SIGTERM (pi then also
+  # stops any commands its bash tool started, which run detached and so would
+  # survive the agent), waits up to the grace period for the workers to
+  # finish, and SIGKILLs agents still running. A second trapped signal other
+  # than HUP SIGKILLs them at once. Any HUP after the first signal is
+  # ignored: a closing terminal can deliver two at once (one forwarded by the
+  # shell, one from the kernel), which must not skip the graceful stop. A
+  # signal agent-council was started ignoring (e.g. HUP under nohup) stays
+  # ignored. Either way, agent-council then dies by the signal (see
+  # .exit_by_signal).
   #
   # Agents run in worker threads, never the main thread, so the main thread
   # is always free to take the Interrupt. Workers report completion through
   # a queue and only the main thread prints, so nothing more is printed once
   # the Interrupt has been taken.
   class WorkerPool
-    TERMINATING_SIGNALS = %w[INT TERM HUP QUIT].freeze
+    # Not QUIT on JRuby: the JVM reserves it for thread dumps, so trapping
+    # it only prints a warning.
+    TERMINATING_SIGNALS = (RUBY_ENGINE == 'jruby' ? %w[INT TERM HUP] : %w[INT TERM HUP QUIT]).freeze
 
     # Each agent leads a new process group, so terminal signals skip it and
     # #signal_child can reach any processes it starts.
@@ -53,6 +56,10 @@ module AgentCouncil
       @children_lock = Mutex.new
       @stop_signal = nil # set once shutdown starts signalling agents
       @first_signal = nil # the signal that started the shutdown
+      # Taken by the first signal. A Queue, because JRuby can run two traps
+      # at once (so checking @first_signal could let both through), and
+      # MRI forbids Mutex#lock in a trap but not Queue#pop.
+      @first_signal_token = Queue.new << true
     end
 
     # Installs the traps described above. The Interrupt is raised with
@@ -60,11 +67,11 @@ module AgentCouncil
     def trap_signals
       TERMINATING_SIGNALS.each do |name|
         previous = trap(name) do
-          if @first_signal.nil?
+          if first_signal?
             @first_signal = name
             Thread.main.raise(Interrupt)
           elsif name != 'HUP'
-            kill_children_and_exit
+            kill_children_and_exit(name)
           end
         end
         trap(name, previous) if previous == 'IGNORE'
@@ -111,10 +118,12 @@ module AgentCouncil
         [stdout, stderr].each { |io| io.set_encoding(Encoding::UTF_8) }
         pid = wait_thr.pid
         begin
-          @children_lock.synchronize { @children[pid] = true }
           # Read after registering; signal_children sets it before reading
           # @children, so an agent is signalled by one or the other.
-          signal = @stop_signal
+          signal = @children_lock.synchronize do
+            @children[pid] = true
+            @stop_signal
+          end
           signal_child(pid, signal) if signal
           out_reader = Thread.new { stdout.read }
           err_reader = Thread.new { stderr.read }
@@ -150,19 +159,33 @@ module AgentCouncil
       self.class.exit_by_signal(@first_signal || 'INT')
     end
 
-    private def kill_children_and_exit
+    # name: the signal that called it, for when it arrived together with the
+    # first one, whose trap may not have set @first_signal yet.
+    private def kill_children_and_exit(name)
       signal_children('KILL')
       flush_stdout
-      exit_by_signal
+      self.class.exit_by_signal(@first_signal || name)
     end
 
-    # Signals every running agent's process group. Callable from a trap,
-    # where Mutex#lock is not allowed, so it reads without the lock, from a
-    # snapshot (the GVL makes Hash#keys atomic) so a concurrent spawn can't
-    # modify the hash mid-iteration.
+    private def first_signal?
+      @first_signal_token.pop(true)
+    rescue ThreadError # already taken
+      false
+    end
+
+    # Signals every running agent's process group. Callable from a trap.
     private def signal_children(signal)
       @stop_signal = signal
-      @children.keys.each { |pid| signal_child(pid, signal) } # rubocop:disable Style/HashEachMethods -- needs a snapshot
+      children_snapshot.each { |pid| signal_child(pid, signal) }
+    end
+
+    # A snapshot, so a concurrent spawn can't modify the hash mid-iteration.
+    # MRI forbids Mutex#lock in a trap, but its GVL makes Hash#keys atomic.
+    # JRuby has no GVL, but its traps run in ordinary threads, which may lock.
+    private def children_snapshot
+      return @children.keys unless RUBY_ENGINE == 'jruby'
+
+      @children_lock.synchronize { @children.keys }
     end
 
     private def signal_child(pid, signal)

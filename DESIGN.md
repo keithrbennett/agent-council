@@ -152,7 +152,7 @@ threads.each(&:join)
 
 The exact implementation can use Ruby threads or another comparably simple mechanism.
 
-The implementation, `AgentCouncil::WorkerPool` (`lib/agent_council/worker_pool.rb`), adds what a run needs on Ctrl-C, SIGTERM, SIGHUP or SIGQUIT: it runs each agent in its own process group, sends agents SIGTERM, then SIGKILL after a grace period, keeps the main thread free to handle the interrupt, and then exits by the signal.
+The implementation, `AgentCouncil::WorkerPool` (`lib/agent_council/worker_pool.rb`), adds what a run needs on Ctrl-C, SIGTERM, SIGHUP or SIGQUIT: it runs each agent in its own process group, sends agents SIGTERM, then SIGKILL after a grace period, keeps the main thread free to handle the interrupt, and then exits by the signal. (Under JRuby the JVM reserves SIGQUIT, so it isn't trapped there.)
 
 Do not introduce a job system, daemon, async framework, or workflow engine.
 
