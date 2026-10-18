@@ -149,7 +149,7 @@ module AgentCouncil
     error = HARNESS.error_message(stdout)
     if error
       summary = error.gsub(/\s+/, ' ').slice(0, 300)
-      return [label, false, "#{HARNESS::NAME} exited 0 but provider error: #{summary}"]
+      return [label, false, "#{HARNESS::NAME} exited 0 but the run failed: #{summary}"]
     end
 
     text = HARNESS.final_response(stdout)

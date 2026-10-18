@@ -114,13 +114,25 @@ module AgentCouncil
         message && response_text(message)
       end
 
-      # Provider-reported error on the final assistant message, if any. Pi exits 0
-      # even when the provider rejects the request, so this is how such failures
-      # are surfaced. Only the final message counts: an error in an earlier turn
-      # that a later turn recovered from is not a failure, while an error on the
-      # last turn means any earlier text is a partial fragment, not a report.
+      # Stop reasons meaning a message was cut off or cancelled, not completed.
+      UNUSABLE_STOP_REASONS = %w[length aborted].freeze
+
+      # Why the run produced no usable report, or nil. Pi exits 0 even when the
+      # provider rejects the request or the output hits its token limit, so this
+      # is how such failures are surfaced. Two messages are checked: the final
+      # one (an error in an earlier turn that a later turn recovered from is not
+      # a failure, while an error on the last turn means any earlier text is a
+      # partial fragment) and the one final_response would save (a cut-off
+      # message must not be saved just because a text-less message followed it).
       module_function def error_message(jsonl)
-        assistant_messages(jsonl).last&.fetch('errorMessage', nil)
+        messages = assistant_messages(jsonl)
+        saved = messages.reverse_each.detect { |m| !response_text(m).empty? }
+        [messages.last, saved].compact.each do |message|
+          reason = message['stopReason']
+          return message['errorMessage'] if message['errorMessage']
+          return "stopped early (stopReason: #{reason})" if UNUSABLE_STOP_REASONS.include?(reason)
+        end
+        nil
       end
     end
   end

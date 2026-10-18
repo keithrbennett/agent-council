@@ -15,7 +15,7 @@ non-goals.
 - Ruby 3.2 or later, or JRuby 10 or later (standard library only for the
   tool itself; CI tests 3.2, 3.3, 3.4, 4.0, JRuby 10.0 and the latest
   JRuby)
-- The `pi` CLI installed (`pi --version`; tested with pi 1.1.0)
+- The `pi` CLI installed (`pi --version`; tested with pi 1.3.0)
 - Credentials for at least one provider (several give more diverse
   viewpoints), configured through pi itself
   (`/login` in interactive pi, or provider API-key env vars)
@@ -379,7 +379,9 @@ which default was picked up.
   final message of a turn. Note that pi exits 0 even
   when the provider rejects the request (e.g. Copilot's
   `model_not_available_for_integrator`); such failures are detected via the
-  assistant message's `errorMessage` and reported, not saved as reports.
+  assistant message's `errorMessage`, and a `stopReason` of `length` or
+  `aborted` (output cut off or cancelled) is treated the same way. Both are
+  reported, not saved as reports.
 
 ## Safety and privacy
 
@@ -433,6 +435,11 @@ No retries, no timeouts, no cost tracking, no ranking or scoring of reports
 the directory layout is the index. This is an experiment to answer one
 question: is Pi-based model diversity worth building on? See
 [`DESIGN.md`](DESIGN.md) §19–21.
+
+## Stability
+
+This is a 0.x release. The config format, command-line interface, run
+directory layout and report front matter may change incompatibly before 1.0.
 
 ## Development
 

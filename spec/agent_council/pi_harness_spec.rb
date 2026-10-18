@@ -130,6 +130,42 @@ RSpec.describe AgentCouncil::Harnesses::PiHarness do
       expect(described_class.error_message(stream)).to eq('400 model_not_available_for_integrator')
     end
 
+    it 'treats a truncated final message as an error' do
+      stream = <<~JSONL
+        {"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"cut o"}],"stopReason":"length"}}
+      JSONL
+      expect(described_class.error_message(stream)).to include('length')
+    end
+
+    it 'treats an aborted final message as an error' do
+      stream = <<~JSONL
+        {"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"half"}],"stopReason":"aborted"}}
+      JSONL
+      expect(described_class.error_message(stream)).to include('aborted')
+    end
+
+    it 'prefers errorMessage over the synthesized stop-reason message' do
+      stream = <<~JSONL
+        {"type":"message_end","message":{"role":"assistant","content":[],"stopReason":"aborted","errorMessage":"Request was aborted"}}
+      JSONL
+      expect(described_class.error_message(stream)).to eq('Request was aborted')
+    end
+
+    it 'returns nil for a normal stop' do
+      stream = <<~JSONL
+        {"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"ok"}],"stopReason":"stop"}}
+      JSONL
+      expect(described_class.error_message(stream)).to be_nil
+    end
+
+    it 'flags a cut-off message even when a text-less message follows it' do
+      stream = <<~JSONL
+        {"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"cut o"}],"stopReason":"length"}}
+        {"type":"message_end","message":{"role":"assistant","content":[{"type":"thinking","thinking":"hm"}],"stopReason":"stop"}}
+      JSONL
+      expect(described_class.error_message(stream)).to include('length')
+    end
+
     it 'returns the last error when several occurred' do
       stream = <<~JSONL
         {"type":"message_end","message":{"role":"assistant","content":[],"stopReason":"error","errorMessage":"first"}}
