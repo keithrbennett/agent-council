@@ -166,6 +166,39 @@ RSpec.describe AgentCouncil::Harnesses::PiHarness do
       expect(described_class.error_message(stream)).to include('length')
     end
 
+    it 'does not fail a run whose earlier turn was cut off but later recovered' do
+      stream = <<~JSONL
+        {"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"cut o"}],"stopReason":"length"}}
+        {"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"complete report"}],"stopReason":"stop"}}
+      JSONL
+      expect(described_class.error_message(stream)).to be_nil
+    end
+
+    it 'reports an errorMessage on the saved message over a later stop reason' do
+      stream = <<~JSONL
+        {"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"partial"}],"stopReason":"error","errorMessage":"quota exceeded"}}
+        {"type":"message_end","message":{"role":"assistant","content":[],"stopReason":"length"}}
+      JSONL
+      expect(described_class.error_message(stream)).to eq('quota exceeded')
+    end
+
+    it 'ignores a blank errorMessage in favor of a cut-off stop reason' do
+      stream = <<~JSONL
+        {"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"cut o"}],"stopReason":"length"}}
+        {"type":"message_end","message":{"role":"assistant","content":[],"stopReason":"stop","errorMessage":""}}
+      JSONL
+      expect(described_class.error_message(stream)).to eq('stopped early (stopReason: length)')
+    end
+
+    [nil, '', ' ', false, 0].each do |blank|
+      it "treats stopReason error with errorMessage #{blank.inspect} as an error" do
+        message = { role: 'assistant', content: [{ type: 'text', text: 'partial' }], stopReason: 'error' }
+        message[:errorMessage] = blank unless blank.nil?
+        stream = JSON.generate(type: 'message_end', message: message)
+        expect(described_class.error_message(stream)).to eq('stopped early (stopReason: error)')
+      end
+    end
+
     it 'returns the last error when several occurred' do
       stream = <<~JSONL
         {"type":"message_end","message":{"role":"assistant","content":[],"stopReason":"error","errorMessage":"first"}}

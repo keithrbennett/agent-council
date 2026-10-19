@@ -108,14 +108,19 @@ module AgentCouncil
       # authoritative final message of each turn; the last assistant message_end
       # with actual text is the report (earlier ones belong to tool-use turns).
       module_function def final_response(jsonl)
-        message = assistant_messages(jsonl).reverse_each.detect do |m|
-          !response_text(m).empty?
-        end
+        message = saved_message(assistant_messages(jsonl))
         message && response_text(message)
       end
 
-      # Stop reasons meaning a message was cut off or cancelled, not completed.
-      UNUSABLE_STOP_REASONS = %w[length aborted].freeze
+      # The message final_response saves: the last one with text.
+      module_function def saved_message(messages)
+        messages.reverse_each.detect { |m| !response_text(m).empty? }
+      end
+
+      # Stop reasons meaning a message was cut off, cancelled or failed, not
+      # completed. error normally comes with an errorMessage, which is reported
+      # instead; this catches one that is missing or blank.
+      UNUSABLE_STOP_REASONS = %w[length aborted error].freeze
 
       # Why the run produced no usable report, or nil. Pi exits 0 even when the
       # provider rejects the request or the output hits its token limit, so this
@@ -124,15 +129,16 @@ module AgentCouncil
       # a failure, while an error on the last turn means any earlier text is a
       # partial fragment) and the one final_response would save (a cut-off
       # message must not be saved just because a text-less message followed it).
+      # A non-blank string errorMessage on either wins over a cut-off stopReason on
+      # the other, since it says more about what went wrong.
       module_function def error_message(jsonl)
         messages = assistant_messages(jsonl)
-        saved = messages.reverse_each.detect { |m| !response_text(m).empty? }
-        [messages.last, saved].compact.each do |message|
-          reason = message['stopReason']
-          return message['errorMessage'] if message['errorMessage']
-          return "stopped early (stopReason: #{reason})" if UNUSABLE_STOP_REASONS.include?(reason)
-        end
-        nil
+        candidates = [messages.last, saved_message(messages)].compact.uniq
+        message = candidates.detect { |m| m['errorMessage'].is_a?(String) && !m['errorMessage'].strip.empty? }
+        return message['errorMessage'] if message
+
+        message = candidates.detect { |m| UNUSABLE_STOP_REASONS.include?(m['stopReason']) }
+        message && "stopped early (stopReason: #{message['stopReason']})"
       end
     end
   end

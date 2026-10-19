@@ -375,12 +375,15 @@ which default was picked up.
   are ignored per pi's security model.)
 - The final response is parsed from pi's JSONL event stream (by
   `AgentCouncil::Harnesses::PiHarness.final_response`): the last `message_end` event with
-  `role: "assistant"` — pi documents `message_end` as the authoritative
+  `role: "assistant"` that has text — pi documents `message_end` as the authoritative
   final message of a turn. Note that pi exits 0 even
   when the provider rejects the request (e.g. Copilot's
   `model_not_available_for_integrator`); such failures are detected via the
-  assistant message's `errorMessage`, and a `stopReason` of `length` or
-  `aborted` (output cut off or cancelled) is treated the same way. Both are
+  assistant message's `errorMessage`, and a `stopReason` of `length`,
+  `aborted` or `error` (output cut off, cancelled, or failed without an
+  `errorMessage`) is treated the same way. Only the
+  last message and the one that would be saved are checked, so a cut-off
+  turn that a later turn recovered from is not a failure. Failures are
   reported, not saved as reports.
 
 ## Safety and privacy

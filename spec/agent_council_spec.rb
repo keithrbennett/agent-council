@@ -235,6 +235,19 @@ RSpec.describe AgentCouncil do
       expect(File.read(File.join(run_dir, detail), encoding: 'UTF-8')).to include('Résumé ✓')
     end
 
+    it 'fails, saving no report, when the final message was cut off' do
+      message = { role: 'assistant', content: [{ type: 'text', text: 'cut o' }], stopReason: 'length' }
+      event = { type: 'message_end', message: message }
+      allow(described_class::HARNESS).to receive(:argv)
+        .and_return(['sh', '-c', "printf '%s\\n' #{Shellwords.escape(JSON.generate(event))}"])
+
+      _label, ok, detail = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
+
+      expect(ok).to be(false)
+      expect(detail).to include('the run failed', 'length')
+      expect(Dir.children(run_dir)).to be_empty
+    end
+
     # As when a dying child writes into the dir while it's being removed.
     it 'ignores errors removing the scratch dir' do
       skip 'root can remove an unwritable dir' if Process.uid.zero?
