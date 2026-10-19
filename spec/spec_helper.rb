@@ -6,6 +6,16 @@ $LOAD_PATH.unshift(File.expand_path('../lib', __dir__))
 
 require 'agent_council'
 
+RSpec.configure do |config|
+  config.around do |example|
+    original = ENV[AgentCouncil::ENV_OPTS_VAR]
+    ENV.delete(AgentCouncil::ENV_OPTS_VAR)
+    example.run
+  ensure
+    ENV[AgentCouncil::ENV_OPTS_VAR] = original
+  end
+end
+
 # Runs the block with the default external encoding Ruby picks under LANG=C
 # (or LANG unset), to check that code reads text as UTF-8 regardless. The
 # library must not depend on the locale, so specs never force it globally.

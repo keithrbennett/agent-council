@@ -272,6 +272,99 @@ RSpec.describe AgentCouncil do
     end
   end
 
+  describe '.env_options' do
+    def env_options(value) = described_class.env_options(described_class::ENV_OPTS_VAR => value)
+
+    it 'returns an empty array when AGENT_COUNCIL_OPTS is unset or blank' do
+      expect(described_class.env_options({})).to eq([])
+      expect(env_options('   ')).to eq([])
+    end
+
+    it 'shell-splits AGENT_COUNCIL_OPTS' do
+      expect(env_options('--output-dir "tmp/reports dir" --version'))
+        .to eq(['--output-dir', 'tmp/reports dir', '--version'])
+    end
+
+    it 'raises a friendly error when AGENT_COUNCIL_OPTS is malformed' do
+      expect { env_options('--output-dir "') }
+        .to raise_error(ArgumentError, /Invalid AGENT_COUNCIL_OPTS value/)
+    end
+
+    # Binary is how ENV tags values under LANG=C.
+    %w[UTF-8 BINARY].each do |encoding|
+      it "raises a friendly error when AGENT_COUNCIL_OPTS is not valid UTF-8 (tagged #{encoding})" do
+        expect { env_options((+"--output-dir \xFF").force_encoding(encoding)) }
+          .to raise_error(ArgumentError, /Invalid AGENT_COUNCIL_OPTS value/)
+      end
+    end
+  end
+
+  describe '.env_option_defaults' do
+    def env_option_defaults(value)
+      described_class.env_option_defaults(described_class::ENV_OPTS_VAR => value)
+    end
+
+    it 'returns an empty hash when AGENT_COUNCIL_OPTS is unset or blank' do
+      expect(described_class.env_option_defaults({})).to eq({})
+      expect(env_option_defaults('   ')).to eq({})
+    end
+
+    it 'parses supported default options' do
+      expect(env_option_defaults('--output-dir "tmp/reports dir"')).to eq(output_dir: 'tmp/reports dir')
+    end
+
+    it 'accepts the same spellings of --output-dir as the command line' do
+      [
+        '-o reports',
+        '-oreports',
+        '--output-dir reports',
+        '--output-dir=reports',
+        '--out=reports',
+        '--output reports',
+      ].each do |value|
+        expect(env_option_defaults(value)).to eq(output_dir: 'reports')
+      end
+    end
+
+    # A lone -- is dropped like OptionParser drops it on the command line;
+    # only what follows it is rejected.
+    it 'rejects positional arguments, including ones after --' do
+      ['prompt.md', '-- --output-dir reports'].each do |value|
+        expect { env_option_defaults(value) }
+          .to raise_error(ArgumentError, /may contain only default options/)
+      end
+    end
+
+    it 'rejects unknown options' do
+      expect { env_option_defaults('--foo') }
+        .to raise_error(ArgumentError, /Invalid AGENT_COUNCIL_OPTS value: invalid option: --foo/)
+    end
+
+    # Including abbreviated and bundled forms, which OptionParser would
+    # otherwise act on itself (its built-in help prints a stub and exits 0).
+    it 'rejects one-shot switches such as help, version and consolidate' do
+      {
+        '--help'                => '--help',
+        '--he'                  => '--help',
+        '-hx'                   => '--help',
+        '--version'             => '--version',
+        '--vers'                => '--version',
+        '-v'                    => '--version',
+        '--consolidate old-run' => '--consolidate',
+        '--consolidate'         => '--consolidate',
+        '--con=old-run'         => '--consolidate',
+      }.each do |value, name|
+        expect { env_option_defaults(value) }
+          .to raise_error(ArgumentError, /may not include #{name};/)
+      end
+    end
+
+    it 'rejects missing option arguments without consuming CLI positionals' do
+      expect { env_option_defaults('--output-dir') }
+        .to raise_error(ArgumentError, /missing argument: --output-dir/)
+    end
+  end
+
   describe '.main' do
     include_context 'with isolated cwd and home'
 
@@ -306,6 +399,130 @@ RSpec.describe AgentCouncil do
       expect { described_class.main(['-h']) }
         .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
         .and output(/^\s+-o, --output-dir DIR\s+\S/).to_stdout
+    end
+
+    it 'documents AGENT_COUNCIL_OPTS in the help output' do
+      expect { described_class.main(['-h']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
+        .and output(/AGENT_COUNCIL_OPTS sets default options \(currently only --output-dir\)/).to_stdout
+    end
+
+    it 'shows the current AGENT_COUNCIL_OPTS value in the help output' do
+      ENV[described_class::ENV_OPTS_VAR] = '--output-dir from-env'
+      expect { described_class.main(['-h']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
+        .and output(/Currently set to: "--output-dir from-env"/).to_stdout
+    end
+
+    it 'uses AGENT_COUNCIL_OPTS as defaults for supported options' do
+      File.write('p_prompt.md', 'hi')
+      File.write('config.yml', YAML.dump('agents' => [{ 'provider' => 'p', 'model' => 'm' }]))
+      ENV[described_class::ENV_OPTS_VAR] = '--output-dir from-env'
+      allow(described_class).to receive(:abort_unless_harness_installed)
+      allow(described_class).to receive(:run_agent).and_return(['#1 p / m', true, 'report.md'])
+      allow(described_class).to receive(:puts_consolidation_status)
+
+      expect { described_class.main(['p_prompt.md', 'config.yml']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
+        .and output.to_stdout
+
+      expect(File).to exist(File.join('from-env', Dir.children('from-env').first))
+    end
+
+    it 'lets command-line options override AGENT_COUNCIL_OPTS defaults' do
+      File.write('p_prompt.md', 'hi')
+      File.write('config.yml', YAML.dump('agents' => [{ 'provider' => 'p', 'model' => 'm' }]))
+      ENV[described_class::ENV_OPTS_VAR] = '--output-dir from-env'
+      allow(described_class).to receive(:abort_unless_harness_installed)
+      allow(described_class).to receive(:run_agent).and_return(['#1 p / m', true, 'report.md'])
+      allow(described_class).to receive(:puts_consolidation_status)
+
+      expect { described_class.main(['--output-dir', 'from-cli', 'p_prompt.md', 'config.yml']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
+        .and output.to_stdout
+
+      expect(File).to exist(File.join('from-cli', Dir.children('from-cli').first))
+      expect(File).not_to exist('from-env')
+    end
+
+    it 'aborts cleanly when AGENT_COUNCIL_OPTS cannot be parsed' do
+      ENV[described_class::ENV_OPTS_VAR] = '--output-dir "'
+      expect { described_class.main(['p_prompt.md']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+        .and output(/Invalid AGENT_COUNCIL_OPTS value/).to_stderr
+    end
+
+    it 'aborts cleanly when AGENT_COUNCIL_OPTS contains non-default arguments' do
+      ENV[described_class::ENV_OPTS_VAR] = 'prompt.md'
+      expect { described_class.main(['p_prompt.md']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+        .and output(/may contain only default options/).to_stderr
+    end
+
+    it 'still honors -v when AGENT_COUNCIL_OPTS is bad' do
+      ENV[described_class::ENV_OPTS_VAR] = '--output-dir "'
+      expect { described_class.main(['-v']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
+        .and output("agent-council #{described_class::VERSION}\n").to_stdout
+    end
+
+    it 'still honors -h, showing a bad AGENT_COUNCIL_OPTS on one line, scrubbed' do
+      ENV[described_class::ENV_OPTS_VAR] = "--output-dir \xFF\nx".b
+      expect { described_class.main(['-h']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
+        # inspect shows U+FFFD raw or escaped, depending on the locale.
+        .and output(/^  Currently set to: #{Regexp.escape("--output-dir \uFFFD\nx".inspect)}$/).to_stdout
+    end
+
+    it 'aborts --consolidate too when AGENT_COUNCIL_OPTS is bad' do
+      allow(described_class).to receive(:consolidate_run)
+      ENV[described_class::ENV_OPTS_VAR] = '--output-dir "'
+      expect { described_class.main(['--consolidate', 'some-run']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+        .and output(/Invalid AGENT_COUNCIL_OPTS value/).to_stderr
+      expect(described_class).not_to have_received(:consolidate_run)
+    end
+
+    it 'names AGENT_COUNCIL_OPTS when its --output-dir names an unknown user home' do
+      ENV[described_class::ENV_OPTS_VAR] = '--output-dir ~no-such-user-agent-council/x'
+      expect { described_class.main(['p_prompt.md']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+        .and output(%r{Invalid --output-dir \(from AGENT_COUNCIL_OPTS\) ~no-such-user-agent-council/x: })
+        .to_stderr
+    end
+
+    it 'names AGENT_COUNCIL_OPTS when the run dir under its --output-dir cannot be created' do
+      File.write('p_prompt.md', 'hi')
+      File.write('config.yml', YAML.dump('agents' => [{ 'provider' => 'p', 'model' => 'm' }]))
+      ENV[described_class::ENV_OPTS_VAR] = '--output-dir out'
+      allow(described_class).to receive(:abort_unless_harness_installed)
+      allow(described_class).to receive(:claim_run_dir).and_raise(Errno::EACCES, 'out')
+      expect { described_class.main(['p_prompt.md', 'config.yml']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+        .and output(/Cannot create a run dir under out \(from AGENT_COUNCIL_OPTS\): /).to_stderr
+    end
+
+    it 'names AGENT_COUNCIL_OPTS when its --output-dir cannot be created' do
+      File.write('blocked', '')
+      ENV[described_class::ENV_OPTS_VAR] = '--output-dir blocked/sub'
+      expect { described_class.main(['p_prompt.md']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+        .and output(%r{Output dir blocked/sub \(from AGENT_COUNCIL_OPTS\) can't be created}).to_stderr
+    end
+
+    it 'does not blame AGENT_COUNCIL_OPTS for an explicit --output-dir' do
+      File.write('blocked', '')
+      ENV[described_class::ENV_OPTS_VAR] = '--output-dir from-env'
+      expect { described_class.main(['-o', 'blocked/sub', 'p_prompt.md']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+        .and output(%r{Output dir blocked/sub can't be created}).to_stderr
+    end
+
+    it 'names AGENT_COUNCIL_OPTS when its --output-dir is blank' do
+      ENV[described_class::ENV_OPTS_VAR] = "--output-dir ''"
+      expect { described_class.main(['p_prompt.md']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+        .and output(/--output-dir \(from AGENT_COUNCIL_OPTS\) needs a directory/).to_stderr
     end
 
     ['', ' '].each do |blank|
@@ -523,12 +740,42 @@ RSpec.describe AgentCouncil do
         .and output(/Usage:/).to_stderr
     end
 
-    it 'aborts when given --output-dir too, since it writes into the run dir' do
+    # Including the abbreviations OptionParser accepts.
+    [
+      %w[-o elsewhere],
+      %w[-oelsewhere],
+      %w[--output-dir=elsewhere],
+      %w[--out elsewhere],
+      %w[--output=elsewhere],
+    ].each do |output_dir_args|
+      it "aborts when given #{output_dir_args.join(' ')} too, since it writes into the run dir" do
+        write_run
+        expect { described_class.main(['--consolidate', run_dir, *output_dir_args]) }
+          .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+          .and output(/--output-dir cannot be used with --consolidate/).to_stderr
+        expect(File).not_to exist('elsewhere')
+      end
+    end
+
+    it 'accepts a run dir whose name starts with -o' do
+      allow(described_class).to receive(:consolidate_run) { raise SystemExit, 0 }
+
+      expect { described_class.main(['--consolidate', '-oldrun']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
+
+      expect(described_class).to have_received(:consolidate_run).with('-oldrun')
+    end
+
+    it 'ignores an env-default output dir when consolidating' do
       write_run
-      expect { described_class.main(['--consolidate', run_dir, '-o', 'elsewhere']) }
-        .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
-        .and output(/--output-dir cannot be used with --consolidate/).to_stderr
-      expect(File).not_to exist('elsewhere')
+      ENV[described_class::ENV_OPTS_VAR] = '--output-dir from-env'
+      allow(described_class).to receive(:consolidate_run) { raise SystemExit, 0 }
+
+      expect { described_class.main(['--consolidate', run_dir]) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
+
+      expect(described_class).to have_received(:consolidate_run).with(run_dir)
+      expect(File).not_to exist('from-env')
     end
   end
 

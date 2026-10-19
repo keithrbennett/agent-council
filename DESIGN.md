@@ -359,8 +359,13 @@ The name says which tool wrote the directory, since it lands in someone
 else's tree. `-o DIR` / `--output-dir DIR` replaces it (a relative `DIR`
 is resolved against the working directory); only the base directory
 changes, and everything beneath it (day buckets, run dirs) is the same.
-`--output-dir` is rejected with `--consolidate`, which writes into the
-given run dir.
+`AGENT_COUNCIL_OPTS` may set this as a default with `--output-dir DIR`,
+but not positional arguments or one-shot switches such as
+`--consolidate`, `--help`, or `--version`. An explicit `--output-dir` is
+rejected with `--consolidate`, which writes into the given run dir; an
+`AGENT_COUNCIL_OPTS` default is ignored there instead, since it is not
+specific to the run. The command line is parsed first, so `--help` and
+`--version` still work when `AGENT_COUNCIL_OPTS` is malformed.
 
 Each run writes a timestamped, day-bucketed run directory (see §12), so
 repeated runs accumulate without overwriting; no further run management is

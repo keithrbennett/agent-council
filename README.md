@@ -161,8 +161,8 @@ Reports land in `./agent-council-reports` under that working directory —
 each analyzed project gets its own reports tree (you'll likely want
 `agent-council-reports/` in that project's `.gitignore`). To put them
 elsewhere, pass `-o DIR` / `--output-dir DIR`; a relative `DIR` is
-resolved against the working directory. (`--output-dir` can't be combined
-with `--consolidate`, which writes into the run dir it is given.)
+resolved against the working directory. (An explicit `--output-dir` can't be
+combined with `--consolidate`, which writes into the run dir it is given.)
 
 ```bash
 agent-council my-analysis-prompt.md                   # requires ./agent-council.yml or ~/.agent-council.yml
@@ -170,6 +170,23 @@ agent-council my-analysis-prompt.md other-config.yml  # alternate config
 agent-council -o tmp/council my-analysis-prompt.md    # reports under ./tmp/council
 agent-council -h                                      # usage and options
 ```
+
+`AGENT_COUNCIL_OPTS` can set default command-line options (currently only
+`--output-dir`), with explicit command-line arguments taking precedence:
+
+```bash
+export AGENT_COUNCIL_OPTS="--output-dir tmp/council"
+agent-council my-analysis-prompt.md
+agent-council --output-dir other-reports my-analysis-prompt.md  # overrides AGENT_COUNCIL_OPTS
+```
+
+It is only for default options, not positional arguments or one-shot
+switches such as `--consolidate`, `--help`, or `--version`. The value is
+split into words like a shell would, but not expanded: `~` works (as it
+does in any `--output-dir`), `$HOME` does not. An `--output-dir` set there
+is ignored by `--consolidate` (only an explicit one is an error). A
+malformed value makes every command except `--help` and `--version` fail
+(`--consolidate` included), with a message naming `AGENT_COUNCIL_OPTS`.
 
 (Paths are resolved from the working directory, including the default
 `./agent-council.yml`; `~` is your home directory.)

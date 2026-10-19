@@ -9,6 +9,9 @@
 #   agent-council [-o OUTPUT_DIR] PROMPT_FILE [CONFIG_FILE]
 #   agent-council --consolidate RUN_DIR
 #
+# AGENT_COUNCIL_OPTS may set default options (currently only --output-dir),
+# but not positional args or one-shot switches such as --consolidate, --help
+# or --version. An env --output-dir is ignored with --consolidate.
 # CONFIG_FILE defaults to ./agent-council.yml in the current directory (no
 # upward directory search), else ~/.agent-council.yml, if either exists;
 # otherwise it is required.
