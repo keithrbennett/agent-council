@@ -10,6 +10,59 @@ does varying only the models through one harness (Pi) already produce
 enough useful diversity? See [`DESIGN.md`](DESIGN.md) for the rationale and explicit
 non-goals.
 
+## Quick start
+
+A first run from scratch, using two models and a consolidator that
+synthesizes their reports. Each step links to the detailed section.
+
+1. **Install the prerequisites:** Ruby 3.2+ (or JRuby 10+) and the `pi` CLI
+   (`pi --version`). See [Prerequisites](#prerequisites).
+2. **Authenticate at least one provider through pi** (`/login` in
+   interactive `pi`, or the provider's API-key env var), then confirm it.
+   Two different providers give more diverse viewpoints, but two models
+   from one provider work too:
+
+   ```bash
+   pi auth check --provider <provider>
+   pi --list-models <name>      # find models you can use
+   ```
+
+3. **Install the gem:**
+
+   ```bash
+   gem install agent-council
+   ```
+
+4. **Write a config** in the directory you want analyzed, using the
+   providers and models from step 2. The `consolidator` can be any model,
+   including one of the agents:
+
+   ```yaml
+   # agent-council.yml
+   agents:
+     - provider: <provider-1>
+       model: <model-1>
+     - provider: <provider-2>
+       model: <model-2>
+   consolidator:
+     provider: <provider-1>
+     model: <model-1>
+   ```
+
+5. **Write a prompt and run it** from that same directory:
+
+   ```bash
+   echo 'In one paragraph, what does this project do?' > ~/what-is-this-prompt.md
+   agent-council ~/what-is-this-prompt.md
+   ```
+
+Each model's answer is saved as a Markdown file under
+`agent-council-reports/<yyyy-mm-dd>/<hh-mm-ss>/reviews/`, and the
+consolidated report is written to the run directory itself; see
+[What you get](#what-you-get). To add more models or change the
+consolidator, see
+[Discovering and configuring models](#discovering-and-configuring-models).
+
 ## Prerequisites
 
 - Ruby 3.2 or later, or JRuby 10 or later (standard library only for the
