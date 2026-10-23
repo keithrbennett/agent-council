@@ -290,6 +290,10 @@ agent-council "$AC_HOME/examples/prompts/smoke-test_prompt.md" "$AC_HOME/example
 - `examples/prompts/review-latest-commit-prompt.md` — a code-review prompt
   for the latest commit (plus any uncommitted changes); run it from the
   repository under review with a multi-model config.
+- `examples/prompts/review-docs-prompt.md` — a documentation review: checks
+  the README, other Markdown files, help output and samples against the
+  code for accuracy, completeness, consistency, and first-run usability;
+  run it from the repository whose docs you want reviewed.
 
 Prompt filenames may end in `-prompt.md` or `_prompt.md`. The file name
 becomes the query slug in report filenames, with either suffix stripped — so
