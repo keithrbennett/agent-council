@@ -88,6 +88,21 @@ module AgentCouncil
     candidates.find { |path| File.file?(path) }
   end
 
+  # An absolute path with the home directory abbreviated to ~, for recording
+  # where an input came from without putting the username in shared reports.
+  module_function def display_source_path(path)
+    path = File.expand_path(path)
+    home = begin
+      File.expand_path(Dir.home)
+    rescue ArgumentError
+      nil
+    end
+    return path if home.nil? || home.empty? || home == File::SEPARATOR
+    return '~' if path == home
+
+    path.start_with?(home + File::SEPARATOR) ? "~#{path.delete_prefix(home)}" : path
+  end
+
   # Make an identifier safe for a filename component.
   module_function def sanitize(part)
     part.to_s.gsub(/[^A-Za-z0-9._-]+/, '-').gsub(/\A[-.]+|[-.]+\z/, '')
@@ -712,7 +727,7 @@ module AgentCouncil
     # rely on the run dir's path.
     report_meta = { 'role' => 'analyst', 'timestamp' => iso_stamp, 'query' => slug,
       'prompt_file' => File.basename(prompt_path), 'config_file' => File.basename(config_path),
-      'run_stamp' => run_stamp }
+      'config_source' => display_source_path(config_path), 'run_stamp' => run_stamp }
     run_dir = File.join(day_dir, run_name)
     reviews_dir = File.join(run_dir, REVIEWS_DIR_NAME)
     FileUtils.mkdir_p(reviews_dir)
@@ -839,7 +854,8 @@ module AgentCouncil
     abort_unless_harness_installed
 
     # In the same key order as a normal run's front matter.
-    meta = fields.slice('role', 'timestamp', 'query', 'prompt_file', 'config_file', 'run_stamp')
+    meta = fields.slice('role', 'timestamp', 'query', 'prompt_file', 'config_file', 'config_source',
+      'run_stamp')
     meta['timestamp'] = iso_timestamp(meta['timestamp']) if meta['timestamp'].is_a?(Time)
 
     puts "Config:  #{relative_path(config_path)}"

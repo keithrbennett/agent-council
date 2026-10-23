@@ -100,6 +100,25 @@ RSpec.describe AgentCouncil do
     before { allow(Dir).to receive(:home).and_return(home) }
   end
 
+  describe '.display_source_path' do
+    before { allow(Dir).to receive(:home).and_return('/home/someone') }
+
+    it 'abbreviates paths under the home directory' do
+      expect(described_class.display_source_path('/home/someone/.agent-council.yml'))
+        .to eq('~/.agent-council.yml')
+    end
+
+    it 'leaves other paths absolute' do
+      expect(described_class.display_source_path('/srv/x/agent-council.yml'))
+        .to eq('/srv/x/agent-council.yml')
+    end
+
+    it 'does not treat a sibling with the same prefix as under home' do
+      expect(described_class.display_source_path('/home/someone-else/c.yml'))
+        .to eq('/home/someone-else/c.yml')
+    end
+  end
+
   describe '.resolve_config_path' do
     include_context 'with isolated cwd and home'
 

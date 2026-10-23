@@ -238,6 +238,7 @@ RSpec.describe 'agent-council end to end' do
     text = File.read(reports('reviews/*.md').first, encoding: 'UTF-8')
     fields, = AgentCouncil.parse_front_matter(text)
     expect(fields).to include('prompt_file' => 'prompt.md', 'config_file' => 'config.yml')
+    expect(fields['config_source']).to end_with('config.yml')
     expect(fields['run_stamp']).to match(/\A\d{4}-\d\d-\d\d-\d\d-\d\d-\d\d\z/)
     expect(fields['duration']).to match(/\A\d\d:\d\d:\d\d\z/)
     expect(text).to include("| duration | #{fields['duration']} |") # in the byline too

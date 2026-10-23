@@ -289,8 +289,9 @@ agent-council-reports/
 - Each report file begins with a small **YAML front matter** block — `role`
   (`analyst` or `consolidator`), `timestamp` (unquoted ISO 8601), `query`,
   `harness`, `provider`, `model`, `duration` (`HH:MM:SS`), `prompt_file`
-  and `config_file` (the names of the run dir's input copies) and
-  `run_stamp` (the report filenames' date-time prefix, with the run dir's
+  and `config_file` (the names of the run dir's input copies),
+  `config_source` (where the config was found, with `~` for the home
+  directory; informational only) and `run_stamp` (the report filenames' date-time prefix, with the run dir's
   suffix, if any), the last three used by `--consolidate`; for analyst
   reports, `agent_index`; and for consolidated reports, `sources` (the
   analyst labels that were synthesized), `source_durations`, and

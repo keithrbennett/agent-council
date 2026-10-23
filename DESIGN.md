@@ -303,7 +303,8 @@ when the run starts, so an in-progress or interrupted run is easy to find.
 The front matter has keys: `role` (`analyst` or `consolidator`),
 `timestamp` (unquoted ISO 8601), `query` (slug), `harness`, `provider`,
 `model`, `duration` (`HH:MM:SS`), `prompt_file` and `config_file` (the
-basenames of the run dir's input copies) and `run_stamp` (the report
+basenames of the run dir's input copies), `config_source` (the config's
+original path, `~`-abbreviated; informational only) and `run_stamp` (the report
 filenames' `<yyyy-mm-dd>-<hh-mm-ss>[-N]` prefix), the last three so
 `--consolidate` can find what it needs; for analyst reports, `agent_index`; and, for
 consolidated reports, `sources: [...]` listing the analyst labels that
