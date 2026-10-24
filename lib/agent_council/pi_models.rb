@@ -4,7 +4,7 @@ require 'json'
 require 'open3'
 
 module AgentCouncil
-  # Reads and formats the models configured in pi.
+  # Reads and formats the models available to pi.
   module PiModels
     FIELD_NAMES = {
       provider:       'provider',
@@ -122,7 +122,8 @@ module AgentCouncil
 
         Options:
           -t, --table     Formatted table (default)
-          -j, --json      Pretty-printed JSON array of model hashes
+          -j, --json      Pretty-printed JSON array of model hashes, with pi's fields:
+                          #{FIELD_NAMES.values.join(', ')}
           -i, --ids       One "provider/id" per line (shell-friendly)
           -h, --help      Show this help and exit
 
@@ -176,8 +177,9 @@ module AgentCouncil
       JSON.pretty_generate(models.map(&:to_h)) + "\n"
     end
 
+    # Empty for an empty list, so shell loops and `wc -l` see no models.
     module_function def format_as_ids(models)
-      models.map { |model| "#{model.provider}/#{model.id}" }.join("\n") + "\n"
+      models.map { |model| "#{model.provider}/#{model.id}\n" }.join
     end
   end
 end

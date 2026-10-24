@@ -1,7 +1,8 @@
 # Report format
 
 Your response will be saved as a standalone Markdown report. A metadata
-table (role, query, harness, provider, model, timestamp) is prepended to it
+table (role, agent, query, harness, provider, model, timestamp, duration)
+is prepended to it
 automatically, so:
 
 - Do not add a document title or any top-level (`#`) heading.

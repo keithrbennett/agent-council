@@ -3,7 +3,7 @@
 
 require_relative '../lib/agent_council/platform'
 
-AgentCouncil.abort_if_native_windows
+AgentCouncil.abort_if_native_windows('pi-models')
 
 require_relative '../lib/agent_council/pi_models'
 
@@ -33,7 +33,7 @@ end
 if json_output
   puts AgentCouncil::PiModels.format_as_json(models)
 elsif ids_output
-  puts AgentCouncil::PiModels.format_as_ids(models)
+  print AgentCouncil::PiModels.format_as_ids(models)
 else
   puts AgentCouncil::PiModels.format_as_table(models)
 end

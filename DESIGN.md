@@ -1,4 +1,4 @@
-# Pre-Implementation Design — MVP
+# Design
 
 ## 1. Goal
 
@@ -8,17 +8,15 @@ This repository is the short-term step: an experiment to validate whether varyin
 
 It is packaged as a gem for easy installation, but it is intentionally not a general-purpose framework.
 
-Build a small Ruby CLI that runs the **same prompt** through several AI model/provider combinations using the Pi coding-agent harness and saves each final response to a deterministic Markdown file.
+agent-council is a small Ruby CLI that runs the **same prompt** through several AI model/provider combinations using the Pi coding-agent harness and saves each final response to a deterministic Markdown file.
 
-The immediate objective is utility, not completeness.
-
-We want to be able to run something like:
+The objective is utility, not completeness. Given a config (§5), one command:
 
 ```bash
-./exe/agent-council prompt.md
+agent-council prompt.md
 ```
 
-and quickly get independent reports from several models.
+quickly gets independent reports from several models.
 
 ---
 
@@ -35,7 +33,7 @@ Typical prompts include:
 
 We want each model to receive the same substantive prompt so that differences in results come from the models themselves.
 
-The MVP does not attempt to rank or debate the responses; synthesis is limited to the optional consolidator (§12).
+agent-council does not rank or debate the responses; synthesis is limited to the optional consolidator (§12).
 
 It simply obtains and preserves them.
 
@@ -59,15 +57,11 @@ For example:
        report         report         report
 ```
 
-We do not assign different roles such as critic, architect, or security reviewer.
-
-The purpose is independent answers to the same question.
-
 ---
 
-## 4. Initial Architecture
+## 4. Architecture
 
-For the MVP, Pi is the only harness.
+Pi is the only harness.
 
 The Ruby program owns orchestration and invokes Pi once per configured provider/model combination.
 
@@ -79,8 +73,6 @@ Ruby CLI
    +-- Pi + model C
    +-- Pi + model D
 ```
-
-This deliberately tests model diversity before we decide whether harness diversity is valuable enough to justify integrating native Claude Code, Codex, Cursor, OpenCode, or `oneharness`.
 
 ---
 
@@ -103,6 +95,10 @@ agents:
 
   - provider: zai
     model: MODEL_ID_HERE
+
+consolidator:              # optional; synthesizes the agents' reports (§12)
+  provider: anthropic
+  model: MODEL_ID_HERE
 ```
 
 Exact provider and model identifiers must be verified against the installed Pi version.
@@ -113,22 +109,24 @@ They belong in configuration because available models and names change frequentl
 
 ## 6. CLI
 
-Initial command:
+Command:
 
 ```bash
-./exe/agent-council prompt.md
+agent-council [-o DIR] PROMPT_FILE [CONFIG_FILE]
+agent-council --consolidate RUN_DIR
 ```
 
-The command should:
+The README's [Running](README.md#running) section and `agent-council -h`
+document the arguments, options and `AGENT_COUNCIL_OPTS`. The command:
 
-1. read configuration;
-2. read the prompt;
-3. launch all configured Pi model runs;
-4. wait for them to complete;
-5. save each successful result;
-6. print a concise success/failure summary.
+1. reads the prompt;
+2. reads the configuration;
+3. launches all configured analyst runs;
+4. saves each successful result as its agent finishes;
+5. waits for all of them, then prints a concise success/failure summary;
+6. runs the consolidator, if one is configured, over the saved reports.
 
-`./exe/agent-council --consolidate RUN_DIR` reruns only the
+`agent-council --consolidate RUN_DIR` runs only the
 consolidation of a finished run, using the run dir's own prompt and
 config copies, found through its reports' front matter (§12).
 
@@ -136,50 +134,36 @@ config copies, found through its reports' front matter (§12).
 
 ## 7. Parallel Execution
 
-Agents should normally run concurrently.
+Agents run concurrently, one Ruby thread per agent, each driving one pi process.
 
-Conceptually:
+`AgentCouncil::WorkerPool` (`lib/agent_council/worker_pool.rb`) also handles signals, keeping the main thread free to take them. The README's [Stopping a run](README.md#stopping-a-run) section describes what Ctrl-C and the other signals do; the reasons behind that behavior are:
 
-```ruby
-threads = agents.map do |agent|
-  Thread.new do
-    run_agent(agent)
-  end
-end
+- **Each agent leads its own process group**, so the terminal's signals reach only agent-council, which then stops the agents itself, in an orderly way, and Ctrl-Z suspends agent-council without suspending the agents under it.
+- **Agents get SIGTERM and a shared grace period before being killed**, so pi can stop the commands it started; a second signal skips the wait for a user who doesn't want to.
+- **agent-council then dies by the signal** rather than exiting normally, so a shell (e.g. one running it in a loop) sees it was killed and stops too. SIGQUIT exits 131 instead, since a core dump is no use here.
+- **Extra SIGHUPs are ignored**, since a closing terminal can send them in pairs, and **signals agent-council was started ignoring stay ignored**, so `nohup` works.
+- **SIGQUIT isn't trapped under JRuby**, where the JVM reserves it for thread dumps.
 
-threads.each(&:join)
-```
-
-The exact implementation can use Ruby threads or another comparably simple mechanism.
-
-The implementation, `AgentCouncil::WorkerPool` (`lib/agent_council/worker_pool.rb`), adds what a run needs on Ctrl-C, SIGTERM, SIGHUP or SIGQUIT: it runs each agent in its own process group, sends agents SIGTERM, then SIGKILL after a grace period, keeps the main thread free to handle the interrupt, and then exits by the signal. (Under JRuby the JVM reserves SIGQUIT, so it isn't trapped there.)
-
-Do not introduce a job system, daemon, async framework, or workflow engine.
+There is no job system, daemon, async framework, or workflow engine.
 
 ---
 
 ## 8. Prompt Identity
 
-Every model must receive the same substantive prompt.
+agent-council does not:
 
-Do not:
-
-- assign different roles;
+- assign different roles to the analysts;
 - customize analytical instructions per model;
 - ask models to identify themselves;
 - add model-specific output instructions.
 
-Execution metadata should remain outside the substantive prompt wherever practical.
+Execution metadata stays outside the substantive prompt: the per-agent scratch path is in the system-prompt scaffolding, and model identity is in the report's front matter.
 
 ---
 
 ## 9. Prompt Delivery
 
-Large prompts should not be interpolated into shell command strings.
-
-Prefer stdin or another Pi-supported mechanism suitable for large multiline prompts.
-
-Prompts may contain:
+The prompt is piped to pi on stdin, never interpolated into a command line, so it may be large and contain:
 
 - Markdown;
 - source code;
@@ -188,7 +172,7 @@ Prompts may contain:
 - Unicode;
 - long analytical instructions.
 
-Use proper subprocess argv/process APIs rather than shell interpolation.
+pi is started with an argv array, not through a shell.
 
 ---
 
@@ -196,40 +180,13 @@ Use proper subprocess argv/process APIs rather than shell interpolation.
 
 For this experiment, agents are analyzers, not modifiers.
 
-The rules below are instructions in the system prompt, not enforced restrictions: withholding pi's `edit` and `write` tools is the only enforcement, and `bash` remains a full shell running as the user.
+The scaffolding appended to pi's system prompt (`PiHarness.scaffold_text` in `lib/agent_council/harnesses/pi_harness.rb`) states the rules agents get, and the README's [How it works](README.md#how-it-works-and-what-pi-is-told) section summarizes them. They are instructions, not enforced restrictions: the `--tools` allowlist, which activates only the tools it lists, is the only enforcement, and `bash` remains a full shell running as the user (see the README's [Safety and privacy](README.md#safety-and-privacy)). A shell is kept because investigation (`git log`, dependency inspection, running a documented command) is much of what makes an analysis useful.
 
-Agents must not intentionally:
+The rules follow from agents running concurrently in the user's own working tree:
 
-- modify, create, rename, or delete project source or configuration files;
-- change Git state;
-- install or remove software;
-- modify user or system configuration;
-- start persistent services;
-- make other persistent changes to the machine.
-
-Each agent must receive its **own dedicated disposable temporary directory**, unique to that agent run.
-
-Agents may write freely within that directory.
-
-Temporary files, caches, logs, generated output, and other scratch artifacts should be directed there whenever the relevant tool supports doing so.
-
-Agents may run clearly read-only investigative commands, including:
-
-- reading and searching files;
-- listing directories;
-- inspecting Git history and status;
-- inspecting dependency and configuration information;
-- other commands known not to modify project or shared state.
-
-Agents **must not run test suites, builds, coverage tools, application servers, database tasks, or other commands that may create or modify shared state** while ensemble members are executing concurrently, **unless the user's prompt explicitly permits it**.
-
-This restriction exists because such commands may collide through shared resources even when each agent has its own temporary directory. Examples include shared databases, Redis, fixed ports, Docker resources, hard-coded temporary paths, or other process-global state.
-
-A prompt may lift the restriction (as `examples/prompts/review-latest-commit-prompt.md` does), since running tests and reproducing defects can make an analysis much stronger. Where it does, agents should direct temporary output to their scratch directory and still skip commands that need shared services such as databases, servers, fixed ports, or Docker.
-
-Otherwise, if running tests or another potentially stateful command would materially improve the analysis, the agent should say so in its report and describe what it would run and why, rather than running it.
-
-If testing a proposed code change requires modifying project files, the agent should describe the proposed experiment rather than performing the modification.
+- **No modifying project files, git state, software or configuration, and no persistent services**, since the agents analyze the user's real repository and environment, not a copy. If testing a proposed change would need a modified file, the agent should describe the experiment instead (this follows from the rule; the scaffolding doesn't state it separately).
+- **Each agent gets its own disposable scratch directory** (also its `TMPDIR`), so agents that need temporary files don't collide with each other or leave files in the project.
+- **No test suites, builds, coverage tools, application servers or database tasks unless the prompt permits them**, since such commands can collide through shared resources a per-agent scratch directory doesn't isolate: shared databases, Redis, fixed ports, Docker resources, hard-coded temporary paths, or other process-global state. Running tests and reproducing defects can make an analysis much stronger, so a prompt may lift the rule (as `examples/prompts/review-latest-commit-prompt.md` does for tests and linters); agents then still skip commands needing shared services. Where a command is not permitted but would help, the agent describes what it would run and why.
 
 ---
 
@@ -243,105 +200,58 @@ Pi may automatically load project-specific context such as:
 - extensions;
 - prompt templates.
 
+The analyzed repository's own `.pi` resources load only if pi already trusts the project, since agent-council passes no `--approve`.
+
 For this experiment, useful real-world analysis matters more than establishing a laboratory benchmark.
 
-Therefore Pi should generally behave as it normally would when analyzing a repository.
+Therefore Pi behaves as it normally would when analyzing a repository, except that:
 
-However:
+- each model run is independent;
+- no conversation/session state leaks between runs (`--no-session`);
+- the tool list is restricted and the scaffolding appended to the system prompt (§10);
+- the report-format addendum is appended to each analyst's prompt.
 
-- each model run must be independent;
-- conversation/session state must not leak between runs;
-- any context-related options deliberately enabled or disabled should be documented.
-
-Do not build a configurable controlled-comparison mode yet.
+There is no configurable controlled-comparison mode.
 
 ---
 
 ## 12. Report Files
 
-The models should not write their own report files.
+The models don't write their own report files.
 
-Pi returns the final response to the Ruby process.
+Pi returns the final response to the Ruby process, which writes that text (minus any leading top-level heading), under front matter and a metadata table, to a deterministic, self-describing filename (see below).
 
-The Ruby program writes that text to a deterministic filename based on the provider and model it invoked.
+Each run gets its own directory, a day bucket and an `hh-mm-ss` time, created atomically with a `-2`, `-3`, ... suffix if that name is already taken, and printed when the run starts, so an in-progress or interrupted run is easy to find. [The README's "What you get" section](README.md#what-you-get) specifies the layout, filenames, query slug and front matter; the decisions behind them are:
 
-Example:
+- **Inputs are copied into the run dir** (the prompt, config and `analyst_format.md`, each under its own file name), so an analyst run's inputs are recoverable later. The orchestrator is versioned in git and deliberately not copied; the pi and agent-council versions, the scaffolding text and the consolidation template are not recorded.
+- **Only analysts' reports go in `reviews/`.** The consolidator's report and the input copies sit at the run dir root.
+- **Filenames are self-describing.** They carry the full timestamp, query slug, agent index (`consolidated` for the consolidator), harness, provider and model, so a report still says what it is when copied out of the tree. The agent index keeps names unique when a provider/model is configured more than once (e.g. to get several independent analyses from one model) and sits before the harness, so filenames sort in agent order once there is more than one harness. Provider and model are sanitized like the slug but keep their case.
+- **Metadata is YAML front matter written by the orchestrator**, never by the model: it gives tools structured provenance, stays readable in the terminal, and is how reports are identified, so nothing parses filenames. Timestamps are unquoted ISO 8601, so they parse directly as `Time` objects. Beyond the `provider` and `model` every report needs to be recognized, `--consolidate` needs the analysts' `prompt_file`, `config_file`, `run_stamp` and `query`, and their `agent_index` to tell which configured agents have no report.
 
-```text
-agent-council-reports/
-  2026-09-02/
-    16-21-43/
-      codebase-review.md            # copy of the prompt, as asked
-      analyst_format.md             # format addendum appended to the prompt
-      consolidated.yml              # copy of the config used
-      reviews/                      # analysts' reports
-        2026-09-02-16-21-43_codebase-review_01_pi_anthropic_claude-x.md
-        2026-09-02-16-21-43_codebase-review_02_pi_openai_gpt-x.md
-        2026-09-02-16-21-43_codebase-review_03_pi_opencode-go_kimi-x.md
-        2026-09-02-16-21-43_codebase-review_04_pi_zai_glm-x.md
-      2026-09-02-16-21-43_codebase-review_consolidated_pi_zai_glm-x.md  # consolidator output, if configured
-```
+The optional consolidator (a top-level `consolidator:` provider and model
+in the config, §5) runs after all agents finish, as one more pi run with
+the same tools and scaffolding. Its prompt is
+`lib/agent_council/templates/consolidate_prompt.md` followed by the
+original prompt, every analyst report labeled with its source, and the
+agents without a report with their failure reasons (with `--consolidate`,
+which can't know them, a note that the reason wasn't recorded). A consolidation
+failure is reported but does not change a normal run's exit status
+(`--consolidate`'s exit status is the consolidation's).
 
-Each run gets its own directory: day bucket / `hh-mm-ss`, created
-atomically with a `-2`, `-3`, ... suffix if that name is already taken
-(same-second runs, or local time repeating when clocks fall back).
-Inputs (prompt and config copies) sit at the run dir root; so does the
-consolidator's report, when configured — only the analysts' reports go
-to `reviews/`; reports are identified by
-where they live, and their provider/model metadata comes from YAML front
-matter the orchestrator writes at the top of each file (the body below it
-is the model's verbatim response). Report filenames still carry the
-full timestamp, a slug of the prompt file name, harness, provider, and
-model, so they stay self-describing when copied out of the tree. Prompt
-files may end in `-prompt.md` or `_prompt.md`; either suffix is stripped from
-the slug (`codebase-review-prompt.md` and `codebase-review_prompt.md` both
-become `codebase-review`). Copies of the
-prompt and the config make each run reproducible later (the orchestrator is
-versioned in git and deliberately not copied). The run dir is printed
-when the run starts, so an in-progress or interrupted run is easy to find.
-
-The front matter has keys: `role` (`analyst` or `consolidator`),
-`timestamp` (unquoted ISO 8601), `query` (slug), `harness`, `provider`,
-`model`, `duration` (`HH:MM:SS`), `prompt_file` and `config_file` (the
-basenames of the run dir's input copies), `config_source` (the config's
-original path, `~`-abbreviated; informational only) and `run_stamp` (the report
-filenames' `<yyyy-mm-dd>-<hh-mm-ss>[-N]` prefix), the last three so
-`--consolidate` can find what it needs; for analyst reports, `agent_index`; and, for
-consolidated reports, `sources: [...]` listing the analyst labels that
-were synthesized, `source_durations`, and `consolidated_at` (when the
-consolidation ran; later than `timestamp`, the run's start, when done by
-`--consolidate`). Unquoted ISO timestamps parse directly as `Time`
-objects. Status printed to the user uses paths
-relative to the current working directory, not absolute — except paths
-outside it, and a default config's path, which is printed absolute to
-show which default was picked up.
-
-The program should sanitize provider/model identifiers sufficiently to make safe filenames.
-
-The orchestrator already knows model identity, so the model should not be asked to report it.
+The orchestrator already knows model identity, so analysts aren't asked to report it; the consolidator gets each report's source label from the orchestrator.
 
 ---
 
 ## 13. Pi Output Parsing
 
-If Pi provides structured JSON or JSONL output suitable for non-interactive execution, prefer it over scraping human-oriented terminal output.
+agent-council reads pi's JSONL event stream (`--mode json`) rather than scraping human-oriented terminal output. Pi documents `message_end` as the authoritative final message of a turn, so the final response is the text of the last assistant `message_end` event that has text (a trailing text-less message doesn't hide an earlier report). Pi exits 0 even when the provider rejects the request, so a non-blank `errorMessage`, or a `stopReason` of `length`, `aborted` or `error` (output cut off, cancelled, or failed without an `errorMessage`), counts as a failure. Only the last assistant message and the one that would be saved are checked, so an error in a turn that a later turn recovered from is not a failure. Failures are reported, not saved as reports.
 
-Before implementing the parser, inspect the installed Pi version and documentation to determine:
+Parsing extracts only that; there is no generic Pi protocol library.
 
-- the current non-interactive invocation syntax;
-- provider/model selection syntax;
-- how prompts should be supplied;
-- how structured output is framed;
-- how to identify the final assistant response;
-- relevant exit behavior.
-
-Implement only enough parsing to reliably extract the final response.
-
-Do not build a generic Pi protocol library.
-
-The parser and the pi CLI invocation live in `AgentCouncil::Harnesses::PiHarness`
+The parser and the pi CLI invocation for runs live in `AgentCouncil::Harnesses::PiHarness`
 (`lib/agent_council/harnesses/pi_harness.rb`), the single home of harness-
-specific behavior; `exe/agent-council` stays harness-agnostic so a second
+specific behavior for runs (the separate `pi-models` helper also talks to
+pi); `exe/agent-council` stays harness-agnostic so a second
 harness can be added as another such module under `AgentCouncil::Harnesses`.
 
 ---
@@ -357,52 +267,36 @@ agent-council-reports/
 ```
 
 The name says which tool wrote the directory, since it lands in someone
-else's tree. `-o DIR` / `--output-dir DIR` replaces it (a relative `DIR`
-is resolved against the working directory); only the base directory
-changes, and everything beneath it (day buckets, run dirs) is the same.
-`AGENT_COUNCIL_OPTS` may set this as a default with `--output-dir DIR`,
-but not positional arguments or one-shot switches such as
-`--consolidate`, `--help`, or `--version`. An explicit `--output-dir` is
-rejected with `--consolidate`, which writes into the given run dir; an
-`AGENT_COUNCIL_OPTS` default is ignored there instead, since it is not
-specific to the run. The command line is parsed first, so `--help` and
-`--version` still work when `AGENT_COUNCIL_OPTS` is malformed.
+else's tree. `-o` / `--output-dir` (or an `AGENT_COUNCIL_OPTS` default)
+replaces only this base directory; everything beneath it is the same. The
+README's [Running](README.md#running) section has the rules. An
+`AGENT_COUNCIL_OPTS` default is ignored by `--consolidate`, rather than
+rejected like an explicit `--output-dir`, since it is not specific to the
+run.
 
 Each run writes a timestamped, day-bucketed run directory (see §12), so
-repeated runs accumulate without overwriting; no further run management is
-implemented yet.
+repeated runs accumulate without overwriting; beyond `--consolidate` (§6),
+no run management is implemented.
 
 ---
 
 ## 15. Basic Failure Handling
 
-Failure handling should remain simple.
+Failure handling is simple. If a Pi invocation fails, agent-council:
 
-If a Pi invocation fails:
+- prints a useful error;
+- writes no report for it;
+- lets the other model runs finish.
 
-- print a useful error;
-- do not create a misleading report;
-- allow other model runs to finish.
+One failed model doesn't discard successful results from others. The
+README's [What you get](README.md#what-you-get) section shows how
+failures are reported.
 
-Example:
-
-```text
-Review Progress:
-  ✓ 00:01:12  #1 anthropic / claude-x
-  ✓ 00:01:40  #2 openai / gpt-x
-  ✗ 00:00:03  #4 zai / glm-x  (pi exited 1: ...)
-  ✓ 00:02:05  #3 opencode-go / kimi-x
-```
-
-One failed model must not discard successful results from others.
-
-Do not implement retries, error taxonomies, fallback models, semantic report validation, or separate process/report status systems yet.
+There are no retries of agent-council's own (pi may retry transient provider failures), error taxonomies, fallback models, semantic report validation, or separate process/report status systems.
 
 ---
 
 ## 16. Repository Layout
-
-Keep the experiment small.
 
 ```text
 README.md
@@ -410,11 +304,12 @@ DESIGN.md
 RELEASE_NOTES.md
 LICENSE.txt
 REVIEW_NOTES.md          # settled review findings; not shipped in the gem
+CONTRIBUTING.md          # contribution process; not shipped in the gem
 code-review-agents.md    # sample code-review ensemble recommendation
 agent-council.gemspec
-exe/                     # executable entry points; all code lives in lib/
+exe/                     # executable entry points; nearly all code lives in lib/
   agent-council
-  pi-models              # helper: list models configured in pi
+  pi-models              # helper: list models available to pi
 lib/
   agent_council.rb       # harness-agnostic orchestration (AgentCouncil)
   agent_council/
@@ -436,91 +331,42 @@ examples/                # pure, non-runtime samples (prompts/ and configs/ ship
     project-name-prompt.md
     recommend-model-ensemble-prompt.md
     review-latest-commit-prompt.md
+    review-docs-prompt.md
   configs/
     single.yml
     consolidated.yml
   results/               # sample output; not shipped in the gem
 
-agent-council-reports/   # created on demand; gitignored
+agent-council-reports/   # created on demand; gitignored in this repository
 ```
 
 Dev-only files (Gemfile, Rakefile, lint configs, CI workflows, `bin/setup`,
 `bin/setup-hooks`, `hooks/pre-commit`) are omitted above. The gemspec's
 `spec.files` is the authority on what ships.
 
-Keep `lib/` shallow; do not introduce deeper namespaces
-(`lib/agent_council/services/...`) unless the experiment actually grows
-enough to require them.
-
-A clean, disposable 100–300 line Ruby implementation is preferable to a speculative framework.
+`lib/` stays shallow, without namespaces deeper than `harnesses/`
+(such as `lib/agent_council/services/...`) unless the experiment grows enough to
+require them. A plain implementation is preferred to a speculative
+framework.
 
 ---
 
 ## 17. Dependencies
 
-Prefer the Ruby standard library for the tool itself (tests use RSpec).
+The tool itself uses only the Ruby standard library (`yaml`, `json`, `open3`, `optparse`, `fileutils`, `tmpdir`, `shellwords`, ...); tests use RSpec.
 
-Likely useful libraries include:
-
-```ruby
-yaml
-json
-open3
-fileutils
-tmpdir
-```
-
-Avoid adding gems unless they solve a meaningful problem that would otherwise require substantial code.
+New gems are added only if they solve a meaningful problem that would otherwise require substantial code.
 
 ---
 
-## 18. MVP Completion Criteria
+## 18. Explicitly Deferred
 
-The experiment is successful when we can:
-
-1. configure several Pi provider/model combinations;
-2. write one analytical prompt;
-3. run one command;
-4. execute the models concurrently;
-5. give every model the same substantive prompt;
-6. save one Markdown report per successful model;
-7. see which model runs succeeded or failed;
-8. use the reports for a real codebase-analysis question.
-
-Example:
-
-```bash
-./exe/agent-council codebase-review.md
-```
-
-produces:
-
-```text
-agent-council-reports/
-  2026-09-02/
-    16-21-43/
-      codebase-review.md
-      analyst_format.md
-      consolidated.yml
-      reviews/
-        2026-09-02-16-21-43_codebase-review_01_pi_anthropic_claude-x.md
-        2026-09-02-16-21-43_codebase-review_02_pi_openai_gpt-x.md
-        2026-09-02-16-21-43_codebase-review_03_pi_opencode-go_kimi-x.md
-        2026-09-02-16-21-43_codebase-review_04_pi_zai_glm-x.md
-```
-
-That is the first useful product.
-
----
-
-## 19. Explicitly Deferred
-
-The following are not part of this MVP:
+The following are deliberately not implemented:
 
 - `oneharness` integration;
 - native Claude Code integration;
 - native Codex integration;
-- Cursor integration;
+- native Cursor integration (the `cursor` provider works through pi);
 - native OpenCode integration;
 - Gemini CLI integration;
 - generalized runner abstraction;
@@ -532,7 +378,7 @@ The following are not part of this MVP:
 - raw stdout/stderr archives;
 - token and cost tracking;
 - CLI-version recording;
-- automatic retries;
+- automatic retries (beyond pi's own);
 - budget controls;
 - authentication abstraction;
 - worktree isolation;
@@ -552,7 +398,7 @@ non-issues — rather than features not yet built.
 
 ---
 
-## 20. What We Want to Learn
+## 19. What We Want to Learn
 
 The experiment should answer:
 
@@ -566,9 +412,9 @@ Only then should we decide whether to integrate `oneharness`.
 
 ---
 
-## 21. Design Rule
+## 20. Design Rule
 
-For the MVP, every proposed feature should pass this test:
+Every proposed feature should pass this test:
 
 > Is this necessary to run the same prompt through multiple Pi-accessible models and save their answers?
 

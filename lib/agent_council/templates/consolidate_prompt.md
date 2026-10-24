@@ -2,8 +2,8 @@
 
 You are consolidating several independent analyses of the same repository.
 Every analyst received the identical prompt (included below as "Original
-prompt"). Their reports follow under "Analyst reports", each headed by the
-model that produced it. Agents that produced no report are listed last,
+prompt"), followed by formatting instructions for its report. Their reports follow under "Analyst reports", each headed "Report
+from" its source label (`#<agent number> <provider> / <model>`). Agents that produced no report are listed last,
 under "Agents without a report", each with the reason shown there (its
 failure, when known).
 
@@ -39,11 +39,6 @@ Issues raised by exactly one analyst, attributed to its source.
 
 Points where analysts disagree, with each position attributed.
 
-## Explain Findings, Don't Just List Them
-
-When listing findings, unanimous or otherwise, add enough explanation of the issue so that the reader
-can easily understand what the issue is. Avoid limiting the text to single phrase attributions.
-
 ## Overall assessment
 
 The most important findings overall and your confidence in each. If you can
@@ -54,5 +49,9 @@ Rules:
 - Begin directly with the "## Agent Consultants" section; do not add a
   document title or top-level heading.
 - Attribute every claim to its source model(s); never drop attribution.
+- Explain findings, don't just list them: when listing findings, unanimous
+  or otherwise, add enough explanation that the reader can easily
+  understand what the issue is. Avoid limiting the text to single-phrase
+  attributions.
 - Do not invent findings that appear in no report.
 - Deduplicate, but do not dilute: keep concrete file and line references.

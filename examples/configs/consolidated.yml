@@ -1,3 +1,8 @@
+# Sample ensemble: four analysts and a consolidator. Replace any provider or
+# model you don't have credentials for (see `pi --list-models`). The
+# commented-out entries are alternatives: uncommenting the extra agent adds a
+# fifth analyst; to swap in the other consolidator, uncomment its provider
+# and model lines and comment out the active pair.
 agents:
   - provider: opencode-go
     model: glm-5.3

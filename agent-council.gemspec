@@ -37,7 +37,8 @@ Gem::Specification.new do |spec|
   # sample prompts and configs, so installed users can read docs and run
   # examples matching their installed version. Exclude development-only
   # files (CI config, lint configs, Gemfile, lockfile, Rakefile, spec/,
-  # REVIEW_NOTES.md, etc.) and generated sample output (examples/results/).
+  # REVIEW_NOTES.md, CONTRIBUTING.md, etc.) and generated sample output
+  # (examples/results/).
   # Only git-tracked files are packaged, so untracked local files (personal
   # configs, editor backups) can't leak into the gem. Without FNM_DOTMATCH,
   # the patterns skip dotfiles.
@@ -62,7 +63,7 @@ Gem::Specification.new do |spec|
   spec.require_paths = ['lib']
 
   # No runtime dependencies: the tool itself uses only the Ruby standard
-  # library (yaml, open3, fileutils, tmpdir). It does require the external
+  # library. It does require the external
   # `pi` CLI at runtime, but that is not a Ruby gem dependency.
   spec.metadata['rubygems_mfa_required'] = 'true'
 end

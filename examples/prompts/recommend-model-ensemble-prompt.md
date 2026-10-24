@@ -14,12 +14,13 @@ recommend a small ensemble for the user's task and constraints.
 
 ## Instructions
 
-1. Run `pi-models --json` to discover the provider/model entries in the pi
-   catalog. Use this as the source for model names and listed attributes, but
-   do not assume every entry is authenticated or covered by the user's plan.
+1. Run `pi-models --json` to discover the provider/model entries available
+   to pi: those of the providers the user has set up credentials for. Use
+   this as the source for model names and listed attributes, but do not
+   assume every entry is covered by the user's plan.
    Exclude any providers or models the user marked unavailable. If the command
-   is not installed or fails, say so and ask the user to provide the model
-   list; do not invent available models.
+   is not installed or fails, say so, and that the model list must then be
+   included in the prompt; do not invent available models.
 2. Recommend exactly the requested number of agents and one consolidator,
    choosing only from the discovered list. If a current config is provided,
    use it as the baseline and explain any meaningful changes.
@@ -59,11 +60,3 @@ recommend a small ensemble for the user's task and constraints.
 
    Ensure every provider/model pair in the YAML appears in the discovered
    catalog and preserve the requested number of agent entries.
-
-## Example result
-
-See [Four agents for code review](../results/recommend-model-ensemble-code-review.md)
-for an example recommendation produced from a model list and the priorities
-of provider diversity, useful code-review findings, and reasonable speed.
-(That file is generated output kept in the source repository only; it is
-not included in the gem.)

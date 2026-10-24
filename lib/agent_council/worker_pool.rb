@@ -32,7 +32,8 @@ module AgentCouncil
     TERMINATING_SIGNALS = (RUBY_ENGINE == 'jruby' ? %w[INT TERM HUP] : %w[INT TERM HUP QUIT]).freeze
 
     # Each agent leads a new process group, so terminal signals skip it and
-    # #signal_child can reach any processes it starts.
+    # #signal_child reaches the processes in that group (not ones a tool
+    # detached into a group of their own).
     SPAWN_OPTIONS = { pgroup: true }.freeze
 
     # Ends the process as the signal would have, so the caller (e.g. a shell

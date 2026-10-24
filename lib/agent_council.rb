@@ -108,8 +108,8 @@ module AgentCouncil
     part.to_s.gsub(/[^A-Za-z0-9._-]+/, '-').gsub(/\A[-.]+|[-.]+\z/, '')
   end
 
-  # Meaningful query slug, derived from the prompt file name. A trailing
-  # -prompt or _prompt suffix is stripped from the slug.
+  # Meaningful query slug, derived from the prompt file name. The extension
+  # and then a trailing -prompt or _prompt (in any case) are stripped.
   module_function def query_slug(prompt_path)
     name = File.basename(prompt_path, File.extname(prompt_path)).sub(/[-_]prompt\z/i, '')
     slug = sanitize(name).downcase
@@ -120,9 +120,8 @@ module AgentCouncil
   # full timestamp and slug live in the filename so reports stay
   # self-describing when copied out of the reports tree. index (an agent's
   # 1-based position in the config's agent list) disambiguates repeated
-  # provider/model entries — e.g. the same model configured twice to spread
-  # load across a rate-limited subscription — without depending on it being
-  # unique. It sits before the harness so that once more than one harness
+  # provider/model entries — e.g. the same model configured twice for two
+  # independent analyses — without depending on it being unique. It sits before the harness so that once more than one harness
   # exists, filenames still sort in config/agent order first, rather than
   # grouping by harness.
   module_function def report_filename(file_prefix, provider, model, index: nil)
@@ -139,7 +138,8 @@ module AgentCouncil
   # filename: overrides the output name; meta: becomes YAML front matter;
   # header: markdown prepended to the report body (or a callable receiving the
   # task's HH:MM:SS duration and returning it). If the response begins
-  # with an H1 of its own, it is dropped to avoid a duplicated title.
+  # with an H1 of its own, it is dropped: the header leads the body (and
+  # carries the title, in consolidated reports).
   # pool: the WorkerPool to spawn the agent through, so Ctrl-C can stop it;
   # without one it's spawned untracked.
   module_function def run_agent(agent, prompt, run_dir, file_prefix, index: nil, filename: nil, meta: {},
@@ -227,7 +227,7 @@ module AgentCouncil
   # by filename; fields is the report's front matter. The dir is the run's
   # reviews/ subdir; provider/model labels come from the YAML front matter
   # run_agent writes — not from filename parsing. Files without parseable
-  # front matter are not ours and are skipped.
+  # front matter naming a provider and model are not ours and are skipped.
   module_function def collect_reports(reviews_dir)
     # base: keeps reviews_dir from being read as a pattern, so a path with
     # glob characters (e.g. "[") still finds its reports.
@@ -273,8 +273,8 @@ module AgentCouncil
     [fields, match.post_match]
   end
 
-  # The exact bytes piped to each analyst harness: the user's prompt
-  # verbatim, then the report-format addendum.
+  # The exact bytes piped to each analyst harness: the user's prompt, less
+  # one trailing newline, then a blank line and the report-format addendum.
   module_function def compose_analyst_prompt(prompt, addendum)
     "#{prompt.chomp}\n\n#{addendum}"
   end
@@ -324,8 +324,9 @@ module AgentCouncil
     "#{file_prefix}_consolidated_#{HARNESS::NAME}_#{sanitize(provider)}_#{sanitize(model)}.md"
   end
 
-  # Centered markdown table mirroring the report's front matter, placed
-  # under the report title; one row per consulted agent, when present.
+  # Markdown table of the report's main front-matter fields, leading the
+  # body (under the title, in consolidated reports); one row per consulted
+  # agent, when present.
   module_function def byline_table(meta, provider, model)
     fields = {
       'role'            => meta['role'],
@@ -540,18 +541,22 @@ module AgentCouncil
 
         Arguments:
           PROMPT_FILE   Path to the prompt file to send to every configured model (required)
-          CONFIG_FILE   Path to a YAML agent config (default: ./#{CWD_CONFIG_NAME}, else ~/#{HOME_CONFIG_NAME}, if present)
+          CONFIG_FILE   Path to a YAML agent config (default: ./#{CWD_CONFIG_NAME}, else ~/#{HOME_CONFIG_NAME}; required if neither exists)
+          RUN_DIR       With --consolidate, a finished run's directory (no PROMPT_FILE or CONFIG_FILE)
+
+        Agents analyze the current directory: run from the project to be analyzed.
 
         Options:
       BANNER
 
       opts.on('--consolidate RUN_DIR',
-        'Consolidate an existing run\'s reports again, in place; runs no analysts') do |dir|
+        'Consolidate an existing run\'s reports, in place; runs no analysts') do |dir|
         options[:consolidate] = dir
       end
 
       opts.on('-o', '--output-dir DIR',
-        "Directory to write run dirs under (default: ./#{DEFAULT_REPORTS_DIR_NAME})",
+        'Base directory for run dirs, as DIR/<date>/<time>',
+        "(default: ./#{DEFAULT_REPORTS_DIR_NAME})",
         'Not allowed with --consolidate', "(which ignores an #{ENV_OPTS_VAR} default)") do |dir|
         options[:output_dir] = dir
       end
@@ -663,19 +668,25 @@ module AgentCouncil
     end
     abort "Config file not found: #{config_path}" unless File.file?(config_path)
 
-    # Read once. Analysts receive the user's prompt verbatim, followed by
-    # the report-format addendum; the consolidator cites the prompt alone.
-    # Both input files are copied into the run dir, so the exact bytes sent
-    # to each harness are recoverable.
+    # Read once. Analysts receive the user's prompt followed by the
+    # report-format addendum (see compose_analyst_prompt); the consolidator
+    # cites the prompt alone.
+    # The prompt and analyst_format.md are copied into the run dir, so the
+    # exact bytes sent to each analyst are recoverable.
     prompt = File.read(prompt_path, encoding: ENCODING)
     abort "Prompt file is empty: #{prompt_path}" if prompt.empty?
     abort "Analyst format addendum missing: #{ANALYST_FORMAT_PATH}" unless File.file?(ANALYST_FORMAT_PATH)
     # All three are copied into the run dir under their own names, so a
     # shared name would leave one copy in place of another.
-    copied_names = [prompt_path, ANALYST_FORMAT_PATH, config_path].map { |path| File.basename(path) }
-    unless copied_names.uniq.size == copied_names.size
+    copied_paths = { 'prompt' => prompt_path, 'config' => config_path, 'addendum' => ANALYST_FORMAT_PATH }
+    copied_names = copied_paths.transform_values { |path| File.basename(path) }
+    unless copied_names.values.uniq.size == copied_names.size
       abort "The prompt, config and #{File.basename(ANALYST_FORMAT_PATH)} need different file names, " \
-        "since all three are copied into the run dir: #{copied_names.join(', ')}"
+        'since all three are copied into the run dir: ' \
+        "#{copied_names.map { |role, name| "#{role} #{name}" }.join(', ')}"
+    end
+    if (role = copied_names.key(REVIEWS_DIR_NAME))
+      abort "The #{role} can't be named #{REVIEWS_DIR_NAME}, the run dir's subdirectory for analyst reports"
     end
     analyst_prompt = compose_analyst_prompt(prompt, File.read(ANALYST_FORMAT_PATH, encoding: ENCODING))
 
@@ -732,7 +743,7 @@ module AgentCouncil
     reviews_dir = File.join(run_dir, REVIEWS_DIR_NAME)
     FileUtils.mkdir_p(reviews_dir)
 
-    # Self-contained run: preserve the exact inputs — prompt, format
+    # Keep the run's inputs recoverable: copy the prompt, format
     # addendum, and config. (The orchestrator is not copied: it is
     # versioned in git.)
     FileUtils.cp(prompt_path, run_dir)
@@ -798,7 +809,7 @@ module AgentCouncil
     exit_interrupted(pool)
   end
 
-  # --consolidate RUN_DIR: runs the consolidator again over an existing
+  # --consolidate RUN_DIR: runs the consolidator over an existing
   # run's reports, writing its report into that run dir. The prompt,
   # config, and run's identity (timestamp, query, run_stamp) all come from
   # the run itself: its analysts' front matter names the prompt and config
@@ -811,8 +822,11 @@ module AgentCouncil
     reports = File.directory?(reviews_dir) ? collect_reports(reviews_dir) : []
     abort "No analyst reports found in #{reviews_dir}" if reports.empty?
 
-    fields = reports.first[2]
-    unless fields.values_at('prompt_file', 'config_file', 'run_stamp', 'query').all?
+    # From the first report that has them, so one stray or older report in
+    # reviews/ doesn't block the run.
+    fields = reports.map { |report| report[2] }
+      .find { |f| f.values_at('prompt_file', 'config_file', 'run_stamp', 'query').all? }
+    unless fields
       abort "Reports in #{reviews_dir} lack prompt_file, config_file, run_stamp or query; " \
         'runs made before --consolidate existed cannot be consolidated'
     end

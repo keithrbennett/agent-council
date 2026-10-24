@@ -204,8 +204,8 @@ RSpec.describe AgentCouncil::PiModels do
       expect(described_class.format_as_ids(models)).to eq("anthropic/claude-sonnet\nopenai/gpt-mini\n")
     end
 
-    it 'returns a newline for an empty model list' do
-      expect(described_class.format_as_ids([])).to eq("\n")
+    it 'returns an empty string for an empty model list' do
+      expect(described_class.format_as_ids([])).to eq('')
     end
   end
 
@@ -267,7 +267,7 @@ RSpec.describe AgentCouncil::PiModels do
       executable = File.expand_path('../../exe/pi-models', __dir__)
       expect { load executable }
         .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
-        .and output(/does not support native Windows; please run it inside WSL\.\n.*README\.md/).to_stderr
+        .and output(/\Api-models does not support native Windows; please run it inside WSL\.\n/).to_stderr
     end
   end
 end

@@ -2,7 +2,7 @@
 
 # AgentCouncil::Harnesses::PiHarness — all knowledge specific to the pi
 # coding-agent harness: how to invoke the pi CLI for one model run, the
-# read-only tool policy and scaffolding delivered with it, and how to
+# tool allowlist and read-only scaffolding delivered with it, and how to
 # read pi's JSONL event stream afterward.
 #
 # AgentCouncil is harness-agnostic and refers to this module only via
@@ -17,14 +17,15 @@ module AgentCouncil
     module PiHarness
       NAME = 'pi'
 
-      # Read-only analysis toolset (pi's built-in tool names): edit/write are
-      # withheld at the harness level. bash stays available for read-only
-      # investigation (git log/status, dependency inspection, ...); the
-      # scaffolding text constrains its use.
+      # Analysis toolset (pi's built-in tool names): edit/write (and the
+      # Windows-only powershell) are withheld. bash, a full shell, stays for
+      # investigation (git log/status, dependency inspection, ...); only the
+      # scaffolding text asks the model to use it read-only.
       TOOLS = 'read,grep,find,ls,bash'
 
       # Invocation for one model run. The substantive prompt is not part of argv;
-      # it is piped to stdin, byte-identical for every agent.
+      # it is piped to stdin (byte-identical for every analyst; the
+      # consolidator gets its own).
       module_function def argv(provider, model, scratch_dir)
         [
           NAME,
@@ -42,8 +43,8 @@ module AgentCouncil
       # except the scratch dir path.
       module_function def scaffold_text(scratch_dir)
         <<~TEXT
-          You are one of several independent agents analyzing the same repository
-          with the same prompt. This is a strictly read-only analysis task.
+          You are one of the independent agents agent-council runs on this
+          repository. This is a strictly read-only analysis task.
 
           Rules:
           - Do not modify, create, rename, or delete any project source or
@@ -52,7 +53,7 @@ module AgentCouncil
             services.
           - Do not run test suites, builds, coverage tools, application servers,
             or database tasks unless the user's prompt explicitly permits it:
-            other analysts are running concurrently and such commands can collide
+            other agents may be running concurrently and such commands can collide
             through shared state (databases, ports, Docker, fixed temp paths).
             Where the prompt permits them, direct their temporary output to the
             scratch directory below, and still skip any that need shared

@@ -18,7 +18,11 @@ solution would be appropriate.
 
 - Report only issues introduced by the latest commit or uncommitted changes.
 - Report issues in uncommitted changes separately from those in the commit.
-- Ignore files in `untracked/` and `agent-council-reports/`.
+- Don't review or report on files that git ignores (check with
+  `git check-ignore`), or on `agent-council-reports/` (agent-council's
+  output, which may not be ignored). You may read ignored files for
+  context, but they are local to this checkout, so judge the changes
+  against tracked files.
 - Do not report preexisting issues unless the changes introduce or worsen them.
 - You may suggest improvements to the commit message, particularly if the
   commit has not been pushed.
@@ -32,8 +36,9 @@ relevant tests and linters, and reproduce suspected defects.
 
 **DO NOT EDIT ANY CODE OR TRACKED FILES.**
 
-Tests and verification tools that generate temporary files, coverage data,
-or build artifacts are permitted. Avoid unnecessary modifications to the
+Tests and linters that generate temporary files or coverage data are
+permitted (builds are not); direct their output to your scratch
+directory where the tool allows it. Avoid unnecessary modifications to the
 working tree.
 
 For each issue, identify the affected file and location, explain the problem

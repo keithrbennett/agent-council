@@ -589,18 +589,30 @@ RSpec.describe AgentCouncil do
     end
 
     {
-      'the prompt is named like the format addendum' => ['analyst_format.md', 'config.yml'],
-      'the prompt and config share a file name'      => ['p/same.yml', 'c/same.yml'],
-    }.each do |situation, (prompt, config)|
+      'the prompt is named like the format addendum' =>
+        ['analyst_format.md', 'config.yml', 'prompt analyst_format.md, config config.yml'],
+      'the prompt and config share a file name'      =>
+        ['p/same.yml', 'c/same.yml', 'prompt same.yml, config same.yml'],
+    }.each do |situation, (prompt, config, names)|
       it "aborts before creating a run dir when #{situation}" do
         FileUtils.mkdir_p(%w[p c])
         File.write(prompt, 'hi')
         File.write(config, YAML.dump('agents' => [{ 'provider' => 'p', 'model' => 'm' }]))
         expect { described_class.main([prompt, config]) }
           .to raise_error(SystemExit)
-          .and output(/need different file names, since all three are copied into the run dir/).to_stderr
+          .and output(/need different file names, since all three are copied into the run dir: #{names}, /)
+          .to_stderr
         expect(File).not_to exist('agent-council-reports')
       end
+    end
+
+    it 'aborts before creating a run dir when the prompt is named like the reviews dir' do
+      File.write('reviews', 'hi')
+      File.write('c.yml', YAML.dump('agents' => [{ 'provider' => 'p', 'model' => 'm' }]))
+      expect { described_class.main(['reviews', 'c.yml']) }
+        .to raise_error(SystemExit)
+        .and output(/The prompt can't be named reviews/).to_stderr
+      expect(File).not_to exist('agent-council-reports')
     end
 
     it 'aborts before creating a run dir when the harness executable is not on PATH' do
@@ -654,6 +666,15 @@ RSpec.describe AgentCouncil do
     it 'aborts when the reports predate --consolidate (no prompt_file, config_file, run_stamp or query)' do
       write_run(fields: analyst_fields.except('prompt_file', 'config_file', 'run_stamp'))
       expect_abort(/runs made before --consolidate existed cannot be consolidated/)
+    end
+
+    it 'takes the run fields from a later report when the first lacks them' do
+      write_run(fields: analyst_fields.except('prompt_file', 'config_file', 'run_stamp', 'query'))
+      File.write(File.join(run_dir, 'reviews', 'b.md'),
+        described_class.with_front_matter(analyst_fields.merge('model' => 'm2'), 'findings'))
+      existing = File.join(run_dir, '2026-09-03-09-14-02_review_consolidated_pi_c_cm.md')
+      File.write(existing, 'earlier')
+      expect_abort(/Consolidated report already exists/)
     end
 
     it 'aborts when query is missing' do
@@ -1088,7 +1109,7 @@ RSpec.describe AgentCouncil do
   end
 
   describe '.byline_table' do
-    it 'mirrors the front matter fields, centered, one row per source' do
+    it 'lists the main front matter fields, one row per source' do
       meta = {
         'role'      => 'consolidator',
         'query'     => 'check-prev-commits',

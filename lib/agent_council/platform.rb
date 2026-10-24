@@ -16,11 +16,11 @@ module AgentCouncil
   # pi.cmd through cmd.exe, which truncates arguments at newlines (breaking
   # the multi-line system prompt), and WorkerPool relies on process groups
   # and SIGTERM.
-  module_function def abort_if_native_windows
+  module_function def abort_if_native_windows(command = 'agent-council')
     return unless windows?
 
     abort <<~MESSAGE
-      agent-council does not support native Windows; please run it inside WSL.
+      #{command} does not support native Windows; please run it inside WSL.
       See "Prerequisites" in #{File.expand_path('../../README.md', __dir__)}
     MESSAGE
   end
