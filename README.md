@@ -151,9 +151,6 @@ AC_HOME=$(ruby -e 'print Gem::Specification.find_by_name("agent-council", ">= 0.
 If several versions are installed, this finds the newest, prereleases
 included: the same one a plain `agent-council` command runs.
 
-In a Bundler project, prefix it with `bundle exec` (or use
-`bundle info agent-council --path`) to get the version Bundler selects.
-
 ## Discovering and configuring models
 
 ```bash
@@ -193,8 +190,9 @@ agent, and the consolidator, needs string `provider` and `model` values
 a date or `yes`); other keys are ignored.
 
 More samples are in [`examples/configs/`](examples/configs/), which is
-included in the installed gem. [`pi-models`](#occasional-utility-pi-models)
-also lists the available models, in forms suited to scripts.
+included in the installed gem. For scripts and agents,
+[`pi-models`](#occasional-utility-pi-models) lists the models in
+machine-readable forms.
 
 For a recommended code-review ensemble, see
 [`code-review-agents.md`](code-review-agents.md). It is Markdown, not a
@@ -623,16 +621,25 @@ process.
 
 ## Occasional utility: `pi-models`
 
-The gem also includes `pi-models`, a helper for listing the provider/model
-pairs available to the `pi` CLI — those of the providers you have set up
-credentials for (see
+To choose models yourself, use `pi --list-models` (see
 [Discovering and configuring models](#discovering-and-configuring-models)).
-It prints a table, JSON, or one `provider/id` per line for shell use
-(`pi-models -h` lists the options and the JSON fields); in a config entry, its `provider` is
-`provider` and its `id` is `model`. It gets the models over pi's RPC
-interface rather than from `pi --list-models`, so its list can include
-models that `pi --list-models` doesn't (e.g. extra `github-copilot`
-models), and those may not be usable on your account. It requires `pi` to be installed and can be run directly after
-installing the gem; like agent-council, it needs WSL on Windows.
+The gem also includes `pi-models`, which lists the same kind of
+provider/model pairs in forms meant for scripts and agents; the sample
+`recommend-model-ensemble-prompt.md` has its agents run it. They differ in
+two ways:
+
+- **Output.** `pi --list-models` prints a table for people and supports
+  fuzzy search. `pi-models` prints a table, JSON with pi's model fields
+  (`--json`, for `jq`), or one `provider/id` per line (`--ids`, for shell
+  loops), and exits non-zero with a clear message if pi is missing or
+  fails. `pi-models -h` lists the options and the JSON fields. In a config
+  entry, its `provider` is `provider` and its `id` is `model`.
+- **Source.** `pi-models` asks pi over its RPC interface instead of running
+  `pi --list-models`, so its list can include models that
+  `pi --list-models` omits (e.g. extra `github-copilot` models), and those
+  may not be usable on your account.
+
+`pi-models` requires `pi` and is on your `PATH` once the gem is installed;
+like agent-council, it needs WSL on Windows.
 
 [pi-docs]: https://github.com/earendil-works/pi/tree/main/packages/coding-agent/docs
