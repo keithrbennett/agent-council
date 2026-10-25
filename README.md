@@ -240,7 +240,8 @@ Reports land in `./agent-council-reports` under that working directory,
 so each analyzed project gets its own reports tree. To put them
 elsewhere, pass `-o DIR` / `--output-dir DIR`; a relative `DIR` is
 resolved against the working directory. (An explicit `--output-dir` can't be
-combined with `--consolidate`, which writes into the run dir it is given.)
+combined with `--consolidate`, which works on the reports of an existing
+run and writes its consolidated report into that run's directory.)
 
 ```bash
 agent-council my-analysis-prompt.md                   # requires ./agent-council.yml or ~/.agent-council.yml
