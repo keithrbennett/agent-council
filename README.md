@@ -23,10 +23,9 @@ Why use it:
   config are all a run needs; every run's reports, prompt, and config
   are saved together in a timestamped directory.
 
-This is also an experiment: does varying only the models through one
-harness (Pi) already produce enough useful diversity? See
-[`DESIGN.md`](DESIGN.md) for the rationale and the
-[deliberately deferred features](DESIGN.md#18-explicitly-deferred).
+The project is at an early stage; support for more harnesses than Pi is
+among the [planned features](DESIGN.md#18-status-and-future-work). See
+[`DESIGN.md`](DESIGN.md) for the rationale.
 
 > **Between releases**, the documentation in the repository describes the
 > next release, not the latest published one, so it may cover features
@@ -607,9 +606,7 @@ No retries or timeouts of agent-council's own (pi itself may retry
 transient provider failures), no cost tracking, no ranking
 or scoring of reports
 (beyond the optional consolidator's synthesis), no manifests or indexes —
-the directory layout is the index. This is an experiment to answer one
-question: is Pi-based model diversity worth building on? See
-[`DESIGN.md`](DESIGN.md) §18–20.
+the directory layout is the index. See [`DESIGN.md`](DESIGN.md) §18–19.
 
 ## Stability
 

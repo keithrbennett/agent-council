@@ -14,7 +14,7 @@ Please do not submit a pull request unless you have first opened an issue and re
 
 Discussing a proposal in an issue does not by itself constitute approval. Please wait until the maintainer specifically confirms that a pull request would be welcome.
 
-This project is maintained by a single developer. Even a well-intentioned and technically sound pull request can require substantial review, testing, discussion, and ongoing maintenance. A proposed change may also conflict with the project's scope, design, priorities, or planned work. agent-council is a deliberately small experiment: see the design rule and the list of deliberately deferred features in [DESIGN.md](DESIGN.md).
+This project is maintained by a single developer. Even a well-intentioned and technically sound pull request can require substantial review, testing, discussion, and ongoing maintenance. A proposed change may also conflict with the project's scope, design, priorities, or planned work. agent-council is deliberately small: see the design rule and the status and future work section in [DESIGN.md](DESIGN.md).
 
 The contribution process is:
 
