@@ -603,7 +603,7 @@ expose.
 ## Limitations (deliberate)
 
 No retries or timeouts of agent-council's own (pi itself may retry
-transient provider failures), no cost tracking, no ranking
+transient provider failures), no ranking
 or scoring of reports
 (beyond the optional consolidator's synthesis), no manifests or indexes —
 the directory layout is the index. See [`DESIGN.md`](DESIGN.md) §18–19.
