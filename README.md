@@ -38,7 +38,7 @@ A first run from scratch, using two models and a consolidator that
 synthesizes their reports. The sections after this one cover each step
 in detail.
 
-1. **Install the prerequisites:** Ruby 3.2+ (or JRuby 10+) and the
+1. **Install the prerequisites:** Ruby 3.3+ (or JRuby 10+) and the
    [`pi` CLI](https://github.com/earendil-works/pi) (`pi --version`). See
    [Prerequisites](#prerequisites).
 2. **Set up credentials for at least one provider in pi** (see
@@ -101,8 +101,8 @@ consolidator, see
 
 ## Prerequisites
 
-- Ruby 3.2 or later, or JRuby 10 or later (standard library only for the
-  tool itself; CI tests 3.2, 3.3, 3.4, 4.0, JRuby 10.0 and the latest
+- Ruby 3.3 or later, or JRuby 10 or later (standard library only for the
+  tool itself; CI tests 3.3, 3.4, 4.0, JRuby 10.0 and the latest
   JRuby)
 - The [`pi` CLI](https://github.com/earendil-works/pi) installed
   (`pi --version`; tested with pi 1.3.0 and 1.4.0)

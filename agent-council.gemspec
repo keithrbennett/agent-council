@@ -30,7 +30,7 @@ Gem::Specification.new do |spec|
   # `rake release` creates, not main, which may describe a different version.
   spec.metadata['documentation_uri'] = "https://github.com/keithrbennett/agent-council/tree/v#{spec.version}"
   spec.metadata['bug_tracker_uri'] = 'https://github.com/keithrbennett/agent-council/issues'
-  spec.required_ruby_version = '>= 3.2'
+  spec.required_ruby_version = '>= 3.3'
 
   # Ship runtime assets (lib/ includes code plus the prompt templates under
   # lib/agent_council/templates/), user-facing documentation, and the small

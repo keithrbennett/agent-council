@@ -15,6 +15,6 @@ lists the provider/model pairs available to pi.
 agent-council does not sandbox the agents: they get pi's `bash` tool,
 running as you. See [Safety and privacy](README.md#safety-and-privacy) in the README before running it.
 
-Runs on Ruby 3.2 or later and on JRuby 10 or later (where SIGQUIT is left
+Runs on Ruby 3.3 or later and on JRuby 10 or later (where SIGQUIT is left
 to the JVM, so it doesn't stop a run). Native Windows is not supported; on
 Windows, run agent-council inside WSL.

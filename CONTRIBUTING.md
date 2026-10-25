@@ -66,7 +66,7 @@ After receiving explicit approval to submit a pull request:
    git checkout -b feature/my-change
    ```
 
-4. With Ruby 3.2 or later (or JRuby 10 or later), install dependencies, and optionally the pre-commit hook that runs the tests and RuboCop:
+4. With Ruby 3.3 or later (or JRuby 10 or later), install dependencies, and optionally the pre-commit hook that runs the tests and RuboCop:
 
    ```bash
    bin/setup
