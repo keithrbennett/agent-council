@@ -361,7 +361,7 @@ New gems are added only if they solve a meaningful problem that would otherwise 
 
 ## 18. Status and Future Work
 
-agent-council is at an early stage (0.x), so it does only what its core job needs. Features we hope to add include support for more harnesses than Pi (such as Claude Code and Codex) and token and cost tracking. A missing feature is usually just not built yet.
+agent-council is at an early stage (0.x), so it does only what its core job needs. Features we hope to add include support for more harnesses than Pi (such as Claude Code and Codex). A missing feature is usually just not built yet.
 
 `REVIEW_NOTES.md` separately tracks review findings that were considered and don't need to be re-raised: accepted risks and non-issues.
 
