@@ -264,7 +264,7 @@ agent-council --output-dir other-reports my-analysis-prompt.md  # overrides AGEN
 
 Its arguments are treated exactly as if typed first on the command line,
 so set it with care: for example, an `--output-dir` there makes
-`--consolidate` fail, as an explicit one does. The value is split into
+`--consolidate` fail, as if both were typed on the command line. The value is split into
 words like a shell would, but agent-council doesn't expand variables in
 it: `~` works, but a literal `$HOME` stays literal. (In a double-quoted
 `export`, your shell has already expanded it.) A malformed value, such as
