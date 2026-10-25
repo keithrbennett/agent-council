@@ -125,14 +125,6 @@ gem install agent-council
 agent-council -h
 ```
 
-If you manage Ruby dependencies with Bundler, add the gem to your application's
-Gemfile and run its commands through Bundler:
-
-```bash
-bundle add agent-council
-bundle exec agent-council -h
-```
-
 The gem creates no config for you; it ships samples in `examples/configs/`. See
 [Discovering and configuring models](#discovering-and-configuring-models)
 to write one. To work on agent-council itself, see
@@ -147,8 +139,7 @@ version. The help output shows where they are for the copy of
 `agent-council` you are actually running:
 
 ```bash
-agent-council -h               # see "Documentation (Local)" and "Examples (Local)"
-bundle exec agent-council -h   # in a Bundler project: the version in Gemfile.lock
+agent-council -h   # see "Documentation (Local)" and "Examples (Local)"
 ```
 
 To get the gem's directory in a shell variable:
