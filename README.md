@@ -176,18 +176,23 @@ argument; if omitted, `./agent-council.yml` in the current directory is used
 home directory. It is an error if neither exists. Each entry becomes one
 pi run with that `--provider` and `--model` (see
 [How it works](#how-it-works-and-what-pi-is-told) for the full command), so no Ruby changes
-are needed to add, remove, or swap models. A minimal config (replace the
-provider and model with ones you have credentials for):
+are needed to add, remove, or swap models. A small config (replace the
+providers and models with ones you have credentials for):
 
 ```yaml
 # agent-council.yml
 agents:
   - provider: opencode-go
     model: kimi-k2.7-code
+  - provider: openai
+    model: gpt-6.1-sol
 consolidator:            # optional; omit to skip consolidation
   provider: opencode-go
   model: kimi-k2.7-code
 ```
+
+Use at least two agents: a council of one gives a single viewpoint, and
+consolidating a single report adds cost without adding anything.
 
 The config must be a YAML mapping with a non-empty `agents` list. Each
 agent, and the consolidator, needs string `provider` and `model` values
