@@ -101,7 +101,9 @@ bundle exec rubocop
 The tests make no model calls. For changes affecting how pi is invoked or how its output is handled, also run agent-council for real, for example with the smoke-test prompt:
 
 ```bash
-./exe/agent-council examples/prompts/smoke-test_prompt.md examples/configs/single.yml
+./exe/agent-council \
+  examples/prompts/smoke-test_prompt.md \
+  examples/configs/single.yml
 ```
 
 `single.yml` names one provider and model; if you lack credentials for them, copy it and substitute a pair from `pi --list-models`, so a missing credential isn't mistaken for a bug in your change. Real runs send whatever the agents read and run to the configured providers, and cost money; see "Safety and privacy" in the [README](README.md#safety-and-privacy).

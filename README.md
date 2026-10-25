@@ -244,12 +244,18 @@ combined with `--consolidate`, which works on the reports of an existing
 run and writes its consolidated report into that run's directory.)
 
 ```bash
-agent-council my-analysis-prompt.md                   # requires ./agent-council.yml or ~/.agent-council.yml
-agent-council my-analysis-prompt.md other-config.yml  # alternate config
-agent-council -o tmp/council my-analysis-prompt.md    # reports under ./tmp/council
-agent-council -h                                      # usage, options, and any AGENT_COUNCIL_OPTS value
-agent-council -v                                      # version
-agent-council --consolidate agent-council-reports/2026-09-03/09-14-02  # see Consolidating a finished run
+# Uses ./agent-council.yml, else ~/.agent-council.yml
+agent-council my-analysis-prompt.md
+# Uses another config
+agent-council my-analysis-prompt.md other-config.yml
+# Writes reports under ./tmp/council
+agent-council -o tmp/council my-analysis-prompt.md
+# Usage, options, and any AGENT_COUNCIL_OPTS value
+agent-council -h
+# Version
+agent-council -v
+# See Consolidating a finished run
+agent-council --consolidate agent-council-reports/2026-09-03/09-14-02
 ```
 
 `AGENT_COUNCIL_OPTS` holds arguments that agent-council inserts before the
@@ -259,7 +265,8 @@ same option there:
 ```bash
 export AGENT_COUNCIL_OPTS="--output-dir tmp/council"
 agent-council my-analysis-prompt.md
-agent-council --output-dir other-reports my-analysis-prompt.md  # overrides AGENT_COUNCIL_OPTS
+# Overrides AGENT_COUNCIL_OPTS
+agent-council --output-dir other-reports my-analysis-prompt.md
 ```
 
 Its arguments are treated exactly as if typed first on the command line,
@@ -290,7 +297,9 @@ models — copy and edit one if yours differ.
   ensemble:
 
 ```bash
-agent-council "$AC_HOME/examples/prompts/code-base-state_prompt.md" "$AC_HOME/examples/configs/consolidated.yml"
+agent-council \
+  "$AC_HOME/examples/prompts/code-base-state_prompt.md" \
+  "$AC_HOME/examples/configs/consolidated.yml"
 ```
 
 - `examples/prompts/smoke-test_prompt.md` +
@@ -301,7 +310,9 @@ agent-council "$AC_HOME/examples/prompts/code-base-state_prompt.md" "$AC_HOME/ex
   the number in a short report):
 
 ```bash
-agent-council "$AC_HOME/examples/prompts/smoke-test_prompt.md" "$AC_HOME/examples/configs/single.yml"
+agent-council \
+  "$AC_HOME/examples/prompts/smoke-test_prompt.md" \
+  "$AC_HOME/examples/configs/single.yml"
 ```
 
 - `examples/prompts/project-name-prompt.md` + `examples/configs/consolidated.yml` —
@@ -309,7 +320,9 @@ agent-council "$AC_HOME/examples/prompts/smoke-test_prompt.md" "$AC_HOME/example
   differences across models:
 
 ```bash
-agent-council "$AC_HOME/examples/prompts/project-name-prompt.md" "$AC_HOME/examples/configs/consolidated.yml"
+agent-council \
+  "$AC_HOME/examples/prompts/project-name-prompt.md" \
+  "$AC_HOME/examples/configs/consolidated.yml"
 ```
 
 - `examples/prompts/recommend-model-ensemble-prompt.md` — a reusable prompt
@@ -486,9 +499,12 @@ You can open the run dir while agents are still working, or after a
 Ctrl-C (see [Stopping a run](#stopping-a-run)). Other access patterns:
 
 ```bash
-ls -d agent-council-reports/*/* | tail -1                # last run by name: usually the newest
-ls agent-council-reports/$(date +%F)/                    # today's runs
-ls agent-council-reports/*/*/reviews/*codebase-review*   # every analyst report for one question, all runs
+# Last run by name: usually the newest
+ls -d agent-council-reports/*/* | tail -1
+# Today's runs
+ls agent-council-reports/$(date +%F)/
+# Every analyst report for one question, all runs
+ls agent-council-reports/*/*/reviews/*codebase-review*
 ```
 
 While the agents run, a `Review Progress:` section prints one line per
