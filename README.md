@@ -88,9 +88,9 @@ in detail.
    agent-council ~/what-is-this-prompt.md
    ```
 
-   This calls each configured model, at your providers' usual cost, and
-   the agents send what they read to those providers; see
-   [Safety and privacy](#safety-and-privacy).
+   This calls each configured model at your providers' usual rates. Any
+   files an agent reads, and the output of any commands it runs, go to
+   that agent's provider; see [Safety and privacy](#safety-and-privacy).
 
 Each model's answer is saved as a Markdown file under
 `agent-council-reports/<yyyy-mm-dd>/<hh-mm-ss>/reviews/`, and the
