@@ -655,7 +655,7 @@ RSpec.describe AgentCouncil do
       write_run(fields: analyst_fields.merge('run_stamp' => '2026-09-03-09-14-02-2'))
       existing = File.join(run_dir, '2026-09-03-09-14-02-2_review_consolidated_pi_c_cm.md')
       File.write(existing, 'earlier')
-      expect_abort(/Consolidated report already exists: #{Regexp.escape(existing)}\nDelete it/)
+      expect_abort(/Consolidated report already exists: #{Regexp.escape(existing)}\nRename or delete it/)
       expect(File.read(existing)).to eq('earlier')
     end
 
