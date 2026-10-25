@@ -1,13 +1,31 @@
 # agent-council
 
-A small experiment: run the **same analytical prompt** through several
-models using the [Pi](https://github.com/earendil-works/pi) coding-agent
-harness, and save each model's final response as a separate Markdown report.
+Get a second opinion, and a third and a fourth, with one command:
+agent-council runs the **same analytical prompt** through several models
+using the [Pi](https://github.com/earendil-works/pi) coding-agent harness,
+saves each model's final response as a separate Markdown report, and can
+then have a **consolidator** model synthesize those reports into a single
+one.
 
-Goal: collect genuinely different viewpoints on the same question from
-multiple harness/model instances. This experiment is the short-term step —
-does varying only the models through one harness (Pi) already produce
-enough useful diversity? See [`DESIGN.md`](DESIGN.md) for the rationale and the
+Why use it:
+
+- **Catch what one model misses.** Different models notice different
+  problems and weigh trade-offs differently; asking several surfaces
+  blind spots that no single answer reveals.
+- **Get one report to read, not five.** The optional consolidator reads
+  every analyst report, checks their claims against your project where it
+  can, and writes a synthesis, so you can see where the models agree and
+  where they differ.
+- **Compare models on your own work.** Each model's report is kept
+  side by side, labeled with its source, for the same prompt and
+  codebase.
+- **Repeatable and cheap to set up.** A prompt file and a short YAML
+  config are all a run needs; every run's reports, prompt, and config
+  are saved together in a timestamped directory.
+
+This is also an experiment: does varying only the models through one
+harness (Pi) already produce enough useful diversity? See
+[`DESIGN.md`](DESIGN.md) for the rationale and the
 [deliberately deferred features](DESIGN.md#18-explicitly-deferred).
 
 > **Between releases**, the documentation in the repository describes the
