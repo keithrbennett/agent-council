@@ -14,7 +14,7 @@ Please do not submit a pull request unless you have first opened an issue and re
 
 Discussing a proposal in an issue does not by itself constitute approval. Please wait until the maintainer specifically confirms that a pull request would be welcome.
 
-This project is maintained by a single developer. Even a well-intentioned and technically sound pull request can require substantial review, testing, discussion, and ongoing maintenance. A proposed change may also conflict with the project's scope, design, priorities, or planned work. agent-council is a deliberately small experiment: see the design rule and the list of deliberately deferred features in [DESIGN.md](DESIGN.md).
+This project is maintained by a single developer. Even a well-intentioned and technically sound pull request can require substantial review, testing, discussion, and ongoing maintenance. A proposed change may also conflict with the project's scope, design, priorities, or planned work. agent-council is deliberately small: see the design rule and the status and future work section in [DESIGN.md](DESIGN.md).
 
 The contribution process is:
 
@@ -66,7 +66,7 @@ After receiving explicit approval to submit a pull request:
    git checkout -b feature/my-change
    ```
 
-4. With Ruby 3.2 or later (or JRuby 10 or later), install dependencies, and optionally the pre-commit hook that runs the tests and RuboCop:
+4. With Ruby 3.3 or later (or JRuby 10 or later), install dependencies, and optionally the pre-commit hook that runs the tests and RuboCop:
 
    ```bash
    bin/setup
@@ -101,7 +101,9 @@ bundle exec rubocop
 The tests make no model calls. For changes affecting how pi is invoked or how its output is handled, also run agent-council for real, for example with the smoke-test prompt:
 
 ```bash
-./exe/agent-council examples/prompts/smoke-test_prompt.md examples/configs/single.yml
+./exe/agent-council \
+  examples/prompts/smoke-test_prompt.md \
+  examples/configs/single.yml
 ```
 
 `single.yml` names one provider and model; if you lack credentials for them, copy it and substitute a pair from `pi --list-models`, so a missing credential isn't mistaken for a bug in your change. Real runs send whatever the agents read and run to the configured providers, and cost money; see "Safety and privacy" in the [README](README.md#safety-and-privacy).

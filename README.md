@@ -1,14 +1,31 @@
 # agent-council
 
-A small experiment: run the **same analytical prompt** through several
-models using the [Pi](https://github.com/earendil-works/pi) coding-agent
-harness, and save each model's final response as a separate Markdown report.
+Get a second opinion, and a third and a fourth, with one command:
+agent-council runs the **same analytical prompt** through several models
+using the [Pi](https://github.com/earendil-works/pi) coding-agent harness,
+saves each model's final response as a separate Markdown report, and can
+then have a **consolidator** model synthesize those reports into a single
+one.
 
-Goal: collect genuinely different viewpoints on the same question from
-multiple harness/model instances. This experiment is the short-term step —
-does varying only the models through one harness (Pi) already produce
-enough useful diversity? See [`DESIGN.md`](DESIGN.md) for the rationale and the
-[deliberately deferred features](DESIGN.md#18-explicitly-deferred).
+Why use it:
+
+- **Catch what one model misses.** Different models notice different
+  problems and weigh trade-offs differently; asking several surfaces
+  blind spots that no single answer reveals.
+- **Get one report to read, not five.** The optional consolidator reads
+  every analyst report, checks their claims against your project where it
+  can, and writes a synthesis, so you can see where the models agree and
+  where they differ.
+- **Compare models on your own work.** Each model's report is kept
+  side by side, labeled with its source, for the same prompt and
+  codebase.
+- **Repeatable and cheap to set up.** A prompt file and a short YAML
+  config are all a run needs; every run's reports, prompt, and config
+  are saved together in a timestamped directory.
+
+The project is at an early stage; support for more harnesses than Pi is
+among the [planned features](DESIGN.md#18-status-and-future-work). See
+[`DESIGN.md`](DESIGN.md) for the rationale.
 
 > **Between releases**, the documentation in the repository describes the
 > next release, not the latest published one, so it may cover features
@@ -21,7 +38,7 @@ A first run from scratch, using two models and a consolidator that
 synthesizes their reports. The sections after this one cover each step
 in detail.
 
-1. **Install the prerequisites:** Ruby 3.2+ (or JRuby 10+) and the
+1. **Install the prerequisites:** Ruby 3.3+ (or JRuby 10+) and the
    [`pi` CLI](https://github.com/earendil-works/pi) (`pi --version`). See
    [Prerequisites](#prerequisites).
 2. **Set up credentials for at least one provider in pi** (see
@@ -71,9 +88,9 @@ in detail.
    agent-council ~/what-is-this-prompt.md
    ```
 
-   This calls each configured model, at your providers' usual cost, and
-   the agents send what they read to those providers; see
-   [Safety and privacy](#safety-and-privacy).
+   This calls each configured model at your providers' usual rates. Any
+   files an agent reads, and the output of any commands it runs, go to
+   that agent's provider; see [Safety and privacy](#safety-and-privacy).
 
 Each model's answer is saved as a Markdown file under
 `agent-council-reports/<yyyy-mm-dd>/<hh-mm-ss>/reviews/`, and the
@@ -84,8 +101,8 @@ consolidator, see
 
 ## Prerequisites
 
-- Ruby 3.2 or later, or JRuby 10 or later (standard library only for the
-  tool itself; CI tests 3.2, 3.3, 3.4, 4.0, JRuby 10.0 and the latest
+- Ruby 3.3 or later, or JRuby 10 or later (standard library only for the
+  tool itself; CI tests 3.3, 3.4, 4.0, JRuby 10.0 and the latest
   JRuby)
 - The [`pi` CLI](https://github.com/earendil-works/pi) installed
   (`pi --version`; tested with pi 1.3.0 and 1.4.0)
@@ -108,14 +125,6 @@ gem install agent-council
 agent-council -h
 ```
 
-If you manage Ruby dependencies with Bundler, add the gem to your application's
-Gemfile and run its commands through Bundler:
-
-```bash
-bundle add agent-council
-bundle exec agent-council -h
-```
-
 The gem creates no config for you; it ships samples in `examples/configs/`. See
 [Discovering and configuring models](#discovering-and-configuring-models)
 to write one. To work on agent-council itself, see
@@ -130,21 +139,22 @@ version. The help output shows where they are for the copy of
 `agent-council` you are actually running:
 
 ```bash
-agent-council -h               # see "Documentation (Local)" and "Examples (Local)"
-bundle exec agent-council -h   # in a Bundler project: the version in Gemfile.lock
+agent-council -h   # see "Documentation (Local)" and "Examples (Local)"
 ```
 
 To get the gem's directory in a shell variable:
 
 ```bash
-AC_HOME=$(ruby -e 'print Gem::Specification.find_by_name("agent-council", ">= 0.a").full_gem_path')
+AC_HOME=$(ruby <<'RUBY'
+print Gem::Specification
+  .find_by_name('agent-council', '>= 0.a')
+  .full_gem_path
+RUBY
+)
 ```
 
 If several versions are installed, this finds the newest, prereleases
 included: the same one a plain `agent-council` command runs.
-
-In a Bundler project, prefix it with `bundle exec` (or use
-`bundle info agent-council --path`) to get the version Bundler selects.
 
 ## Discovering and configuring models
 
@@ -166,18 +176,23 @@ argument; if omitted, `./agent-council.yml` in the current directory is used
 home directory. It is an error if neither exists. Each entry becomes one
 pi run with that `--provider` and `--model` (see
 [How it works](#how-it-works-and-what-pi-is-told) for the full command), so no Ruby changes
-are needed to add, remove, or swap models. A minimal config (replace the
-provider and model with ones you have credentials for):
+are needed to add, remove, or swap models. A small config (replace the
+providers and models with ones you have credentials for):
 
 ```yaml
 # agent-council.yml
 agents:
   - provider: opencode-go
     model: kimi-k2.7-code
+  - provider: openai
+    model: gpt-6.1-sol
 consolidator:            # optional; omit to skip consolidation
   provider: opencode-go
   model: kimi-k2.7-code
 ```
+
+Use at least two agents: a council of one gives a single viewpoint, and
+consolidating a single report adds cost without adding anything.
 
 The config must be a YAML mapping with a non-empty `agents` list. Each
 agent, and the consolidator, needs string `provider` and `model` values
@@ -185,8 +200,9 @@ agent, and the consolidator, needs string `provider` and `model` values
 a date or `yes`); other keys are ignored.
 
 More samples are in [`examples/configs/`](examples/configs/), which is
-included in the installed gem. [`pi-models`](#occasional-utility-pi-models)
-also lists the available models, in forms suited to scripts.
+included in the installed gem. For scripts and agents,
+[`pi-models`](#occasional-utility-pi-models) lists the models in
+machine-readable forms.
 
 For a recommended code-review ensemble, see
 [`code-review-agents.md`](code-review-agents.md). It is Markdown, not a
@@ -224,35 +240,43 @@ Reports land in `./agent-council-reports` under that working directory,
 so each analyzed project gets its own reports tree. To put them
 elsewhere, pass `-o DIR` / `--output-dir DIR`; a relative `DIR` is
 resolved against the working directory. (An explicit `--output-dir` can't be
-combined with `--consolidate`, which writes into the run dir it is given.)
+combined with `--consolidate`, which works on the reports of an existing
+run and writes its consolidated report into that run's directory.)
 
 ```bash
-agent-council my-analysis-prompt.md                   # requires ./agent-council.yml or ~/.agent-council.yml
-agent-council my-analysis-prompt.md other-config.yml  # alternate config
-agent-council -o tmp/council my-analysis-prompt.md    # reports under ./tmp/council
-agent-council -h                                      # usage, options, and any AGENT_COUNCIL_OPTS value
-agent-council -v                                      # version
-agent-council --consolidate agent-council-reports/2026-09-03/09-14-02  # see Consolidating a finished run
+# Uses ./agent-council.yml, else ~/.agent-council.yml
+agent-council my-analysis-prompt.md
+# Uses another config
+agent-council my-analysis-prompt.md other-config.yml
+# Writes reports under ./tmp/council
+agent-council -o tmp/council my-analysis-prompt.md
+# Usage, options, and any AGENT_COUNCIL_OPTS value
+agent-council -h
+# Version
+agent-council -v
+# See Consolidating a finished run
+agent-council --consolidate agent-council-reports/2026-09-03/09-14-02
 ```
 
-`AGENT_COUNCIL_OPTS` can set default command-line options (currently only
-`-o` / `--output-dir`), with explicit command-line arguments taking precedence:
+`AGENT_COUNCIL_OPTS` holds arguments that agent-council inserts before the
+command-line ones, so an option given on the command line overrides the
+same option there:
 
 ```bash
 export AGENT_COUNCIL_OPTS="--output-dir tmp/council"
 agent-council my-analysis-prompt.md
-agent-council --output-dir other-reports my-analysis-prompt.md  # overrides AGENT_COUNCIL_OPTS
+# Overrides AGENT_COUNCIL_OPTS
+agent-council --output-dir other-reports my-analysis-prompt.md
 ```
 
-It is only for default options, not positional arguments or one-shot
-switches such as `--consolidate`, `--help`, or `--version`. The value is
-split into words like a shell would, but agent-council doesn't expand
-variables in it: `~` works, but a
-literal `$HOME` stays literal. (In a double-quoted `export`, your shell
-has already expanded it.) An `--output-dir` set there
-is ignored by `--consolidate` (only an explicit one is an error). A
-malformed value makes every command except `-h`/`--help` and `-v`/`--version` fail
-(`--consolidate` included), with a message naming `AGENT_COUNCIL_OPTS`.
+Its arguments are treated exactly as if typed first on the command line,
+so set it with care: for example, an `--output-dir` there makes
+`--consolidate` fail, as if both were typed on the command line. The value is split into
+words like a shell would, but agent-council doesn't expand variables in
+it: `~` works, but a literal `$HOME` stays literal. (In a double-quoted
+`export`, your shell has already expanded it.) A malformed value, such as
+one with an unclosed quote, makes every command fail, `-h` and `-v`
+included, with a message naming `AGENT_COUNCIL_OPTS`.
 
 Relative paths are resolved from the working directory. agent-council
 expands `~` itself only in `--output-dir`; in other paths, the shell
@@ -273,7 +297,9 @@ models — copy and edit one if yours differ.
   ensemble:
 
 ```bash
-agent-council "$AC_HOME/examples/prompts/code-base-state_prompt.md" "$AC_HOME/examples/configs/consolidated.yml"
+agent-council \
+  "$AC_HOME/examples/prompts/code-base-state_prompt.md" \
+  "$AC_HOME/examples/configs/consolidated.yml"
 ```
 
 - `examples/prompts/smoke-test_prompt.md` +
@@ -284,7 +310,9 @@ agent-council "$AC_HOME/examples/prompts/code-base-state_prompt.md" "$AC_HOME/ex
   the number in a short report):
 
 ```bash
-agent-council "$AC_HOME/examples/prompts/smoke-test_prompt.md" "$AC_HOME/examples/configs/single.yml"
+agent-council \
+  "$AC_HOME/examples/prompts/smoke-test_prompt.md" \
+  "$AC_HOME/examples/configs/single.yml"
 ```
 
 - `examples/prompts/project-name-prompt.md` + `examples/configs/consolidated.yml` —
@@ -292,7 +320,9 @@ agent-council "$AC_HOME/examples/prompts/smoke-test_prompt.md" "$AC_HOME/example
   differences across models:
 
 ```bash
-agent-council "$AC_HOME/examples/prompts/project-name-prompt.md" "$AC_HOME/examples/configs/consolidated.yml"
+agent-council \
+  "$AC_HOME/examples/prompts/project-name-prompt.md" \
+  "$AC_HOME/examples/configs/consolidated.yml"
 ```
 
 - `examples/prompts/recommend-model-ensemble-prompt.md` — a reusable prompt
@@ -364,9 +394,12 @@ any suffix). Exit status is 0 only if the consolidation succeeded.
 - **The consolidation instructions are the current template's** (the
   installed gem's, or a checkout's own), which may have changed since
   the run.
-- **Existing reports are kept.** A report from the same consolidator
-  stops the run (delete that file to redo it); reports from different
-  consolidators sit side by side, so you can compare their syntheses.
+- **Existing reports are kept.** If a file with the name the new
+  report would get already exists (as it does when the same model
+  configuration, meaning harness, provider and model, consolidated the run
+  before), nothing runs; rename or delete that file to redo it. Reports
+  from different model configurations have different names and sit side
+  by side, so you can compare their syntheses.
 - **The run needs at least one analyst report written by
   agent-council**: the prompt and config copies are found through the
   reports' front matter (`prompt_file` and `config_file`, with
@@ -388,15 +421,16 @@ given):
 agent-council-reports/
   2026-09-02/
     16-21-43/
-      codebase-review.md                                     # copy of the prompt (its own file name)
-      analyst_format.md                                      # copy of the report-format addendum sent with the prompt
-      consolidated.yml                                       # copy of the config used (its own file name)
-      reviews/                                               # analysts' reports
+      codebase-review.md   # prompt copy
+      analyst_format.md    # report-format addendum copy
+      consolidated.yml     # config copy
+      reviews/             # analyst reports
         2026-09-02-16-21-43_codebase-review_01_pi_opencode-go_glm-5.3.md
         2026-09-02-16-21-43_codebase-review_02_pi_opencode-go_kimi-k3.md
         2026-09-02-16-21-43_codebase-review_03_pi_openai_gpt-6.1-sol.md
         2026-09-02-16-21-43_codebase-review_04_pi_cursor_claude-sonnet-5-5-high.md
-      2026-09-02-16-21-43_codebase-review_consolidated_pi_opencode-go_glm-5.3.md  # if consolidator configured
+      # consolidated report, if a consolidator is configured:
+      2026-09-02-16-21-43_codebase-review_consolidated_pi_opencode-go_glm-5.3.md
     18-05-11/
       ...
   2026-09-03/
@@ -410,12 +444,13 @@ agent-council-reports/
   time repeating when clocks fall back or are set back), the new run gets
   `hh-mm-ss-2`, `-3`, ... instead, so each run has its own directory.
 - **Report filenames** carry everything else:
-  `<yyyy-mm-dd>-<hh-mm-ss>_<query-slug>_<agent-number>_pi_<provider>_<model>.md`,
+  `<yyyy-mm-dd>-<hh-mm-ss>_<query-slug>_<agent-number>_<harness>_<provider>_<model>.md`,
   so a report stays self-describing when you copy or attach it outside the
   tree (a consolidated report has `consolidated` in place of
   `<agent-number>`); `<hh-mm-ss>` includes the run dir's suffix, if any,
   and `<provider>` and `<model>` are sanitized like the query slug below,
-  but keep their case.
+  but keep their case. `<harness>` is currently always `pi`, the only
+  harness agent-council supports so far.
   `<agent-number>` is the agent's 1-based position in the config's
   `agents` list (`01`, `02`, ...), so every report has a unique name even
   if the same provider/model is configured more than once. The query slug
@@ -469,9 +504,12 @@ You can open the run dir while agents are still working, or after a
 Ctrl-C (see [Stopping a run](#stopping-a-run)). Other access patterns:
 
 ```bash
-ls -d agent-council-reports/*/* | tail -1                # last run by name: usually the newest
-ls agent-council-reports/$(date +%F)/                    # today's runs
-ls agent-council-reports/*/*/reviews/*codebase-review*   # every analyst report for one question, all runs
+# Last run by name: usually the newest
+ls -d agent-council-reports/*/* | tail -1
+# Today's runs
+ls agent-council-reports/$(date +%F)/
+# Every analyst report for one question, all runs
+ls agent-council-reports/*/*/reviews/*codebase-review*
 ```
 
 While the agents run, a `Review Progress:` section prints one line per
@@ -586,12 +624,10 @@ expose.
 ## Limitations (deliberate)
 
 No retries or timeouts of agent-council's own (pi itself may retry
-transient provider failures), no cost tracking, no ranking
+transient provider failures), no ranking
 or scoring of reports
 (beyond the optional consolidator's synthesis), no manifests or indexes —
-the directory layout is the index. This is an experiment to answer one
-question: is Pi-based model diversity worth building on? See
-[`DESIGN.md`](DESIGN.md) §18–20.
+the directory layout is the index. See [`DESIGN.md`](DESIGN.md) §18–19.
 
 ## Stability
 
@@ -617,16 +653,25 @@ process.
 
 ## Occasional utility: `pi-models`
 
-The gem also includes `pi-models`, a helper for listing the provider/model
-pairs available to the `pi` CLI — those of the providers you have set up
-credentials for (see
+To choose models yourself, use `pi --list-models` (see
 [Discovering and configuring models](#discovering-and-configuring-models)).
-It prints a table, JSON, or one `provider/id` per line for shell use
-(`pi-models -h` lists the options and the JSON fields); in a config entry, its `provider` is
-`provider` and its `id` is `model`. It gets the models over pi's RPC
-interface rather than from `pi --list-models`, so its list can include
-models that `pi --list-models` doesn't (e.g. extra `github-copilot`
-models), and those may not be usable on your account. It requires `pi` to be installed and can be run directly after
-installing the gem; like agent-council, it needs WSL on Windows.
+The gem also includes `pi-models`, which lists the same kind of
+provider/model pairs in forms meant for scripts and agents; the sample
+`recommend-model-ensemble-prompt.md` has its agents run it. They differ in
+two ways:
+
+- **Output.** `pi --list-models` prints a table for people and supports
+  fuzzy search. `pi-models` prints a table, JSON with pi's model fields
+  (`--json`, for `jq`), or one `provider/id` per line (`--ids`, for shell
+  loops), and exits non-zero with a clear message if pi is missing or
+  fails. `pi-models -h` lists the options and the JSON fields. In a config
+  entry, its `provider` is `provider` and its `id` is `model`.
+- **Source.** `pi-models` asks pi over its RPC interface instead of running
+  `pi --list-models`, so its list can include models that
+  `pi --list-models` omits (e.g. extra `github-copilot` models), and those
+  may not be usable on your account.
+
+`pi-models` requires `pi` and is on your `PATH` once the gem is installed;
+like agent-council, it needs WSL on Windows.
 
 [pi-docs]: https://github.com/earendil-works/pi/tree/main/packages/coding-agent/docs

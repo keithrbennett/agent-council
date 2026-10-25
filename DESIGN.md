@@ -4,7 +4,7 @@
 
 The long-term goal is to collect genuinely different viewpoints on the same question from multiple harness/model instances.
 
-This repository is the short-term step: an experiment to validate whether varying only the models under a single harness (Pi) already produces sufficiently diverse and useful results, before harness diversity is added.
+This repository is the first step: it varies only the models, under a single harness (Pi). Harness diversity comes later (§18).
 
 It is packaged as a gem for easy installation, but it is intentionally not a general-purpose framework.
 
@@ -178,7 +178,7 @@ pi is started with an argv array, not through a shell.
 
 ## 10. Repository and System Safety
 
-For this experiment, agents are analyzers, not modifiers.
+Agents are analyzers, not modifiers.
 
 The scaffolding appended to pi's system prompt (`PiHarness.scaffold_text` in `lib/agent_council/harnesses/pi_harness.rb`) states the rules agents get, and the README's [How it works](README.md#how-it-works-and-what-pi-is-told) section summarizes them. They are instructions, not enforced restrictions: the `--tools` allowlist, which activates only the tools it lists, is the only enforcement, and `bash` remains a full shell running as the user (see the README's [Safety and privacy](README.md#safety-and-privacy)). A shell is kept because investigation (`git log`, dependency inspection, running a documented command) is much of what makes an analysis useful.
 
@@ -202,7 +202,7 @@ Pi may automatically load project-specific context such as:
 
 The analyzed repository's own `.pi` resources load only if pi already trusts the project, since agent-council passes no `--approve`.
 
-For this experiment, useful real-world analysis matters more than establishing a laboratory benchmark.
+Useful real-world analysis matters more than establishing a laboratory benchmark.
 
 Therefore Pi behaves as it normally would when analyzing a repository, except that:
 
@@ -267,12 +267,9 @@ agent-council-reports/
 ```
 
 The name says which tool wrote the directory, since it lands in someone
-else's tree. `-o` / `--output-dir` (or an `AGENT_COUNCIL_OPTS` default)
+else's tree. `-o` / `--output-dir` (given directly or in `AGENT_COUNCIL_OPTS`)
 replaces only this base directory; everything beneath it is the same. The
-README's [Running](README.md#running) section has the rules. An
-`AGENT_COUNCIL_OPTS` default is ignored by `--consolidate`, rather than
-rejected like an explicit `--output-dir`, since it is not specific to the
-run.
+README's [Running](README.md#running) section has the rules.
 
 Each run writes a timestamped, day-bucketed run directory (see §12), so
 repeated runs accumulate without overwriting; beyond `--consolidate` (§6),
@@ -345,7 +342,7 @@ Dev-only files (Gemfile, Rakefile, lint configs, CI workflows, `bin/setup`,
 `spec.files` is the authority on what ships.
 
 `lib/` stays shallow, without namespaces deeper than `harnesses/`
-(such as `lib/agent_council/services/...`) unless the experiment grows enough to
+(such as `lib/agent_council/services/...`) unless the project grows enough to
 require them. A plain implementation is preferred to a speculative
 framework.
 
@@ -359,63 +356,18 @@ New gems are added only if they solve a meaningful problem that would otherwise 
 
 ---
 
-## 18. Explicitly Deferred
+## 18. Status and Future Work
 
-The following are deliberately not implemented:
+agent-council is at an early stage (0.x), so it does only what its core job needs. Features we hope to add include support for more harnesses than Pi (such as Claude Code and Codex). A missing feature is usually just not built yet.
 
-- `oneharness` integration;
-- native Claude Code integration;
-- native Codex integration;
-- native Cursor integration (the `cursor` provider works through pi);
-- native OpenCode integration;
-- Gemini CLI integration;
-- generalized runner abstraction;
-- report comparison UI;
-- report scoring;
-- report/process status taxonomy;
-- manifests;
-- prompt hashes;
-- raw stdout/stderr archives;
-- token and cost tracking;
-- CLI-version recording;
-- automatic retries (beyond pi's own);
-- budget controls;
-- authentication abstraction;
-- worktree isolation;
-- repository-state recording;
-- run-history management;
-- schema validation;
-- controlled context modes;
-- RubyLLM integration;
-- web UI;
-- persistent services or daemons.
-
-These are possible later enhancements, not prerequisites.
-
-Distinct from the above: `REVIEW_NOTES.md` tracks review findings that
-were considered and don't need to be re-raised — accepted risks and
-non-issues — rather than features not yet built.
+`REVIEW_NOTES.md` separately tracks review findings that were considered and don't need to be re-raised: accepted risks and non-issues.
 
 ---
 
-## 19. What We Want to Learn
-
-The experiment should answer:
-
-> Does running the same codebase-analysis prompt through several different models under Pi produce sufficiently different and useful analyses to justify keeping this workflow?
-
-After using it on real tasks, we can then ask:
-
-> Does using different native harnesses such as Claude Code and Codex add enough value beyond Pi-based model diversity to justify a second execution layer?
-
-Only then should we decide whether to integrate `oneharness`.
-
----
-
-## 20. Design Rule
+## 19. Design Rule
 
 Every proposed feature should pass this test:
 
-> Is this necessary to run the same prompt through multiple Pi-accessible models and save their answers?
+> Does this help get independent answers to the same prompt from multiple models, or make sense of them?
 
-If not, defer it.
+If not, leave it out. Consolidation passes; a general-purpose agent framework does not.

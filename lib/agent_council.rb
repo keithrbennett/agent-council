@@ -66,10 +66,7 @@ module AgentCouncil
   CWD_CONFIG_NAME = 'agent-council.yml'
   HOME_CONFIG_NAME = '.agent-council.yml'
 
-  # Shell-style default CLI options from the environment. Unlike the real
-  # command line, these may contain only option defaults (currently only
-  # --output-dir), not positional args or one-shot switches such as
-  # --consolidate, --help or --version.
+  # Shell-style arguments from the environment, inserted before ARGV.
   ENV_OPTS_VAR = 'AGENT_COUNCIL_OPTS'
 
   # The explicit CONFIG_FILE argument if given, else ./agent-council.yml if
@@ -496,35 +493,6 @@ module AgentCouncil
     raise ArgumentError, "Invalid #{ENV_OPTS_VAR} value: #{e.message}"
   end
 
-  # Default CLI options parsed from AGENT_COUNCIL_OPTS. These are merged
-  # under the real CLI parse, so explicit command-line arguments still win.
-  # The one-shot switches are registered only to be rejected, so that
-  # OptionParser's own matching (abbreviations such as --he, bundled shorts
-  # such as -hx) catches them and its built-in --help and --version never run.
-  module_function def env_option_defaults(env = ENV)
-    args = env_options(env)
-    return {} if args.empty?
-
-    defaults = {}
-    OptionParser.new do |opts|
-      opts.on('-o', '--output-dir DIR') { |dir| defaults[:output_dir] = dir }
-      opts.on('--consolidate [RUN_DIR]') { reject_env_option('--consolidate') }
-      opts.on('-h', '--help') { reject_env_option('--help') }
-      opts.on('-v', '--version') { reject_env_option('--version') }
-    end.parse!(args)
-    return defaults if args.empty?
-
-    raise ArgumentError,
-      "#{ENV_OPTS_VAR} may contain only default options (currently only --output-dir); got: #{args.join(' ')}"
-  rescue OptionParser::ParseError => e
-    raise ArgumentError, "Invalid #{ENV_OPTS_VAR} value: #{e.message}"
-  end
-
-  module_function def reject_env_option(name)
-    raise ArgumentError,
-      "#{ENV_OPTS_VAR} may not include #{name}; use it only for default options (currently only --output-dir)"
-  end
-
   # options: receives the parsed option values (:consolidate, :output_dir).
   # env: where -h finds the current AGENT_COUNCIL_OPTS value.
   module_function def option_parser(options = {}, env = ENV)
@@ -557,7 +525,7 @@ module AgentCouncil
       opts.on('-o', '--output-dir DIR',
         'Base directory for run dirs, as DIR/<date>/<time>',
         "(default: ./#{DEFAULT_REPORTS_DIR_NAME})",
-        'Not allowed with --consolidate', "(which ignores an #{ENV_OPTS_VAR} default)") do |dir|
+        'Not allowed with --consolidate') do |dir|
         options[:output_dir] = dir
       end
 
@@ -573,12 +541,12 @@ module AgentCouncil
 
       opts.separator ''
       opts.separator 'Environment:'
-      opts.separator "  #{ENV_OPTS_VAR} sets default options (currently only --output-dir),"
-      opts.separator '  which command-line options override. It cannot contain positional args'
-      opts.separator '  or one-shot switches such as --consolidate, --help or --version.'
+      opts.separator "  #{ENV_OPTS_VAR} holds arguments inserted before the command-line ones,"
+      opts.separator '  so an option given on the command line overrides the same option there.'
       opts.separator "  Example: export #{ENV_OPTS_VAR}=\"--output-dir tmp/council\""
-      # Scrubbed and inspected, so invalid bytes or newlines can't break -h.
-      env_value = env_options_value(env).to_s.scrub
+      # Inspected, so newlines can't break -h. (A value with invalid bytes
+      # never gets here: env_options rejects it first.)
+      env_value = env_options_value(env).to_s
       opts.separator "  Currently set to: #{env_value.inspect}" unless env_value.strip.empty?
       opts.separator ''
       opts.separator 'Examples:'
@@ -591,39 +559,27 @@ module AgentCouncil
 
   module_function def main(argv)
     abort_if_native_windows
-    # The CLI is parsed first, so -h and -v work even when AGENT_COUNCIL_OPTS
-    # is bad, and into its own hash, so checks can tell explicit options from
-    # env defaults.
-    cli = {}
-    parser = option_parser(cli)
+    options = {}
+    parser = option_parser(options)
     begin
-      argv = parser.parse(argv)
+      argv = parser.parse(env_options + argv)
+    rescue ArgumentError => e # a malformed AGENT_COUNCIL_OPTS
+      abort e.message
     rescue OptionParser::ParseError => e
       warn e.message
       warn parser
       exit 1
     end
-    env_defaults =
-      begin
-        env_option_defaults
-      rescue ArgumentError => e
-        warn e.message
-        exit 1
-      end
-    options = env_defaults.merge(cli)
-    # Appended to output-dir errors, so a bad env default is traced to its source.
-    from_env = !cli.key?(:output_dir) && env_defaults.key?(:output_dir)
-    output_dir_source = from_env ? " (from #{ENV_OPTS_VAR})" : ''
 
     if options[:consolidate]
       unless argv.empty?
         warn parser
         exit 1
       end
-      # The consolidation report goes into RUN_DIR itself; an env default for
-      # --output-dir is irrelevant here, but an explicit CLI one is an error.
-      if cli.key?(:output_dir)
-        abort '--output-dir cannot be used with --consolidate, which writes into RUN_DIR'
+      # The consolidation report goes into RUN_DIR itself.
+      if options.key?(:output_dir)
+        abort "--output-dir (given directly or in #{ENV_OPTS_VAR}) cannot be used with --consolidate, " \
+          'which writes into RUN_DIR'
       end
       consolidate_run(options[:consolidate])
     end
@@ -632,20 +588,20 @@ module AgentCouncil
     # rather than a backtrace. A blank value (e.g. -o "$UNSET_VAR") would
     # otherwise resolve to the cwd and scatter day dirs over the project.
     if options[:output_dir]&.strip&.empty?
-      abort "--output-dir#{output_dir_source} needs a directory; got an empty value"
+      abort '--output-dir needs a directory; got an empty value'
     end
     reports_root =
       begin
         reports_dir(options[:output_dir])
       rescue ArgumentError => e # e.g. ~nosuchuser/x
-        abort "Invalid --output-dir#{output_dir_source} #{options[:output_dir]}: #{e.message}"
+        abort "Invalid --output-dir #{options[:output_dir]}: #{e.message}"
       end
     # mkdir_p would fail on a file anywhere along the path, so check the
     # nearest part that exists, which is the dir itself if it exists.
     existing = reports_root
     existing = File.dirname(existing) until File.exist?(existing)
     unless File.directory?(existing)
-      abort "Output dir #{relative_path(reports_root)}#{output_dir_source} can't be created: " \
+      abort "Output dir #{relative_path(reports_root)} can't be created: " \
         "#{relative_path(existing)} is not a directory"
     end
 
@@ -727,7 +683,7 @@ module AgentCouncil
       begin
         claim_run_dir(day_dir, now.strftime('%H-%M-%S'))
       rescue SystemCallError => e # e.g. no write permission
-        abort "Cannot create a run dir under #{relative_path(reports_root)}#{output_dir_source}: #{e.message}"
+        abort "Cannot create a run dir under #{relative_path(reports_root)}: #{e.message}"
       end
     run_stamp = "#{day}-#{run_name}"
     iso_stamp = iso_timestamp(now)
@@ -860,7 +816,7 @@ module AgentCouncil
     end
     if File.exist?(File.join(run_dir, filename))
       abort "Consolidated report already exists: #{relative_path(File.join(run_dir, filename))}\n" \
-        'Delete it to consolidate again with the same model.'
+        'Rename or delete it to consolidate again with the same model configuration.'
     end
     prompt = File.read(prompt_path, encoding: ENCODING)
     abort "Prompt copy is empty: #{prompt_path}" if prompt.empty?
