@@ -816,7 +816,7 @@ module AgentCouncil
     end
     if File.exist?(File.join(run_dir, filename))
       abort "Consolidated report already exists: #{relative_path(File.join(run_dir, filename))}\n" \
-        'Rename or delete it to consolidate again with the same model.'
+        'Rename or delete it to consolidate again with the same model configuration.'
     end
     prompt = File.read(prompt_path, encoding: ENCODING)
     abort "Prompt copy is empty: #{prompt_path}" if prompt.empty?

@@ -395,9 +395,10 @@ any suffix). Exit status is 0 only if the consolidation succeeded.
   installed gem's, or a checkout's own), which may have changed since
   the run.
 - **Existing reports are kept.** If a file with the name the new
-  report would get already exists (as it does when the same consolidator
-  ran before), nothing runs; rename or delete that file to redo it.
-  Reports from different consolidators have different names and sit side
+  report would get already exists (as it does when the same model
+  configuration, meaning harness, provider and model, consolidated the run
+  before), nothing runs; rename or delete that file to redo it. Reports
+  from different model configurations have different names and sit side
   by side, so you can compare their syntheses.
 - **The run needs at least one analyst report written by
   agent-council**: the prompt and config copies are found through the
