@@ -371,6 +371,6 @@ agent-council is at an early stage (0.x), so it does only what its core job need
 
 Every proposed feature should pass this test:
 
-> Is this necessary to run the same prompt through multiple Pi-accessible models and save their answers?
+> Does this help get independent answers to the same prompt from multiple models, or make sense of them?
 
-If not, defer it.
+If not, leave it out. Consolidation passes; a general-purpose agent framework does not.
