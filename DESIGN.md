@@ -267,12 +267,9 @@ agent-council-reports/
 ```
 
 The name says which tool wrote the directory, since it lands in someone
-else's tree. `-o` / `--output-dir` (or an `AGENT_COUNCIL_OPTS` default)
+else's tree. `-o` / `--output-dir` (given directly or in `AGENT_COUNCIL_OPTS`)
 replaces only this base directory; everything beneath it is the same. The
-README's [Running](README.md#running) section has the rules. An
-`AGENT_COUNCIL_OPTS` default is ignored by `--consolidate`, rather than
-rejected like an explicit `--output-dir`, since it is not specific to the
-run.
+README's [Running](README.md#running) section has the rules.
 
 Each run writes a timestamped, day-bucketed run directory (see §12), so
 repeated runs accumulate without overwriting; beyond `--consolidate` (§6),

@@ -252,8 +252,9 @@ agent-council -v                                      # version
 agent-council --consolidate agent-council-reports/2026-09-03/09-14-02  # see Consolidating a finished run
 ```
 
-`AGENT_COUNCIL_OPTS` can set default command-line options (currently only
-`-o` / `--output-dir`), with explicit command-line arguments taking precedence:
+`AGENT_COUNCIL_OPTS` holds arguments that agent-council inserts before the
+command-line ones, so an option given on the command line overrides the
+same option there:
 
 ```bash
 export AGENT_COUNCIL_OPTS="--output-dir tmp/council"
@@ -261,15 +262,14 @@ agent-council my-analysis-prompt.md
 agent-council --output-dir other-reports my-analysis-prompt.md  # overrides AGENT_COUNCIL_OPTS
 ```
 
-It is only for default options, not positional arguments or one-shot
-switches such as `--consolidate`, `--help`, or `--version`. The value is
-split into words like a shell would, but agent-council doesn't expand
-variables in it: `~` works, but a
-literal `$HOME` stays literal. (In a double-quoted `export`, your shell
-has already expanded it.) An `--output-dir` set there
-is ignored by `--consolidate` (only an explicit one is an error). A
-malformed value makes every command except `-h`/`--help` and `-v`/`--version` fail
-(`--consolidate` included), with a message naming `AGENT_COUNCIL_OPTS`.
+Its arguments are treated exactly as if typed first on the command line,
+so set it with care: for example, an `--output-dir` there makes
+`--consolidate` fail, as an explicit one does. The value is split into
+words like a shell would, but agent-council doesn't expand variables in
+it: `~` works, but a literal `$HOME` stays literal. (In a double-quoted
+`export`, your shell has already expanded it.) A malformed value, such as
+one with an unclosed quote, makes every command fail, `-h` and `-v`
+included, with a message naming `AGENT_COUNCIL_OPTS`.
 
 Relative paths are resolved from the working directory. agent-council
 expands `~` itself only in `--output-dir`; in other paths, the shell
