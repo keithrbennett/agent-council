@@ -394,9 +394,11 @@ any suffix). Exit status is 0 only if the consolidation succeeded.
 - **The consolidation instructions are the current template's** (the
   installed gem's, or a checkout's own), which may have changed since
   the run.
-- **Existing reports are kept.** A report from the same consolidator
-  stops the run (delete that file to redo it); reports from different
-  consolidators sit side by side, so you can compare their syntheses.
+- **Existing reports are kept.** If a file with the name the new
+  report would get already exists (as it does when the same consolidator
+  ran before), nothing runs; rename or delete that file to redo it.
+  Reports from different consolidators have different names and sit side
+  by side, so you can compare their syntheses.
 - **The run needs at least one analyst report written by
   agent-council**: the prompt and config copies are found through the
   reports' front matter (`prompt_file` and `config_file`, with
@@ -418,15 +420,16 @@ given):
 agent-council-reports/
   2026-09-02/
     16-21-43/
-      codebase-review.md                                     # copy of the prompt (its own file name)
-      analyst_format.md                                      # copy of the report-format addendum sent with the prompt
-      consolidated.yml                                       # copy of the config used (its own file name)
-      reviews/                                               # analysts' reports
+      codebase-review.md   # prompt copy
+      analyst_format.md    # report-format addendum copy
+      consolidated.yml     # config copy
+      reviews/             # analyst reports
         2026-09-02-16-21-43_codebase-review_01_pi_opencode-go_glm-5.3.md
         2026-09-02-16-21-43_codebase-review_02_pi_opencode-go_kimi-k3.md
         2026-09-02-16-21-43_codebase-review_03_pi_openai_gpt-6.1-sol.md
         2026-09-02-16-21-43_codebase-review_04_pi_cursor_claude-sonnet-5-5-high.md
-      2026-09-02-16-21-43_codebase-review_consolidated_pi_opencode-go_glm-5.3.md  # if consolidator configured
+      # consolidated report, if a consolidator is configured:
+      2026-09-02-16-21-43_codebase-review_consolidated_pi_opencode-go_glm-5.3.md
     18-05-11/
       ...
   2026-09-03/
