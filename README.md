@@ -444,12 +444,13 @@ agent-council-reports/
   time repeating when clocks fall back or are set back), the new run gets
   `hh-mm-ss-2`, `-3`, ... instead, so each run has its own directory.
 - **Report filenames** carry everything else:
-  `<yyyy-mm-dd>-<hh-mm-ss>_<query-slug>_<agent-number>_pi_<provider>_<model>.md`,
+  `<yyyy-mm-dd>-<hh-mm-ss>_<query-slug>_<agent-number>_<harness>_<provider>_<model>.md`,
   so a report stays self-describing when you copy or attach it outside the
   tree (a consolidated report has `consolidated` in place of
   `<agent-number>`); `<hh-mm-ss>` includes the run dir's suffix, if any,
   and `<provider>` and `<model>` are sanitized like the query slug below,
-  but keep their case.
+  but keep their case. `<harness>` is currently always `pi`, the only
+  harness agent-council supports so far.
   `<agent-number>` is the agent's 1-based position in the config's
   `agents` list (`01`, `02`, ...), so every report has a unique name even
   if the same provider/model is configured more than once. The query slug
