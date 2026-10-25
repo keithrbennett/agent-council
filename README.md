@@ -145,7 +145,12 @@ agent-council -h   # see "Documentation (Local)" and "Examples (Local)"
 To get the gem's directory in a shell variable:
 
 ```bash
-AC_HOME=$(ruby -e 'print Gem::Specification.find_by_name("agent-council", ">= 0.a").full_gem_path')
+AC_HOME=$(ruby <<'RUBY'
+print Gem::Specification
+  .find_by_name('agent-council', '>= 0.a')
+  .full_gem_path
+RUBY
+)
 ```
 
 If several versions are installed, this finds the newest, prereleases
