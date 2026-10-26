@@ -343,6 +343,13 @@ agent-council \
   against the code for accuracy, completeness, consistency, first-run
   usability, and clarity (including duplication);
   run it from the repository whose docs you want reviewed.
+- `examples/prompts/test-coverage-analysis-prompt.md` — a line-coverage
+  analysis organized by the logical parts of the system, with gaps ranked by
+  risk and a ready-to-use prompt for each recommended fix. It reads
+  SimpleCov's `coverage/coverage.json` through
+  [cov-loupe](https://github.com/keithrbennett/cov-loupe) and runs no tests,
+  so run your full test suite first; it stops with an error if the coverage
+  data looks out of date.
 
 ### Stopping a run
 

@@ -329,6 +329,7 @@ examples/                # pure, non-runtime samples (prompts/ and configs/ ship
     recommend-model-ensemble-prompt.md
     review-latest-commit-prompt.md
     review-docs-prompt.md
+    test-coverage-analysis-prompt.md
   configs/
     single.yml
     consolidated.yml
