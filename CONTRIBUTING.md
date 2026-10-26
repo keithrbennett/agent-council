@@ -102,7 +102,7 @@ The tests make no model calls. For changes affecting how pi is invoked or how it
 
 ```bash
 ./exe/agent-council \
-  examples/prompts/smoke-test_prompt.md \
+  examples/prompts/smoke-test-prompt.md \
   examples/configs/single.yml
 ```
 

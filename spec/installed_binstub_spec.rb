@@ -42,6 +42,6 @@ RSpec.describe 'installed agent-council binstub' do
     expect(examples_path).to start_with(gem_home)
     expect(File.file?(docs_path)).to be(true)
     expect(File.file?(File.join(examples_path, 'configs', 'single.yml'))).to be(true)
-    expect(File.file?(File.join(examples_path, 'prompts', 'smoke-test_prompt.md'))).to be(true)
+    expect(File.file?(File.join(examples_path, 'prompts', 'smoke-test-prompt.md'))).to be(true)
   end
 end

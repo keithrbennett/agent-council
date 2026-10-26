@@ -323,8 +323,8 @@ spec/                    # RSpec; not shipped in the gem
 
 examples/                # pure, non-runtime samples (prompts/ and configs/ ship in the gem)
   prompts/
-    smoke-test_prompt.md
-    code-base-state_prompt.md
+    smoke-test-prompt.md
+    state-of-the-code-base-prompt.md
     project-name-prompt.md
     recommend-model-ensemble-prompt.md
     review-latest-commit-prompt.md

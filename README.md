@@ -292,17 +292,17 @@ your `PATH` (see [Development](#development)). They still analyze your
 current directory, and the sample configs name specific providers and
 models — copy and edit one if yours differ.
 
-- `examples/prompts/code-base-state_prompt.md` — a real codebase-analysis
+- `examples/prompts/state-of-the-code-base-prompt.md` — a real codebase-analysis
   prompt; with `examples/configs/consolidated.yml` this is the full
   ensemble:
 
 ```bash
 agent-council \
-  "$AC_HOME/examples/prompts/code-base-state_prompt.md" \
+  "$AC_HOME/examples/prompts/state-of-the-code-base-prompt.md" \
   "$AC_HOME/examples/configs/consolidated.yml"
 ```
 
-- `examples/prompts/smoke-test_prompt.md` +
+- `examples/prompts/smoke-test-prompt.md` +
   `examples/configs/single.yml` — a tiny, cheap prompt (one multiplication
   question — enough to prove a real answer came back) and a one-model
   config, for verifying your setup in seconds (the
@@ -311,7 +311,7 @@ agent-council \
 
 ```bash
 agent-council \
-  "$AC_HOME/examples/prompts/smoke-test_prompt.md" \
+  "$AC_HOME/examples/prompts/smoke-test-prompt.md" \
   "$AC_HOME/examples/configs/single.yml"
 ```
 
