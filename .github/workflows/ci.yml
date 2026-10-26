@@ -22,6 +22,35 @@ jobs:
           bundler-cache: true
       - run: bundle exec rspec
 
+  # The Gemfile allows simplecov >= 1.0, < 2.0. A normal `bundle install` only
+  # exercises whatever Bundler resolves today (usually the newest), so this job
+  # pins simplecov to each end of that range and runs the suite there.
+  compat:
+    runs-on: ubuntu-latest
+    name: Compat (simplecov ${{ matrix.simplecov }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Oldest supported simplecov: the first release that writes coverage.json.
+          - simplecov: '1.0.0'
+            version: '1.0.0'
+          # Newest release. An empty pin leaves simplecov to the Gemfile range.
+          - simplecov: latest
+            version: ''
+    env:
+      SIMPLECOV_VERSION: ${{ matrix.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '4.0'
+          # No bundler cache: resolve fresh so the pins above take effect.
+          bundler-cache: false
+      - run: bundle install --jobs 4
+      - run: bundle list | grep simplecov
+      - run: bundle exec rspec
+
   rubocop:
     runs-on: ubuntu-latest
     name: RuboCop

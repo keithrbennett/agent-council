@@ -1,5 +1,23 @@
 # frozen_string_literal: true
 
+# Enable SimpleCov for this project (coverage output in ./coverage). This must
+# run before the library is required so that its files are tracked.
+begin
+  require 'simplecov'
+  require 'simplecov-cobertura'
+  SimpleCov.enable_coverage :branch
+  SimpleCov.start do
+    # Report only lib/, including files no spec loads.
+    cover 'lib/**/*.rb'
+    formatter SimpleCov::Formatter::MultiFormatter.new([
+      SimpleCov::Formatter::HTMLFormatter,
+      SimpleCov::Formatter::CoberturaFormatter,
+    ])
+  end
+rescue LoadError
+  warn 'SimpleCov not available; skipping coverage'
+end
+
 # Make lib/ loadable as `require 'agent_council'`, mirroring how the gem
 # itself resolves files relative to lib/ (rather than the project root).
 $LOAD_PATH.unshift(File.expand_path('../lib', __dir__))

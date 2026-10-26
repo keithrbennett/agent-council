@@ -1,5 +1,6 @@
 agent-council-reports/
 tmp/
+coverage/
 .DS_Store
 .idea/
 *.gem
