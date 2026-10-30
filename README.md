@@ -338,6 +338,11 @@ agent-council \
 - `examples/prompts/review-latest-commit-prompt.md` — a code-review prompt
   for the latest commit (plus any uncommitted changes); run it from the
   repository under review with a multi-model config.
+- `examples/prompts/review-pull-request-prompt.md` — the same review for a
+  GitHub pull request, plus its unaddressed review comments and failing
+  checks. Check out the PR first (`gh pr checkout <number>`) and run from
+  that checkout; agents need an authenticated
+  [`gh`](https://cli.github.com/) and read the PR through it.
 - `examples/prompts/review-docs-prompt.md` — a documentation review: checks
   the README, other Markdown files, help output, code comments and samples
   against the code for accuracy, completeness, consistency, first-run
