@@ -45,6 +45,13 @@ The most important findings overall and your confidence in each. If you can
 verify a claim against the repository, do so (read-only) and state the
 result.
 
+## Agent performance
+
+A brief review of each agent that produced a report: how deep its research
+went (e.g. did it read code, run commands, verify claims) and how much it
+added to the review (unique or confirmed findings vs. noise or errors).
+Keep it terse: one short line per agent, or a compact table.
+
 Rules:
 - Begin directly with the "## Agent Consultants" section; do not add a
   document title or top-level heading.
