@@ -456,6 +456,14 @@ agent-council-reports/
   name is already taken (two runs started in the same second, or local
   time repeating when clocks fall back or are set back), the new run gets
   `hh-mm-ss-2`, `-3`, ... instead, so each run has its own directory.
+- **Time zone**: run dir names, report filenames and front matter
+  timestamps all use the local time zone, which the standard `TZ`
+  environment variable overrides. For UTC, run `TZ=UTC agent-council ...`
+  (timestamps then end in `+00:00`). On Linux and macOS, `TZ` takes IANA
+  names such as `UTC` or `America/Chicago`; a misspelled name may fall
+  back to UTC silently. Native Windows accepts only POSIX-style
+  values such as `UTC0` (PowerShell: `$env:TZ = 'UTC0'`). The agents
+  inherit `TZ` too.
 - **Report filenames** carry everything else:
   `<yyyy-mm-dd>-<hh-mm-ss>_<query-slug>_<agent-number>_<harness>_<provider>_<model>.md`,
   so a report stays self-describing when you copy or attach it outside the
