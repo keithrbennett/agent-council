@@ -499,8 +499,11 @@ RSpec.describe AgentCouncil do
       File.write('p_prompt.md', 'hi')
       samples = File.join(described_class::EXAMPLES_DIR, 'configs')
       expect { described_class.main(['p_prompt.md']) }
-        .to raise_error(SystemExit)
-        .and output(/Sample configs: #{Regexp.escape(samples)}/).to_stderr
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+        .and output(a_string_starting_with(
+          "No config file given, and neither ./agent-council.yml nor ~/.agent-council.yml exists.\n"
+        ).and(including("Sample configs: #{samples}\n"))).to_stderr
+      expect(File).not_to exist('agent-council-reports')
     end
 
     {
