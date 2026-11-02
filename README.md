@@ -201,7 +201,7 @@ included: the same one a plain `agent-council` command runs.
 
 ```bash
 pi --list-models                 # models of the providers you have credentials for
-pi --list-models kimi            # fuzzy search
+pi --list-models | grep -i kimi  # only models whose provider or name contains "kimi"
 ```
 
 `pi --list-models` lists only the models of providers pi has
@@ -804,8 +804,7 @@ provider/model pairs in forms meant for scripts and agents; the sample
 `recommend-model-ensemble-prompt.md` has its agents run it. They differ in
 two ways:
 
-- **Output.** `pi --list-models` prints a table for people and supports
-  fuzzy search. `pi-models` prints a table, JSON with pi's model fields
+- **Output.** `pi --list-models` prints a table for people. `pi-models` prints a table, JSON with pi's model fields
   (`--json`, for `jq`), or one `provider/id` per line (`--ids`, for shell
   loops), and exits non-zero with a clear message if pi is missing or
   fails. `pi-models -h` lists the options and the JSON fields. In a config
