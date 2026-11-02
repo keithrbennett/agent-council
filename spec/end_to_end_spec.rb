@@ -232,7 +232,7 @@ RSpec.describe 'agent-council end to end' do
 
     expect(run_council.exitstatus).to eq(0), output_report
     expect(out)
-      .to match(/^  ✗   \d\d:\d\d:\d\d  - +  fails \/ c  \(pi exited 1: boom\)$/), output_report
+      .to match(/^  ✗   \d\d:\d\d:\d\d  - +  fails \/ c  pi exited 1: boom$/), output_report
     expect(out).to end_with("\n--- Consolidation error ---\n")
     expect(reports('*consolidated*.md')).to be_empty
   end
@@ -282,7 +282,7 @@ RSpec.describe 'agent-council end to end' do
     expect(run_council.exitstatus).to eq(1), output_report
     expect(out).to include('--- Reviews complete (1/2 succeeded; 1.2k in (200 cached) / 200 out, $0.02) ---',
       '--- Consolidation complete ---')
-    expect(out).to match(/^  ✗   \d\d:\d\d:\d\d  - +  #2 fails \/ m2  \(pi exited 1: boom\)$/), output_report
+    expect(out).to match(/^  ✗   \d\d:\d\d:\d\d  - +  #2 fails \/ m2  pi exited 1: boom$/), output_report
     consolidated = File.read(reports('*consolidated*.md').first, encoding: 'UTF-8')
     fields, = AgentCouncil.parse_front_matter(consolidated)
     expect(fields['sources']).to eq(['#1 done / m1'])
@@ -323,7 +323,7 @@ RSpec.describe 'agent-council end to end' do
       status = run_council(args: ['--consolidate', run_dir])
 
       expect(status.exitstatus).to eq(0), output_report
-      expect(out).to match(/^  ✓   \d\d:\d\d:\d\d  #{usage_cell}  done \/ c  \S+_pi_done_c\.md$/),
+      expect(out).to match(/^  ✓   \d\d:\d\d:\d\d  #{usage_cell}  done \/ c$/),
         output_report
       expect(out).to include('--- Consolidation complete ---')
       expect(out).to include(
@@ -393,7 +393,7 @@ RSpec.describe 'agent-council end to end' do
       status = run_council(args: ['--consolidate', run_dir])
 
       expect(status.exitstatus).to eq(1), output_report
-      expect(out).to match(/^  ✗   \d\d:\d\d:\d\d  - +  fails \/ c  \(pi exited 1: boom\)$/), output_report
+      expect(out).to match(/^  ✗   \d\d:\d\d:\d\d  - +  fails \/ c  pi exited 1: boom$/), output_report
       expect(out).to include('--- Consolidation error ---')
       expect(reports('*consolidated*.md')).to be_empty
       consolidations = JSON.parse(File.read(File.join(work_dir, run_dir, 'usage.json')))['consolidations']
@@ -475,7 +475,7 @@ RSpec.describe 'agent-council end to end' do
 
     expect(status.exitstatus).to eq(0), output_report
     expect(err).not_to match(/:\d+:in /), output_report # a backtrace line
-    expect(out).to match(/^  ✓   \d\d:\d\d:\d\d  #{usage_cell}  utf8 \/ c  \S+_consolidated_pi_utf8_c\.md$/),
+    expect(out).to match(/^  ✓   \d\d:\d\d:\d\d  #{usage_cell}  utf8 \/ c$/),
       output_report
     expect(out).to include('Reviews (in ', '2/2 succeeded')
     consolidated = reports('*consolidated*.md')

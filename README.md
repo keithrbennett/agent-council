@@ -551,8 +551,9 @@ agent as it finishes: `✓` or `✗`, its duration, its label (e.g.
 When all reviews finish, a `Reviews` table shows which models succeeded,
 how long each took (`HH:MM:SS`), its token usage (e.g.
 `45.2k in (30.0k cached) / 3.1k out, $0.21`, where `in` counts cached
-input too, or `-` when unknown; failed runs show what they used), and its
-report file (for a failure, the reason in parentheses), followed by a
+input too, or `-` when unknown; failed runs show what they used) and,
+in an `Error` column shown only when something failed, why a run failed,
+followed by a
 `--- Reviews complete (N/M succeeded; <total usage>) ---` line. The
 total's cost is shown only when every analyst's cost is known. With a consolidator,
 the `Consolidation Report (in <run dir>):` heading (with

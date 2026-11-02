@@ -499,23 +499,23 @@ module AgentCouncil
     [result, Process.clock_gettime(Process::CLOCK_MONOTONIC) - started]
   end
 
-  RESULT_HEADINGS = %w[Ok Duration Usage Agent Report].freeze
+  RESULT_HEADINGS = %w[Ok Duration Usage Agent Error].freeze
 
   # Indented result table lines for [label, ok, detail, elapsed, usage]
-  # results: a heading row, then one row per result, with ✓ and the report
-  # filename on success, ✗ and the error in parentheses on failure, and -
-  # for unknown usage.
+  # results: a heading row, then one row per result, with ✓ or ✗, - for
+  # unknown usage, and a failure's error. The Error column is left out when
+  # nothing failed. Report filenames aren't shown: an analyst's is found by
+  # its agent number, and the consolidated report is the run dir's only one.
   module_function def format_result_table(results)
     rows = results.map do |label, ok, detail, elapsed, usage|
-      report = ok ? detail : "(#{detail})"
-      [ok ? '✓' : '✗', format_duration(elapsed), format_usage(usage) || '-', label, report]
+      [ok ? '✓' : '✗', format_duration(elapsed), format_usage(usage) || '-', label, ok ? '' : detail]
     end
     table = [RESULT_HEADINGS, *rows]
-    # The last column is left unpadded, so lines have no trailing spaces.
-    widths = table.transpose[0...-1].map { |column| column.map { |cell| display_width(cell) }.max }
+    table = table.map { |row| row[0...-1] } if rows.all? { |row| row.last.empty? }
+    widths = table.transpose.map { |column| column.map { |cell| display_width(cell) }.max }
     table.map do |row|
-      cells = row[0...-1].zip(widths).map { |cell, width| cell + (' ' * (width - display_width(cell))) }
-      "  #{[*cells, row.last].join('  ')}"
+      cells = row.zip(widths).map { |cell, width| cell + (' ' * (width - display_width(cell))) }
+      "  #{cells.join('  ')}".rstrip
     end
   end
 
