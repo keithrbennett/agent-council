@@ -433,9 +433,9 @@ they stay unambiguous whatever the zone.
 
 | Platform | One run in UTC | Value format |
 |---|---|---|
-| Linux, macOS, WSL (bash, zsh, fish) | `TZ=UTC agent-council prompt.md` | IANA name |
-| Windows PowerShell | `$env:TZ = 'UTC0'; agent-council prompt.md` | POSIX-style |
-| Windows cmd | `set "TZ=UTC0" && agent-council prompt.md` | POSIX-style |
+| Linux, macOS, WSL (bash, zsh, fish) | `TZ=UTC agent-council prompt.md` | [IANA name](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) |
+| Windows PowerShell | `$env:TZ = 'UTC0'; agent-council prompt.md` | [POSIX-style](https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/tzset) |
+| Windows cmd | `set "TZ=UTC0" && agent-council prompt.md` | [POSIX-style](https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/tzset) |
 
 On Windows, `TZ` set this way lasts for the rest of the shell session.
 Git Bash on Windows accepts the Linux syntax but runs Windows Ruby, so it
