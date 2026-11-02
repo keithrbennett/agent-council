@@ -1020,6 +1020,56 @@ RSpec.describe AgentCouncil do
     end
   end
 
+  describe '.usage_entry' do
+    let(:agent) { { 'provider' => 'p', 'model' => 'm' } }
+
+    it "names a successful run's report under dir" do
+      expect(described_class.usage_entry(agent, true, 'a.md', { 'input' => 1 }, index: 2, dir: 'reviews'))
+        .to eq('agent_index' => 2, 'provider' => 'p', 'model' => 'm', 'ok' => true,
+          'report' => 'reviews/a.md', 'usage' => { 'input' => 1 })
+    end
+
+    it "gives a failed run's error, and null for unknown usage" do
+      expect(described_class.usage_entry(agent, false, 'boom', nil))
+        .to eq('provider' => 'p', 'model' => 'm', 'ok' => false, 'error' => 'boom', 'usage' => nil)
+    end
+  end
+
+  describe '.write_usage_file' do
+    let(:run_dir) { Dir.mktmpdir }
+
+    after { FileUtils.remove_entry(run_dir) }
+
+    it 'writes the entries and their total, which read_usage_file reads back' do
+      analysts = [{ 'ok' => true, 'usage' => { 'input' => 1, 'output' => 2 } },
+                  { 'ok' => false, 'usage' => nil }]
+      consolidations = [{ 'ok' => true, 'usage' => { 'input' => 10, 'output' => 20 } }]
+      described_class.write_usage_file(run_dir, analysts, consolidations)
+
+      data = JSON.parse(File.read(File.join(run_dir, 'usage.json')))
+      expect(data['total']).to eq('input' => 11, 'output' => 22, 'cache_read' => 0, 'cache_write' => 0)
+      expect(described_class.read_usage_file(run_dir)).to eq([analysts, consolidations])
+      expect(Dir.children(run_dir)).to eq(['usage.json']) # no temp file left
+    end
+
+    it 'warns, rather than raises, when it cannot write the file' do
+      expect { described_class.write_usage_file(File.join(run_dir, 'missing'), [], []) }
+        .to output(/Could not write .*usage\.json/).to_stderr
+    end
+  end
+
+  describe '.read_usage_file' do
+    it 'is nil for a missing or malformed file' do
+      Dir.mktmpdir do |dir|
+        expect(described_class.read_usage_file(dir)).to be_nil
+        File.write(File.join(dir, 'usage.json'), '{"analysts": {}}')
+        expect(described_class.read_usage_file(dir)).to be_nil
+        File.write(File.join(dir, 'usage.json'), 'not json')
+        expect(described_class.read_usage_file(dir)).to be_nil
+      end
+    end
+  end
+
   describe '.format_result_table' do
     it 'aligns columns under headings, with the report on success and the error on failure' do
       usage = { 'input' => 1500, 'output' => 20 }

@@ -436,6 +436,7 @@ agent-council-reports/
       codebase-review.md   # prompt copy
       analyst_format.md    # report-format addendum copy
       consolidated.yml     # config copy
+      usage.json           # token usage of every agent run, and the total
       reviews/             # analyst reports
         2026-09-02-16-21-43_codebase-review_01_pi_opencode-go_glm-5.3.md
         2026-09-02-16-21-43_codebase-review_02_pi_opencode-go_kimi-k3.md
@@ -498,6 +499,16 @@ agent-council-reports/
   provider reports no usage. Providers count tokens somewhat differently
   (reasoning tokens, for example), so compare counts across providers
   only roughly.
+- The run dir's **`usage.json`** collects the token usage in one
+  machine-readable place: `harness`; `analysts` and `consolidations`,
+  one entry per run with its `agent_index` (analysts only), `provider`,
+  `model`, `ok`, `report` (its path in the run dir) or `error`, and
+  `usage` (`null` when unknown); and `total`, their summed usage, whose
+  `cost` is included only if every entry's cost is known. Failed runs
+  are included, since their tokens were spent. It is written once the
+  reviews finish and updated after each consolidation, including each
+  `--consolidate` (which creates it, from the analysts' front matter,
+  for a run without one).
 
   `--consolidate` relies on the analysts' `prompt_file`, `config_file`,
   `run_stamp` and `query`, and on `agent_index` to tell which configured

@@ -6,6 +6,7 @@
 # AgentCouncil::Harnesses::PiHarness); HARNESS below is the single swap
 # point.
 
+require 'json'
 require 'yaml'
 # Psych requires stringio lazily, on first emit. On JRuby, worker threads
 # emitting front matter at once can then see a half-loaded StringIO
@@ -439,16 +440,56 @@ module AgentCouncil
     dollars < 0.01 ? '<$0.01' : format('$%.2f', dollars)
   end
 
-  # The sum of usage hashes (see HARNESS), ignoring nils; nil if all are nil.
+  # The sum of usage hashes (see HARNESS), ignoring nils (and anything else
+  # not a hash); nil if there are none.
   # The cost is summed only if every usage has one, so a partial total
   # isn't presented as the whole.
   module_function def sum_usage(usages)
-    usages = usages.compact
+    usages = usages.grep(Hash)
     return nil if usages.empty?
 
     total = %w[input output cache_read cache_write].to_h { |key| [key, usages.sum { |u| u[key].to_i }] }
     costs = usages.map { |u| u['cost'] }
     costs.all?(Numeric) ? total.merge('cost' => costs.sum.round(6)) : total
+  end
+
+  # The run dir's machine-readable token usage summary.
+  USAGE_FILENAME = 'usage.json'
+
+  # A usage.json entry for an agent's run_agent result: its report's path
+  # under dir (the run dir's reviews_dir for analysts) on success, its error
+  # on failure.
+  module_function def usage_entry(agent, ok, detail, usage, index: nil, dir: nil)
+    entry = { 'agent_index' => index, 'provider' => agent['provider'], 'model' => agent['model'], 'ok' => ok }
+      .compact
+    entry[ok ? 'report' : 'error'] = ok && dir ? File.join(dir, detail) : detail
+    entry.merge('usage' => usage)
+  end
+
+  # Writes the run dir's usage.json: every analyst's and consolidation's
+  # entry (see usage_entry) and their total usage. Replaced atomically, so
+  # a reader or a Ctrl-C never sees it half written. A failure to write it
+  # is only warned about: the reports are what matter.
+  module_function def write_usage_file(run_dir, analysts, consolidations)
+    data = { 'harness' => HARNESS::NAME, 'analysts' => analysts, 'consolidations' => consolidations,
+      'total' => sum_usage((analysts + consolidations).map { |entry| entry['usage'] }) }
+    path = File.join(run_dir, USAGE_FILENAME)
+    temp = "#{path}.#{Process.pid}.tmp"
+    File.write(temp, "#{JSON.pretty_generate(data)}\n")
+    File.rename(temp, path)
+  rescue SystemCallError => e
+    FileUtils.rm_f(temp) if temp
+    warn "Could not write #{relative_path(path)}: #{e.message}"
+  end
+
+  # [analysts, consolidations] from a run dir's usage.json, or nil if it is
+  # missing or malformed.
+  module_function def read_usage_file(run_dir)
+    data = JSON.parse(File.read(File.join(run_dir, USAGE_FILENAME), encoding: ENCODING))
+    lists = data.values_at('analysts', 'consolidations') if data.is_a?(Hash)
+    lists if lists&.all?(Array)
+  rescue SystemCallError, JSON::ParserError
+    nil
   end
 
   # Runs the block; returns [block_result, elapsed_seconds] (monotonic clock).
@@ -796,6 +837,11 @@ module AgentCouncil
     total_usage = format_usage(sum_usage(results.map(&:last)))
     puts "\n--- Reviews complete (#{results.size - failed}/#{results.size} succeeded" \
       "#{"; #{total_usage}" if total_usage}) ---"
+    # Written now, so it's there even if the consolidation is interrupted.
+    analyst_usages = agents.zip(results).each_with_index.map do |(agent, (_, ok, detail, _, usage)), i|
+      usage_entry(agent, ok, detail, usage, index: i + 1, dir: REVIEWS_DIR_NAME)
+    end
+    write_usage_file(run_dir, analyst_usages, [])
 
     if consolidator
       puts "\nConsolidation Report (in #{relative_path(run_dir)}):"
@@ -808,6 +854,7 @@ module AgentCouncil
       end
       (label, ok, detail, usage), elapsed = pool.collect.first
       puts format_result_table([[label, ok, detail, elapsed, usage]])
+      write_usage_file(run_dir, analyst_usages, [usage_entry(consolidator, ok, detail, usage)])
       puts_consolidation_status(ok)
     end
 
@@ -896,10 +943,23 @@ module AgentCouncil
     end
     (label, ok, detail, usage), elapsed = pool.collect.first
     puts format_result_table([[label, ok, detail, elapsed, usage]])
+    # Added to the run's usage.json; a run without one (made before it
+    # existed) gets one, with its analysts' usage from their front matter.
+    analysts, consolidations = read_usage_file(run_dir) || [usage_entries_from_reports(reports), []]
+    write_usage_file(run_dir, analysts, consolidations + [usage_entry(consolidator, ok, detail, usage)])
     puts_consolidation_status(ok)
     exit(ok ? 0 : 1)
   rescue Interrupt
     exit_interrupted(pool)
+  end
+
+  # usage.json analyst entries for a run's reports (see collect_reports),
+  # from their front matter: what's known without the run's own usage.json.
+  module_function def usage_entries_from_reports(reports)
+    reports.map do |_, _, fields|
+      { 'agent_index' => fields['agent_index'], 'provider' => fields['provider'], 'model' => fields['model'],
+        'ok' => true }.compact.merge('usage' => fields['usage'])
+    end
   end
 
   # True if name is a plain file name: no directory part or null byte, and

@@ -12,7 +12,8 @@ holds arguments inserted before the command-line ones. Includes
 sample prompts and configs under `examples/`, and a `pi-models` helper that
 lists the provider/model pairs available to pi. Each report records the
 model's token usage and, where pi can price it, its cost; the console shows
-them per agent and in total.
+them per agent and in total, and the run directory's `usage.json` collects
+them in machine-readable form.
 
 agent-council does not sandbox the agents: they get pi's `bash` tool,
 running as you. See [Safety and privacy](README.md#safety-and-privacy) in the README before running it.
