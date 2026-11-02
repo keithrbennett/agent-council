@@ -1042,7 +1042,7 @@ RSpec.describe AgentCouncil do
 
     it 'writes the entries and their total, which read_usage_file reads back' do
       analysts = [{ 'ok' => true, 'usage' => { 'input' => 1, 'output' => 2 } },
-                  { 'ok' => false, 'usage' => nil }]
+        { 'ok' => false, 'usage' => nil }]
       consolidations = [{ 'ok' => true, 'usage' => { 'input' => 10, 'output' => 20 } }]
       described_class.write_usage_file(run_dir, analysts, consolidations)
 
