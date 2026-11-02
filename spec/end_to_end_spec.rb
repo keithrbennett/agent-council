@@ -237,7 +237,7 @@ RSpec.describe 'agent-council end to end' do
     expect(reports('*consolidated*.md')).to be_empty
   end
 
-  it 'names the prompt and config copies and records durations and usage in analyst front matter' do
+  it 'names the input copies in analyst front matter, and shows duration and usage in the byline' do
     write_config(%w[done])
 
     expect(run_council.exitstatus).to eq(0), output_report
@@ -246,18 +246,18 @@ RSpec.describe 'agent-council end to end' do
     expect(fields).to include('prompt_file' => 'prompt.md', 'config_file' => 'config.yml')
     expect(fields['config_source']).to end_with('config.yml')
     expect(fields['run_stamp']).to match(/\A\d{4}-\d\d-\d\d-\d\d-\d\d-\d\d\z/)
-    expect(fields['duration']).to match(/\A\d\d:\d\d:\d\d\z/)
-    expect(text).to include("| duration | #{fields['duration']} |") # in the byline too
-    expect(fields['usage']).to eq('input' => 1000, 'output' => 200, 'cache_read' => 200, 'cache_write' => 0,
-      'cost' => 0.02)
+    expect(fields.keys).not_to include('duration', 'usage') # in run.json
+    expect(text).to match(/^\| duration \| \d\d:\d\d:\d\d \|$/)
     expect(text).to include('| usage | 1.2k in (200 cached) / 200 out, $0.02 |')
   end
 
-  it 'writes every run, failed ones included, and the total to usage.json' do
+  it 'writes every run, failed ones included, and the total usage to run.json' do
     write_config(%w[done fails], consolidator: 'done')
 
     expect(run_council.exitstatus).to eq(1), output_report
-    data = JSON.parse(File.read(reports('usage.json').first))
+    data = JSON.parse(File.read(reports('run.json').first))
+    runs = data['analysts'] + data['consolidations']
+    expect(runs.map { |run| run.delete('duration_seconds') }).to all(be_a(Numeric))
     report = File.basename(reports('reviews/*.md').first)
     stored = { 'input' => 1000, 'output' => 200, 'cache_read' => 200, 'cache_write' => 0, 'cost' => 0.02 }
     expect(data).to eq(
@@ -272,11 +272,11 @@ RSpec.describe 'agent-council end to end' do
         { 'provider' => 'done', 'model' => 'c', 'ok' => true,
           'report' => File.basename(reports('*consolidated*.md').first), 'usage' => stored },
       ],
-      'total'          => stored.merge('input' => 2000, 'output' => 400, 'cache_read' => 400, 'cost' => 0.04)
+      'total_usage'    => stored.merge('input' => 2000, 'output' => 400, 'cache_read' => 400, 'cost' => 0.04)
     )
   end
 
-  it 'lists only the reports consolidated, not failed agents, in source_durations and source_usages' do
+  it 'lists only the reports consolidated, not failed agents, as sources' do
     write_config(%w[done fails], consolidator: 'done')
 
     expect(run_council.exitstatus).to eq(1), output_report
@@ -286,8 +286,8 @@ RSpec.describe 'agent-council end to end' do
     consolidated = File.read(reports('*consolidated*.md').first, encoding: 'UTF-8')
     fields, = AgentCouncil.parse_front_matter(consolidated)
     expect(fields['sources']).to eq(['#1 done / m1'])
-    expect(fields['source_durations'].keys).to eq(['#1 done / m1'])
-    expect(fields['source_usages'].keys).to eq(['#1 done / m1'])
+    expect(consolidated.scan(/^\| source \| .*$/))
+      .to match([/\A\| source \| #1 done \/ m1 \(\d\d:\d\d:\d\d, #{usage_cell}\) \|\z/])
   end
 
   it 'writes the run dir under --output-dir when given' do
@@ -347,23 +347,22 @@ RSpec.describe 'agent-council end to end' do
       expect(leftover_scratch_dirs).to be_empty
     end
 
-    it 'adds the consolidation to usage.json, creating it for a run without one' do
+    it 'adds the consolidation to run.json, or warns when there is none' do
       run_dir = finished_run('done')
-      usage_path = File.join(work_dir, run_dir, 'usage.json')
-      expect(JSON.parse(File.read(usage_path))['consolidations']).to eq([])
+      run_path = File.join(work_dir, run_dir, 'run.json')
+      expect(JSON.parse(File.read(run_path))['consolidations']).to eq([])
 
       expect(run_council(args: ['--consolidate', run_dir]).exitstatus).to eq(0), output_report
-      data = JSON.parse(File.read(usage_path))
+      data = JSON.parse(File.read(run_path))
       expect(data['consolidations'].map { |entry| entry.values_at('provider', 'ok') }).to eq([['done', true]])
-      expect(data['total']['input']).to eq(3000)
+      expect(data['total_usage']['input']).to eq(3000)
 
-      File.delete(usage_path)
+      File.delete(run_path)
       File.delete(*reports('*consolidated*.md'))
       expect(run_council(args: ['--consolidate', run_dir]).exitstatus).to eq(0), output_report
-      data = JSON.parse(File.read(usage_path))
-      expect(data['analysts'].map { |entry| entry.values_at('agent_index', 'ok') })
-        .to eq([[1, true], [2, true]])
-      expect(data['total']['input']).to eq(3000)
+      expect(err).to include("No readable run.json in #{run_dir}")
+      expect(File).not_to exist(run_path)
+      expect(reports('*consolidated*.md').size).to eq(1)
     end
 
     it 'consolidates a run dir that has been moved' do
@@ -387,7 +386,7 @@ RSpec.describe 'agent-council end to end' do
       )
     end
 
-    it 'exits 1, writing no report but recording the failure in usage.json, when the consolidation fails' do
+    it 'exits 1, writing no report but recording the failure in run.json, when the consolidation fails' do
       run_dir = finished_run('fails')
 
       status = run_council(args: ['--consolidate', run_dir])
@@ -396,7 +395,8 @@ RSpec.describe 'agent-council end to end' do
       expect(out).to match(/^  ✗   \d\d:\d\d:\d\d  - +  fails \/ c  pi exited 1: boom$/), output_report
       expect(out).to include('--- Consolidation error ---')
       expect(reports('*consolidated*.md')).to be_empty
-      consolidations = JSON.parse(File.read(File.join(work_dir, run_dir, 'usage.json')))['consolidations']
+      consolidations = JSON.parse(File.read(File.join(work_dir, run_dir, 'run.json')))['consolidations']
+      expect(consolidations.map { |run| run.delete('duration_seconds') }).to all(be_a(Numeric))
       expect(consolidations).to eq([{ 'provider' => 'fails', 'model' => 'c', 'ok' => false,
         'error' => 'pi exited 1: boom', 'usage' => nil }])
     end

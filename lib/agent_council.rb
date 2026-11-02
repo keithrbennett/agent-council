@@ -136,7 +136,9 @@ module AgentCouncil
   # their tokens were still spent.
   # index: the agent's 1-based position in the config's agent list, used to
   # disambiguate repeated provider/model entries in the filename and label;
-  # filename: overrides the output name; meta: becomes YAML front matter;
+  # filename: overrides the output name; meta: becomes YAML front matter,
+  # which identifies the report; what was measured about its run (duration
+  # and usage) goes in run.json instead (see write_run_file);
   # header: markdown prepended to the report body (or a callable receiving
   # the run's fields, 'duration' (HH:MM:SS) and 'usage', and returning
   # it). If the response begins
@@ -197,7 +199,7 @@ module AgentCouncil
     end
     content = with_front_matter(meta.merge('harness' => HARNESS::NAME,
       'provider' => provider,
-      'model'    => model, **run_fields), text)
+      'model'    => model), text)
     # Exclusive create ('x'): never replaces a report, e.g. one written by
     # a concurrent --consolidate with the same model; that is a failure.
     File.write(File.join(run_dir, filename), content, mode: 'wx')
@@ -327,9 +329,11 @@ module AgentCouncil
     "#{file_prefix}_consolidated_#{HARNESS::NAME}_#{sanitize(provider)}_#{sanitize(model)}.md"
   end
 
-  # Markdown table of the report's main front-matter fields, leading the
-  # body (under the title, in consolidated reports); one row per consulted
-  # agent, when present.
+  # Markdown table of the report's main front-matter fields and its run's
+  # duration and usage, leading the body (under the title, in consolidated
+  # reports); one row per consulted agent, when present, with its run's
+  # duration and usage from meta['source_runs'] (source label => run.json
+  # entry) when known.
   module_function def byline_table(meta, provider, model)
     fields = {
       'role'            => meta['role'],
@@ -344,10 +348,11 @@ module AgentCouncil
       'usage'           => format_usage(meta['usage']),
     }.compact
     rows = fields.map { |field, value| "| #{field} | #{value} |" }
-    source_durations = meta['source_durations'] || {}
-    source_usages = meta['source_usages'] || {}
+    source_runs = meta['source_runs'] || {}
     rows += Array(meta['sources']).map do |label|
-      details = [source_durations[label], format_usage(source_usages[label])].compact
+      run = source_runs[label] || {}
+      seconds = run['duration_seconds']
+      details = [(format_duration(seconds) if seconds.is_a?(Numeric)), format_usage(run['usage'])].compact
       "| source | #{label}#{" (#{details.join(', ')})" unless details.empty?} |"
     end
     <<~TABLE
@@ -358,12 +363,12 @@ module AgentCouncil
   end
 
   # Runs the configured consolidator model over a run's reports and writes
-  # its report into the same run dir. Returns [label, ok, detail]; never
-  # raises. Each source's duration and usage come from its report's front
-  # matter.
-  # failures: as for consolidation_prompt. pool: as for run_agent.
+  # its report into the same run dir. Returns as run_agent; never raises.
+  # analyst_runs: the run's run.json analyst entries, for the byline's
+  # source durations and usage. failures: as for consolidation_prompt.
+  # pool: as for run_agent.
   module_function def run_consolidation(consolidator, original_prompt, run_dir, file_prefix,
-    meta: {}, prompt_path: nil, failures: [], pool: nil)
+    meta: {}, prompt_path: nil, failures: [], analyst_runs: [], pool: nil)
     provider = consolidator['provider'] if consolidator.is_a?(Hash)
     model = consolidator['model'] if consolidator.is_a?(Hash)
     return ['consolidator', false, "config entry needs 'provider' and 'model'"] if provider.nil? || model.nil?
@@ -375,17 +380,16 @@ module AgentCouncil
     end
 
     prompt = consolidation_prompt(original_prompt, reports, failures)
-    source_durations = reports.to_h { |label, _, fields| [label, fields['duration']] }.compact
-    source_usages = reports.to_h { |label, _, fields| [label, fields['usage']] }
-      .select { |_, usage| usage.is_a?(Hash) }
+    source_runs = analyst_runs.grep(Hash)
+      .to_h { |run| [agent_label(run['provider'], run['model'], run['agent_index']), run] }
     # timestamp is the run's start; consolidated_at is this consolidation's,
     # which is later when done by --consolidate.
     meta = meta.merge('role' => 'consolidator', 'consolidated_at' => iso_timestamp(Time.now),
-      'sources' => reports.map(&:first), 'source_durations' => source_durations,
-      'source_usages' => source_usages)
+      'sources' => reports.map(&:first))
     prompt_line = prompt_path ? "### Prompt: #{prompt_path}\n\n" : ''
     header = ->(run_fields) do
-      "# Consolidated Report\n\n#{prompt_line}#{byline_table(meta.merge(run_fields), provider, model)}"
+      byline = byline_table(meta.merge(run_fields, 'source_runs' => source_runs), provider, model)
+      "# Consolidated Report\n\n#{prompt_line}#{byline}"
     end
     run_agent(consolidator, prompt, run_dir, file_prefix,
       filename: consolidated_filename(file_prefix, provider, model),
@@ -453,27 +457,27 @@ module AgentCouncil
     costs.all?(Numeric) ? total.merge('cost' => costs.sum.round(6)) : total
   end
 
-  # The run dir's machine-readable token usage summary.
-  USAGE_FILENAME = 'usage.json'
+  # The run dir's machine-readable record of its agents' runs.
+  RUN_FILENAME = 'run.json'
 
-  # A usage.json entry for an agent's run_agent result: its report's path
-  # under dir (the run dir's reviews_dir for analysts) on success, its error
-  # on failure.
-  module_function def usage_entry(agent, ok, detail, usage, index: nil, dir: nil)
+  # A run.json entry for an agent's run_agent result and its elapsed
+  # seconds: its report's path under dir (the run dir's reviews_dir for
+  # analysts) on success, its error on failure.
+  module_function def run_entry(agent, ok, detail, elapsed, usage, index: nil, dir: nil)
     entry = { 'agent_index' => index, 'provider' => agent['provider'], 'model' => agent['model'], 'ok' => ok }
       .compact
     entry[ok ? 'report' : 'error'] = ok && dir ? File.join(dir, detail) : detail
-    entry.merge('usage' => usage)
+    entry.merge('duration_seconds' => elapsed.round(1), 'usage' => usage)
   end
 
-  # Writes the run dir's usage.json: every analyst's and consolidation's
-  # entry (see usage_entry) and their total usage. Replaced atomically, so
-  # a reader or a Ctrl-C never sees it half written. A failure to write it
-  # is only warned about: the reports are what matter.
-  module_function def write_usage_file(run_dir, analysts, consolidations)
+  # Writes the run dir's run.json: every analyst's and consolidation's
+  # entry (see run_entry) and their total usage. Replaced atomically, so a
+  # reader or a Ctrl-C never sees it half written. A failure to write it is
+  # only warned about: the reports are what matter.
+  module_function def write_run_file(run_dir, analysts, consolidations)
     data = { 'harness' => HARNESS::NAME, 'analysts' => analysts, 'consolidations' => consolidations,
-      'total' => sum_usage((analysts + consolidations).map { |entry| entry['usage'] }) }
-    path = File.join(run_dir, USAGE_FILENAME)
+      'total_usage' => sum_usage((analysts + consolidations).map { |entry| entry['usage'] }) }
+    path = File.join(run_dir, RUN_FILENAME)
     temp = "#{path}.#{Process.pid}.tmp"
     File.write(temp, "#{JSON.pretty_generate(data)}\n")
     File.rename(temp, path)
@@ -482,10 +486,10 @@ module AgentCouncil
     warn "Could not write #{relative_path(path)}: #{e.message}"
   end
 
-  # [analysts, consolidations] from a run dir's usage.json, or nil if it is
+  # [analysts, consolidations] from a run dir's run.json, or nil if it is
   # missing or malformed.
-  module_function def read_usage_file(run_dir)
-    data = JSON.parse(File.read(File.join(run_dir, USAGE_FILENAME), encoding: ENCODING))
+  module_function def read_run_file(run_dir)
+    data = JSON.parse(File.read(File.join(run_dir, RUN_FILENAME), encoding: ENCODING))
     lists = data.values_at('analysts', 'consolidations') if data.is_a?(Hash)
     lists if lists&.all?(Array)
   rescue SystemCallError, JSON::ParserError
@@ -838,10 +842,10 @@ module AgentCouncil
     puts "\n--- Reviews complete (#{results.size - failed}/#{results.size} succeeded" \
       "#{"; #{total_usage}" if total_usage}) ---"
     # Written now, so it's there even if the consolidation is interrupted.
-    analyst_usages = agents.zip(results).each_with_index.map do |(agent, (_, ok, detail, _, usage)), i|
-      usage_entry(agent, ok, detail, usage, index: i + 1, dir: REVIEWS_DIR_NAME)
+    analyst_runs = agents.zip(results).each_with_index.map do |(agent, (_, ok, detail, elapsed, usage)), i|
+      run_entry(agent, ok, detail, elapsed, usage, index: i + 1, dir: REVIEWS_DIR_NAME)
     end
-    write_usage_file(run_dir, analyst_usages, [])
+    write_run_file(run_dir, analyst_runs, [])
 
     if consolidator
       puts "\nConsolidation Report (in #{relative_path(run_dir)}):"
@@ -849,12 +853,13 @@ module AgentCouncil
       pool.start do
         timed do
           run_consolidation(consolidator, prompt, run_dir, file_prefix,
-            meta: report_meta, prompt_path: prompt_path, failures: failures, pool: pool)
+            meta: report_meta, prompt_path: prompt_path, failures: failures, analyst_runs: analyst_runs,
+            pool: pool)
         end
       end
       (label, ok, detail, usage), elapsed = pool.collect.first
       puts format_result_table([[label, ok, detail, elapsed, usage]])
-      write_usage_file(run_dir, analyst_usages, [usage_entry(consolidator, ok, detail, usage)])
+      write_run_file(run_dir, analyst_runs, [run_entry(consolidator, ok, detail, elapsed, usage)])
       puts_consolidation_status(ok)
     end
 
@@ -933,33 +938,31 @@ module AgentCouncil
     puts "\nConsolidation Report (in #{relative_path(run_dir)}, " \
       "from #{reports.size} review#{'s' unless reports.size == 1}):"
     failures = missing_agents(config, reports)
+    analysts, consolidations = read_run_file(run_dir)
     pool = WorkerPool.new(grace: INTERRUPT_GRACE_SECONDS)
     pool.trap_signals
     pool.start do
       timed do
         run_consolidation(consolidator, prompt, run_dir, file_prefix,
-          meta: meta, prompt_path: relative_path(prompt_path), failures: failures, pool: pool)
+          meta: meta, prompt_path: relative_path(prompt_path), failures: failures,
+          analyst_runs: analysts || [], pool: pool)
       end
     end
     (label, ok, detail, usage), elapsed = pool.collect.first
     puts format_result_table([[label, ok, detail, elapsed, usage]])
-    # Added to the run's usage.json; a run without one (made before it
-    # existed) gets one, with its analysts' usage from their front matter.
-    analysts, consolidations = read_usage_file(run_dir) || [usage_entries_from_reports(reports), []]
-    write_usage_file(run_dir, analysts, consolidations + [usage_entry(consolidator, ok, detail, usage)])
+    # Added to the run's run.json. Without one (deleted, or unreadable),
+    # none is written: a total covering only this consolidation would
+    # pass for the run's.
+    if analysts
+      entry = run_entry(consolidator, ok, detail, elapsed, usage)
+      write_run_file(run_dir, analysts, consolidations + [entry])
+    else
+      warn "No readable #{RUN_FILENAME} in #{relative_path(run_dir)}; not recording this consolidation's run"
+    end
     puts_consolidation_status(ok)
     exit(ok ? 0 : 1)
   rescue Interrupt
     exit_interrupted(pool)
-  end
-
-  # usage.json analyst entries for a run's reports (see collect_reports),
-  # from their front matter: what's known without the run's own usage.json.
-  module_function def usage_entries_from_reports(reports)
-    reports.map do |_, _, fields|
-      { 'agent_index' => fields['agent_index'], 'provider' => fields['provider'], 'model' => fields['model'],
-        'ok' => true }.compact.merge('usage' => fields['usage'])
-    end
   end
 
   # True if name is a plain file name: no directory part or null byte, and

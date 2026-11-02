@@ -436,7 +436,7 @@ agent-council-reports/
       codebase-review.md   # prompt copy
       analyst_format.md    # report-format addendum copy
       consolidated.yml     # config copy
-      usage.json           # token usage of every agent run, and the total
+      run.json             # every agent run's outcome, duration and token usage
       reviews/             # analyst reports
         2026-09-02-16-21-43_codebase-review_01_pi_opencode-go_glm-5.3.md
         2026-09-02-16-21-43_codebase-review_02_pi_opencode-go_kimi-k3.md
@@ -476,39 +476,40 @@ agent-council-reports/
 - **Day buckets** keep the reports directory itself navigable when you have hundreds
   of runs.
 - Each report file begins with a small **YAML front matter** block,
-  written by the orchestrator (never by the model):
+  written by the orchestrator (never by the model), identifying the
+  report (what was measured about its run is in `run.json`, below):
   - in every report: `role` (`analyst` or `consolidator`), `timestamp`
     (unquoted ISO 8601), `query` (the query slug), `harness`, `provider`, `model`,
-    `duration` (`HH:MM:SS`), `usage` (see below), `prompt_file` and `config_file` (the names of
+    `prompt_file` and `config_file` (the names of
     the run dir's input copies), `config_source` (where the config was
     found, with `~` for the home directory; informational only) and
     `run_stamp` (the report filenames' date-time prefix, with the run
     dir's suffix, if any);
   - in analyst reports: `agent_index` (the agent number, as an integer);
   - in consolidated reports: `sources` (the analyst labels that were
-    synthesized), `source_durations` (each source label's report duration),
-    `source_usages` (each source label's `usage`), and `consolidated_at` (when the
+    synthesized) and `consolidated_at` (when the
     consolidation ran; with `--consolidate`, possibly long after
     `timestamp`, the run's start).
+
+- The run dir's **`run.json`** records every agent run, for tools and
+  for analysis across many runs: `harness`; `analysts` and
+  `consolidations`, one entry per run with its `agent_index` (analysts
+  only), `provider`, `model`, `ok`, `report` (its path in the run dir)
+  or `error`, `duration_seconds` and `usage`; and `total_usage`, the
+  entries' summed usage, whose `cost` is included only if every entry's
+  cost is known. Failed runs are included, since their tokens were spent.
+  It is written once the reviews finish and updated after each
+  consolidation, including each `--consolidate`; a `--consolidate` of a
+  run dir without a readable `run.json` warns and writes none.
 
   `usage` is the model's token usage, summed over every request of the
   run, as reported by the harness: `input` (excluding cached input),
   `cache_read`, `cache_write` and `output` token counts, plus `cost` in
   US dollars when the harness could price the run (pi uses its own price
-  table, so models missing from it have no cost). It is left out when the
+  table, so models missing from it have no cost). It is `null` when the
   provider reports no usage. Providers count tokens somewhat differently
   (reasoning tokens, for example), so compare counts across providers
   only roughly.
-- The run dir's **`usage.json`** collects the token usage in one
-  machine-readable place: `harness`; `analysts` and `consolidations`,
-  one entry per run with its `agent_index` (analysts only), `provider`,
-  `model`, `ok`, `report` (its path in the run dir) or `error`, and
-  `usage` (`null` when unknown); and `total`, their summed usage, whose
-  `cost` is included only if every entry's cost is known. Failed runs
-  are included, since their tokens were spent. It is written once the
-  reviews finish and updated after each consolidation, including each
-  `--consolidate` (which creates it, from the analysts' front matter,
-  for a run without one).
 
   `--consolidate` relies on the analysts' `prompt_file`, `config_file`,
   `run_stamp` and `query`, and on `agent_index` to tell which configured
@@ -516,7 +517,8 @@ agent-council-reports/
   not by filename parsing, so `.md` files in `reviews/` without
   `provider` and `model` front matter are ignored.
 - Below the front matter, the orchestrator adds a metadata table
-  summarizing its main fields (for consolidated reports, under a
+  summarizing its main fields and its run's duration and token usage
+  (for consolidated reports, also each source's, and under a
   `# Consolidated Report` title and a `### Prompt:` line), followed by the
   model's final message, minus any top-level `#` heading the message
   starts with.
