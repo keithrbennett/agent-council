@@ -118,6 +118,29 @@ module AgentCouncil
         messages.reverse_each.detect { |m| !response_text(m).empty? }
       end
 
+      # Our usage keys, each mapped to pi's name for it. pi normalizes usage
+      # across providers; its input excludes cache reads and writes.
+      USAGE_KEYS = { 'input' => 'input', 'output' => 'output',
+                     'cache_read' => 'cacheRead', 'cache_write' => 'cacheWrite' }.freeze
+
+      # Token usage summed over all assistant messages (each is a separate
+      # model request), as AgentCouncil expects it: integer 'input', 'output',
+      # 'cache_read' and 'cache_write', plus 'cost' in US dollars when pi
+      # priced the run. nil when the stream reports no usage, as some
+      # providers don't.
+      module_function def usage(jsonl)
+        usages = assistant_messages(jsonl).map { |m| m['usage'] }.grep(Hash)
+        totals = USAGE_KEYS.transform_values { |key| usages.sum { |u| count(u[key]) } }
+        return nil if totals.values.all?(&:zero?)
+
+        cost = usages.sum { |u| u['cost'].is_a?(Hash) ? count(u['cost']['total']) : 0 }
+        cost.positive? ? totals.merge('cost' => cost.round(6)) : totals
+      end
+
+      module_function def count(value)
+        value.is_a?(Numeric) && value.positive? ? value : 0
+      end
+
       # Stop reasons meaning a message was cut off, cancelled or failed, not
       # completed. error normally comes with an errorMessage, which is reported
       # instead; this catches one that is missing or blank.

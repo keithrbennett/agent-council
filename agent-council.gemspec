@@ -37,8 +37,8 @@ Gem::Specification.new do |spec|
   # sample prompts and configs, so installed users can read docs and run
   # examples matching their installed version. Exclude development-only
   # files (CI config, lint configs, Gemfile, lockfile, Rakefile, spec/,
-  # REVIEW_NOTES.md, CONTRIBUTING.md, etc.) and generated sample output
-  # (examples/results/).
+  # REVIEW_NOTES.md, CONTRIBUTING.md, AGENTS.md, CLAUDE.md, etc.) and
+  # generated sample output (examples/results/).
   # Only git-tracked files are packaged, so untracked local files (personal
   # configs, editor backups) can't leak into the gem. Without FNM_DOTMATCH,
   # the patterns skip dotfiles.

@@ -121,6 +121,35 @@ RSpec.describe AgentCouncil::Harnesses::PiHarness do
     end
   end
 
+  describe '.usage' do
+    def stream(*usages)
+      usages.map { |usage| JSON.generate(type: 'message_end', message: { role: 'assistant', usage: usage }) }
+        .join("\n")
+    end
+
+    it 'sums usage over all assistant messages, in our keys, with the total cost' do
+      first = { input: 100, output: 20, cacheRead: 0, cacheWrite: 50, cost: { total: 0.25 } }
+      second = { input: 10, output: 300, cacheRead: 150, cacheWrite: 0, cost: { total: 0.5 } }
+      expect(described_class.usage(stream(first, second)))
+        .to eq('input' => 110, 'output' => 320, 'cache_read' => 150, 'cache_write' => 50, 'cost' => 0.75)
+    end
+
+    it 'leaves out a cost pi could not price' do
+      usage = described_class.usage(stream({ input: 1, output: 2, cost: { total: 0 } }))
+      expect(usage).to eq('input' => 1, 'output' => 2, 'cache_read' => 0, 'cache_write' => 0)
+    end
+
+    it 'ignores malformed usage and counts' do
+      usage = described_class.usage(stream('lots', { input: 'many', output: 2, cost: 3 }))
+      expect(usage).to eq('input' => 0, 'output' => 2, 'cache_read' => 0, 'cache_write' => 0)
+    end
+
+    it 'is nil when the stream reports no usage' do
+      expect(described_class.usage(sample_stream)).to be_nil
+      expect(described_class.usage(stream({ input: 0, output: 0 }))).to be_nil
+    end
+  end
+
   describe '.error_message' do
     it 'surfaces provider errors' do
       stream = <<~JSONL

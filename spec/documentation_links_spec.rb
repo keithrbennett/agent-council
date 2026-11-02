@@ -10,7 +10,7 @@ module DocumentationLinks
   PROJECT_ROOT = File.expand_path('..', __dir__)
   ENSEMBLE_RESULT = 'examples/results/recommend-model-ensemble-code-review.md'
   # Tracked Markdown deliberately kept out of the gem (spec/ is never packaged).
-  UNPACKAGED = ['REVIEW_NOTES.md', 'CONTRIBUTING.md', ENSEMBLE_RESULT].freeze
+  UNPACKAGED = ['REVIEW_NOTES.md', 'CONTRIBUTING.md', 'AGENTS.md', 'CLAUDE.md', ENSEMBLE_RESULT].freeze
   # Gem::Specification.load warns and returns nil when the gemspec raises.
   PACKAGED = (Gem::Specification.load(File.join(PROJECT_ROOT, 'agent-council.gemspec')) ||
               raise('agent-council.gemspec failed to load; see the warning above')).files.freeze

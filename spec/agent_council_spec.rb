@@ -207,15 +207,22 @@ RSpec.describe AgentCouncil do
       expect(File).not_to exist(scratch_dirs.first)
     end
 
-    it 'records the duration in the front matter, as an HH:MM:SS string' do
+    it 'gives the header its HH:MM:SS duration and usage, keeping them out of the front matter' do
       stub_capture3('', instance_double(Process::Status, success?: true))
-      allow(described_class::HARNESS).to receive_messages(error_message: nil, final_response: 'answer')
+      usage = { 'input' => 5, 'output' => 6 }
+      allow(described_class::HARNESS).to receive_messages(error_message: nil, final_response: 'answer',
+        usage: usage)
+      header_fields = nil
+      header = ->(run_fields) { (header_fields = run_fields) && 'HEADER' }
 
-      _label, ok, filename = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
+      _label, ok, filename = described_class.run_agent(agent, 'prompt', run_dir, 'prefix', header: header)
 
       expect(ok).to be(true)
-      fields, = described_class.parse_front_matter(File.read(File.join(run_dir, filename)))
-      expect(fields['duration']).to match(/\A\d\d:\d\d:\d\d\z/)
+      expect(header_fields['duration']).to match(/\A\d\d:\d\d:\d\d\z/)
+      expect(header_fields['usage']).to eq(usage)
+      fields, body = described_class.parse_front_matter(File.read(File.join(run_dir, filename)))
+      expect(fields.keys).to contain_exactly('harness', 'provider', 'model')
+      expect(body).to eq("HEADER\nanswer\n")
     end
 
     it 'fails rather than replace an existing report' do
@@ -228,6 +235,28 @@ RSpec.describe AgentCouncil do
       expect(ok).to be(false)
       expect(detail).to start_with('Errno::EEXIST')
       expect(File.read(File.join(run_dir, 'taken.md'))).to eq('earlier')
+    end
+
+    it 'returns the harness usage' do
+      stub_capture3('', instance_double(Process::Status, success?: true))
+      usage = { 'input' => 5, 'output' => 6, 'cache_read' => 0, 'cache_write' => 0 }
+      allow(described_class::HARNESS).to receive_messages(error_message: nil, final_response: 'answer',
+        usage: usage)
+
+      _label, ok, _filename, returned = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
+
+      expect(ok).to be(true)
+      expect(returned).to eq(usage)
+    end
+
+    it 'returns the usage of a failed run too' do
+      stub_capture3('', instance_double(Process::Status, success?: false, exitstatus: 1))
+      allow(described_class::HARNESS).to receive(:usage).and_return({ 'input' => 5, 'output' => 6 })
+
+      _label, ok, _detail, usage = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
+
+      expect(ok).to be(false)
+      expect(usage).to eq({ 'input' => 5, 'output' => 6 })
     end
 
     it 'deletes the scratch dir after a failed run' do
@@ -848,9 +877,9 @@ RSpec.describe AgentCouncil do
     it 'includes each report\'s front matter fields' do
       Dir.mktmpdir do |dir|
         File.write(File.join(dir, 'a.md'),
-          "---\nprovider: zai\nmodel: glm-5.3\nduration: '00:01:05'\n---\n\nbody")
+          "---\nprovider: zai\nmodel: glm-5.3\nquery: review\n---\n\nbody")
         _label, _body, fields = described_class.collect_reports(dir).first
-        expect(fields).to eq('provider' => 'zai', 'model' => 'glm-5.3', 'duration' => '00:01:05')
+        expect(fields).to eq('provider' => 'zai', 'model' => 'glm-5.3', 'query' => 'review')
       end
     end
   end
@@ -870,10 +899,10 @@ RSpec.describe AgentCouncil do
       expect(fields['sources']).to eq(['a / one', 'b / two'])
     end
 
-    it 'round-trips #N source labels and a source_durations hash as valid YAML' do
+    it 'round-trips #N source labels, as list items and hash keys, as valid YAML' do
       fields = {
-        'sources'          => ['#1 zai / glm-5.3', '#2 zai / glm-5.3'],
-        'source_durations' => { '#1 zai / glm-5.3' => '00:03:43', '#2 zai / glm-5.3' => '00:01:05' },
+        'sources'  => ['#1 zai / glm-5.3', '#2 zai / glm-5.3'],
+        'by_label' => { '#1 zai / glm-5.3' => '00:03:43', '#2 zai / glm-5.3' => '00:01:05' },
       }
       content = described_class.with_front_matter(fields, 'body')
       parsed, = described_class.parse_front_matter(content)
@@ -947,22 +976,152 @@ RSpec.describe AgentCouncil do
     end
   end
 
+  describe '.format_usage' do
+    it 'counts cached input as input, noting it, and shows the cost' do
+      usage = { 'input' => 100, 'output' => 2500, 'cache_read' => 1_200_000, 'cache_write' => 300,
+                'cost' => 1.234 }
+      expect(described_class.format_usage(usage)).to eq('1.2M in (1.2M cached) / 2.5k out, $1.23')
+    end
+
+    it 'leaves out an unknown or zero cost' do
+      expect(described_class.format_usage({ 'input' => 1, 'output' => 2 })).to eq('1 in / 2 out')
+      expect(described_class.format_usage({ 'input' => 1, 'output' => 2, 'cost' => 0 })).to eq('1 in / 2 out')
+    end
+
+    it 'shows a cost under a cent as such, not as $0.00' do
+      expect(described_class.format_usage({ 'input' => 1, 'output' => 2, 'cost' => 0.001 }))
+        .to eq('1 in / 2 out, <$0.01')
+    end
+
+    it 'is nil for unknown usage' do
+      expect(described_class.format_usage(nil)).to be_nil
+    end
+  end
+
+  describe '.format_token_count' do
+    it 'abbreviates thousands and millions to one decimal' do
+      counts = [999, 1000, 45_250, 999_949, 999_950, 12_345_678]
+      expect(counts.map { |n| described_class.format_token_count(n) })
+        .to eq(%w[999 1.0k 45.2k 999.9k 1.0M 12.3M])
+    end
+  end
+
+  describe '.sum_usage' do
+    it 'sums the counts and costs, ignoring unknown usage' do
+      first = { 'input' => 1, 'output' => 2, 'cache_read' => 3, 'cost' => 0.1 }
+      second = { 'input' => 10, 'output' => 20, 'cache_write' => 4, 'cost' => 0.2 }
+      total = described_class.sum_usage([first, nil, second])
+      expect(total).to eq('input' => 11, 'output' => 22, 'cache_read' => 3, 'cache_write' => 4, 'cost' => 0.3)
+    end
+
+    it 'leaves out the cost unless every usage has one' do
+      total = described_class.sum_usage([{ 'input' => 1, 'output' => 2, 'cost' => 0.1 },
+        { 'input' => 1, 'output' => 2 }])
+      expect(total).not_to have_key('cost')
+    end
+
+    it 'is nil when no usage is known' do
+      expect(described_class.sum_usage([nil, nil])).to be_nil
+    end
+  end
+
+  describe '.run_entry' do
+    let(:agent) { { 'provider' => 'p', 'model' => 'm' } }
+
+    it "names a successful run's report under dir, with its duration in seconds" do
+      entry = described_class.run_entry(agent, true, 'a.md', 61.26, { 'input' => 1 },
+        index: 2, dir: 'reviews')
+      expect(entry).to eq('agent_index' => 2, 'harness' => 'pi', 'provider' => 'p', 'model' => 'm',
+        'ok' => true, 'report' => 'reviews/a.md', 'duration_seconds' => 61.3, 'usage' => { 'input' => 1 })
+    end
+
+    it "gives a failed run's error, and null for unknown usage" do
+      expect(described_class.run_entry(agent, false, 'boom', 2, nil))
+        .to eq('harness' => 'pi', 'provider' => 'p', 'model' => 'm', 'ok' => false, 'error' => 'boom',
+          'duration_seconds' => 2, 'usage' => nil)
+    end
+  end
+
+  describe '.write_run_file' do
+    let(:run_dir) { Dir.mktmpdir }
+
+    after { FileUtils.remove_entry(run_dir) }
+
+    it 'writes the entries and their total usage, which read_run_file reads back' do
+      analysts = [{ 'ok' => true, 'usage' => { 'input' => 1, 'output' => 2 } },
+        { 'ok' => false, 'usage' => nil }]
+      consolidations = [{ 'ok' => true, 'usage' => { 'input' => 10, 'output' => 20 } }]
+      described_class.write_run_file(run_dir, analysts, consolidations)
+
+      data = JSON.parse(File.read(File.join(run_dir, 'run.json')))
+      expect(data['total_usage']).to eq('input' => 11, 'output' => 22, 'cache_read' => 0, 'cache_write' => 0)
+      expect(described_class.read_run_file(run_dir)).to eq([analysts, consolidations])
+      expect(Dir.children(run_dir)).to eq(['run.json']) # no temp file left
+    end
+
+    it 'warns, rather than raises, when it cannot write the file' do
+      expect { described_class.write_run_file(File.join(run_dir, 'missing'), [], []) }
+        .to output(/Could not write .*run\.json/).to_stderr
+    end
+  end
+
+  describe '.read_run_file' do
+    it 'is nil for a missing or malformed file' do
+      Dir.mktmpdir do |dir|
+        expect(described_class.read_run_file(dir)).to be_nil
+        File.write(File.join(dir, 'run.json'), '{"analysts": {}}')
+        expect(described_class.read_run_file(dir)).to be_nil
+        File.write(File.join(dir, 'run.json'), 'not json')
+        expect(described_class.read_run_file(dir)).to be_nil
+      end
+    end
+  end
+
   describe '.format_result_table' do
-    it 'aligns columns under headings, with the report on success and the error on failure' do
-      results = [['claude/opus', true, 'a.md', 61], ['#2 openai/gpt-x', false, 'exit 1', 3]]
+    it 'right-aligns the usage columns, listing errors below the table' do
+      usage = { 'input' => 500, 'cache_read' => 1000, 'output' => 20, 'cost' => 0.123 }
+      results = [['claude/opus', true, 'a.md', 61, usage], ['#2 openai/gpt-x', false, 'exit 1', 3]]
       expect(described_class.format_result_table(results)).to eq([
-        '  Ok  Duration  Agent            Report',
-        '  ✓   00:01:01  claude/opus      a.md',
-        '  ✗   00:00:03  #2 openai/gpt-x  (exit 1)',
+        '  Ok  Duration  Agent              In  Cached  Out   Cost',
+        '  ✓   00:01:01  claude/opus      1.5k    1.0k   20  $0.12',
+        '  ✗   00:00:03  #2 openai/gpt-x     -       -    -      -',
+        '',
+        '  Errors:',
+        '    #2 openai/gpt-x: exit 1',
+      ])
+    end
+
+    it 'lists no errors, and no report filenames, when nothing failed' do
+      results = [['claude/opus', true, 'a.md', 61], ['#2 openai/gpt-x', true, 'b.md', 3]]
+      expect(described_class.format_result_table(results)).to eq([
+        '  Ok  Duration  Agent            In  Cached  Out  Cost',
+        '  ✓   00:01:01  claude/opus       -       -    -     -',
+        '  ✓   00:00:03  #2 openai/gpt-x   -       -    -     -',
       ])
     end
 
     it 'aligns by display width, so wide characters take two columns' do
-      results = [['模型', true, 'a.md', 1], ['abcd', true, 'b.md', 1]]
+      results = [['模型', true, 'x', 1], ['abcd', true, 'y', 1]]
       expect(described_class.format_result_table(results).drop(1)).to eq([
-        '  ✓   00:00:01  模型   a.md',
-        '  ✓   00:00:01  abcd   b.md',
+        '  ✓   00:00:01  模型    -       -    -     -',
+        '  ✓   00:00:01  abcd    -       -    -     -',
       ])
+    end
+  end
+
+  describe '.usage_summary' do
+    let(:usage) { { 'input' => 1, 'output' => 2 } }
+
+    it 'gives the total usage' do
+      expect(described_class.usage_summary([usage, usage])).to eq('; 2 in / 4 out')
+    end
+
+    it 'notes how many runs the total covers when some reported no usage' do
+      expect(described_class.usage_summary([usage, nil, usage])).to eq('; 2 in / 4 out (from 2 of 3 agents)')
+    end
+
+    it 'is empty when no run reported usage' do
+      expect(described_class.usage_summary([nil, nil])).to eq('')
     end
   end
 
@@ -992,7 +1151,7 @@ RSpec.describe AgentCouncil do
   end
 
   describe '.byline_table' do
-    it 'lists the main front matter fields, one row per source' do
+    it 'lists the main front matter fields, leaving sources to sources_table' do
       meta = {
         'role'      => 'consolidator',
         'query'     => 'check-prev-commits',
@@ -1007,26 +1166,15 @@ RSpec.describe AgentCouncil do
         "| harness | pi |\n" \
         "| provider | zai |\n" \
         "| model | glm-5.3 |\n" \
-        "| timestamp | 2026-09-03T19:23:57 |\n" \
-        "| source | openai / gpt-x |\n" \
-        "| source | zai / glm-5.3 |\n"
+        "| timestamp | 2026-09-03T19:23:57 |\n"
       )
     end
 
-    it 'adds a duration row and annotates sources with their durations' do
-      meta = { 'role' => 'consolidator', 'duration' => '00:02:10', 'sources' => ['a / b'],
-        'source_durations' => { 'a / b' => '00:00:42' } }
+    it 'adds duration and usage rows' do
+      meta = { 'role' => 'consolidator', 'duration' => '00:02:10',
+        'usage' => { 'input' => 10, 'output' => 5 } }
       table = described_class.byline_table(meta, 'openai', 'gpt-x')
-      expect(table).to include('| duration | 00:02:10 |')
-      expect(table).to include('| source | a / b (00:00:42) |')
-    end
-
-    it 'omits source rows when there are none (analyst reports)' do
-      meta = { 'role' => 'analyst', 'query' => 'review', 'timestamp' => '2026-09-03T19:23:57' }
-      table = described_class.byline_table(meta, 'openai', 'gpt-x')
-      expect(table).not_to include('| source |')
-      expect(table).to include('| role | analyst |')
-      expect(table).to include('| model | gpt-x |')
+      expect(table).to include('| duration | 00:02:10 |', '| usage | 10 in / 5 out |')
     end
 
     it 'adds an agent row when an agent_index is present' do
@@ -1040,6 +1188,26 @@ RSpec.describe AgentCouncil do
       meta = { 'role' => 'consolidator', 'query' => 'review', 'timestamp' => '2026-09-03T19:23:57' }
       table = described_class.byline_table(meta, 'openai', 'gpt-x')
       expect(table).not_to include('| agent |')
+    end
+  end
+
+  describe '.sources_table' do
+    it "gives each source's duration, input (cached included), cached input, output and cost, or -" do
+      runs = {
+        'a / b' => { 'duration_seconds' => 42.4,
+                     'usage'            => { 'input' => 500, 'cache_read' => 1500, 'output' => 7,
+                                             'cost' => 0.5 } },
+        'c / d' => { 'duration_seconds' => 3, 'usage' => nil },
+      }
+      expect(described_class.sources_table(['a / b', 'c / d', 'e / f'], runs)).to eq(<<~TABLE)
+        ### Sources
+
+        | Source | Duration | Input | Cached | Output | Cost |
+        | :----- | -------: | ----: | -----: | -----: | ---: |
+        | a / b | 00:00:42 | 2.0k | 1.5k | 7 | $0.50 |
+        | c / d | 00:00:03 | - | - | - | - |
+        | e / f | - | - | - | - | - |
+      TABLE
     end
   end
 
@@ -1079,8 +1247,7 @@ RSpec.describe AgentCouncil do
         reviews = File.join(dir, 'reviews')
         FileUtils.mkdir_p(reviews)
         File.write(File.join(reviews, 'analyst.md'),
-          described_class.with_front_matter(
-            { 'provider' => 'openai', 'model' => 'gpt-x', 'duration' => '00:01:05' }, 'findings'))
+          described_class.with_front_matter({ 'provider' => 'openai', 'model' => 'gpt-x' }, 'findings'))
 
         allow(Time).to receive(:now).and_return(Time.new(2026, 9, 3, 19, 40, 5, '+07:00'))
         captured = nil
@@ -1095,14 +1262,16 @@ RSpec.describe AgentCouncil do
           'prompt', dir, 'prefix', meta: {
             'query'     => 'check-prev-commits',
             'timestamp' => '2026-09-03T19:23:57',
-          }, prompt_path: 'prompts/check-prev-commits_prompt.md')
+          }, prompt_path: 'prompts/check-prev-commits_prompt.md',
+          analyst_runs: [{ 'provider' => 'openai', 'model' => 'gpt-x', 'duration_seconds' => 65 }])
         expect(ok).to be(true)
         expect(label).to eq('zai / glm-5.3')
         expect(captured[:run_dir]).to eq(dir)
         expect(captured[:filename]).to eq('prefix_consolidated_pi_zai_glm-5.3.md')
         expect(captured[:meta]['role']).to eq('consolidator')
         expect(captured[:meta]['consolidated_at']).to eq('2026-09-03T19:40:05+07:00')
-        expect(captured[:header].call('00:02:10')).to eq(<<~HEADER)
+        expect(captured[:meta].keys).not_to include('source_runs')
+        expect(captured[:header].call('duration' => '00:02:10')).to eq(<<~HEADER)
           # Consolidated Report
 
           ### Prompt: prompts/check-prev-commits_prompt.md
@@ -1117,7 +1286,12 @@ RSpec.describe AgentCouncil do
           | timestamp | 2026-09-03T19:23:57 |
           | consolidated_at | 2026-09-03T19:40:05+07:00 |
           | duration | 00:02:10 |
-          | source | openai / gpt-x (00:01:05) |
+
+          ### Sources
+
+          | Source | Duration | Input | Cached | Output | Cost |
+          | :----- | -------: | ----: | -----: | -----: | ---: |
+          | openai / gpt-x | 00:01:05 | - | - | - | - |
         HEADER
         expect(File.read(File.join(dir, captured[:filename]))).to eq('consolidated body')
         expect(Dir.exist?(File.join(dir, 'consolidated'))).to be(false)

@@ -436,6 +436,7 @@ agent-council-reports/
       codebase-review.md   # prompt copy
       analyst_format.md    # report-format addendum copy
       consolidated.yml     # config copy
+      run.json             # every agent run's outcome, duration and token usage
       reviews/             # analyst reports
         2026-09-02-16-21-43_codebase-review_01_pi_opencode-go_glm-5.3.md
         2026-09-02-16-21-43_codebase-review_02_pi_opencode-go_kimi-k3.md
@@ -475,19 +476,42 @@ agent-council-reports/
 - **Day buckets** keep the reports directory itself navigable when you have hundreds
   of runs.
 - Each report file begins with a small **YAML front matter** block,
-  written by the orchestrator (never by the model):
+  written by the orchestrator (never by the model), identifying the
+  report (what was measured about its run is in `run.json`, below):
   - in every report: `role` (`analyst` or `consolidator`), `timestamp`
     (unquoted ISO 8601), `query` (the query slug), `harness`, `provider`, `model`,
-    `duration` (`HH:MM:SS`), `prompt_file` and `config_file` (the names of
+    `prompt_file` and `config_file` (the names of
     the run dir's input copies), `config_source` (where the config was
     found, with `~` for the home directory; informational only) and
     `run_stamp` (the report filenames' date-time prefix, with the run
     dir's suffix, if any);
   - in analyst reports: `agent_index` (the agent number, as an integer);
   - in consolidated reports: `sources` (the analyst labels that were
-    synthesized), `source_durations` (each source label's report duration), and `consolidated_at` (when the
+    synthesized) and `consolidated_at` (when the
     consolidation ran; with `--consolidate`, possibly long after
     `timestamp`, the run's start).
+
+- The run dir's **`run.json`** records every agent run, for tools and
+  for analysis across many runs: `analysts` and `consolidations`, one
+  entry per run with its `agent_index` (analysts only), `harness`,
+  `provider`, `model`, `ok`, `report` (its path in the run dir)
+  or `error`, `duration_seconds` and `usage`; `total_usage`, the
+  entries' summed usage, whose `cost` is included only if every summed
+  entry's cost is known; and `total_usage_runs`, how many entries reported
+  usage (and so are in the total). Failed runs are included, since their
+  tokens were spent.
+  It is written once the reviews finish and updated after each
+  consolidation, including each `--consolidate`; a `--consolidate` of a
+  run dir without a readable `run.json` warns and writes none.
+
+  `usage` is the model's token usage, summed over every request of the
+  run, as reported by the harness: `input` (excluding cached input),
+  `cache_read`, `cache_write` and `output` token counts, plus `cost` in
+  US dollars when the harness could price the run (pi uses its own price
+  table, so models missing from it have no cost). It is `null` when the
+  provider reports no usage. Providers count tokens somewhat differently
+  (reasoning tokens, for example), so compare counts across providers
+  only roughly.
 
   `--consolidate` relies on the analysts' `prompt_file`, `config_file`,
   `run_stamp` and `query`, and on `agent_index` to tell which configured
@@ -495,8 +519,11 @@ agent-council-reports/
   not by filename parsing, so `.md` files in `reviews/` without
   `provider` and `model` front matter are ignored.
 - Below the front matter, the orchestrator adds a metadata table
-  summarizing its main fields (for consolidated reports, under a
-  `# Consolidated Report` title and a `### Prompt:` line), followed by the
+  summarizing its main fields and its run's duration and token usage
+  (for consolidated reports, under a `# Consolidated Report` title and a
+  `### Prompt:` line, and followed by a `### Sources` table giving each
+  source's duration, input (cached included), cached input, output and
+  cost, from `run.json`), followed by the
   model's final message, minus any top-level `#` heading the message
   starts with.
 - The copied prompt, config and report-format addendum keep an analyst
@@ -526,11 +553,17 @@ ls agent-council-reports/*/*/reviews/*codebase-review*
 
 While the agents run, a `Review Progress:` section prints one line per
 agent as it finishes: `✓` or `✗`, its duration, its label (e.g.
-`#2 openai / gpt-6.1-sol`) and, for a failure, the reason.
-When all reviews finish, a `Reviews` table shows which models succeeded,
-how long each took (`HH:MM:SS`), and its report file (for a failure,
-the reason in parentheses), followed by a
-`--- Reviews complete (N/M succeeded) ---` line. With a consolidator,
+`#2 openai / gpt-6.1-sol`) and, for a failure, the reason on the line
+below. When all reviews finish, a `Reviews` table shows which models
+succeeded, how long each took (`HH:MM:SS`) and their token usage in
+`In`, `Cached`, `Out` and `Cost` columns (`In` counts cached input too;
+`-` when unknown; failed runs show what they used), with the failures'
+reasons listed below it under `Errors:`. A
+`--- Reviews complete (N/M succeeded; <total usage>) ---` line follows,
+e.g. `2.1M in (2.0M cached) / 32.7k out, $0.18`. The total's cost is
+shown only when every counted analyst's cost is known, and the total
+notes `(from K of M agents)` when some reported no usage (as some
+providers don't). With a consolidator,
 the `Consolidation Report (in <run dir>):` heading (with
 `--consolidate`, `(in <run dir>, from N review(s)):`) then prints while it
 runs, its result row when it finishes, and finally `--- Consolidation
