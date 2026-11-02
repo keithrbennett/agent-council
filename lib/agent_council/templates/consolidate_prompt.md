@@ -55,3 +55,11 @@ Rules:
   attributions.
 - Do not invent findings that appear in no report.
 - Deduplicate, but do not dilute: keep concrete file and line references.
+
+## Agent performance
+
+A brief review of each agent that produced a report: how deep its research
+went (e.g. did it read code, run commands, verify claims) and how much it
+added to the review (unique or confirmed findings vs. noise or errors).
+For each agent, print a header line with agent number, duration, harness, provider,
+and model. Then print a single text string below it with the performance information.
