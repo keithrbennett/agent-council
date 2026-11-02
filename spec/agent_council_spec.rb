@@ -1082,26 +1082,26 @@ RSpec.describe AgentCouncil do
       usage = { 'input' => 1500, 'output' => 20 }
       results = [['claude/opus', true, 'a.md', 61, usage], ['#2 openai/gpt-x', false, 'exit 1', 3]]
       expect(described_class.format_result_table(results)).to eq([
-        '  Ok  Duration  Usage             Agent            Error',
-        '  ✓   00:01:01  1.5k in / 20 out  claude/opus',
-        '  ✗   00:00:03  -                 #2 openai/gpt-x  exit 1',
+        '  Ok  Duration  Agent            Usage             Error',
+        '  ✓   00:01:01  claude/opus      1.5k in / 20 out',
+        '  ✗   00:00:03  #2 openai/gpt-x  -                 exit 1',
       ])
     end
 
     it 'leaves out the Error column, and report filenames, when nothing failed' do
       results = [['claude/opus', true, 'a.md', 61], ['#2 openai/gpt-x', true, 'b.md', 3]]
       expect(described_class.format_result_table(results)).to eq([
-        '  Ok  Duration  Usage  Agent',
-        '  ✓   00:01:01  -      claude/opus',
-        '  ✓   00:00:03  -      #2 openai/gpt-x',
+        '  Ok  Duration  Agent            Usage',
+        '  ✓   00:01:01  claude/opus      -',
+        '  ✓   00:00:03  #2 openai/gpt-x  -',
       ])
     end
 
     it 'aligns by display width, so wide characters take two columns' do
       results = [['模型', false, 'x', 1], ['abcd', false, 'y', 1]]
       expect(described_class.format_result_table(results).drop(1)).to eq([
-        '  ✗   00:00:01  -      模型   x',
-        '  ✗   00:00:01  -      abcd   y',
+        '  ✗   00:00:01  模型   -      x',
+        '  ✗   00:00:01  abcd   -      y',
       ])
     end
   end

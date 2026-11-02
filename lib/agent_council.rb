@@ -504,7 +504,7 @@ module AgentCouncil
     [result, Process.clock_gettime(Process::CLOCK_MONOTONIC) - started]
   end
 
-  RESULT_HEADINGS = %w[Ok Duration Usage Agent Error].freeze
+  RESULT_HEADINGS = %w[Ok Duration Agent Usage Error].freeze
 
   # Indented result table lines for [label, ok, detail, elapsed, usage]
   # results: a heading row, then one row per result, with ✓ or ✗, - for
@@ -513,7 +513,7 @@ module AgentCouncil
   # its agent number, and the consolidated report is the run dir's only one.
   module_function def format_result_table(results)
     rows = results.map do |label, ok, detail, elapsed, usage|
-      [ok ? '✓' : '✗', format_duration(elapsed), format_usage(usage) || '-', label, ok ? '' : detail]
+      [ok ? '✓' : '✗', format_duration(elapsed), label, format_usage(usage) || '-', ok ? '' : detail]
     end
     table = [RESULT_HEADINGS, *rows]
     table = table.map { |row| row[0...-1] } if rows.all? { |row| row.last.empty? }
