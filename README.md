@@ -422,6 +422,62 @@ any suffix). Exit status is 0 only if the consolidation succeeded.
   is told only which configured agents have no report, with a note that
   the reason wasn't recorded.
 
+### Time zone
+
+Run dir names, report filenames and the front matter's `timestamp` and
+`consolidated_at` all use the **local time zone**. There is no
+agent-council option to change it; instead, set the standard `TZ`
+environment variable, which Ruby (like most programs) honors. Timestamps
+always carry their UTC offset (`2026-09-02T16:21:43+00:00` in UTC), so
+they stay unambiguous whatever the zone.
+
+| Platform | One run in UTC | Value format |
+|---|---|---|
+| Linux, macOS, WSL (bash, zsh, fish) | `TZ=UTC agent-council prompt.md` | IANA name [[1]][tz-iana] |
+| Windows PowerShell | `$env:TZ = 'UTC0'; agent-council prompt.md` | POSIX-style [[2]][tz-gnu] [[3]][tz-posix-db] [[4]][tz-ms] |
+| Windows cmd | `set "TZ=UTC0" && agent-council prompt.md` | POSIX-style [[2]][tz-gnu] [[3]][tz-posix-db] [[4]][tz-ms] |
+
+On Windows, `TZ` set this way lasts for the rest of the shell session.
+Git Bash on Windows accepts the Linux syntax but runs Windows Ruby, so it
+takes POSIX-style values.
+
+**Finding the value to use:**
+
+- **IANA names** (Linux, macOS, WSL): `Area/City`, such as
+  `America/Chicago` or `Europe/Berlin`, plus `UTC`. List them with
+  `ls /usr/share/zoneinfo`, or see the list on Wikipedia [[1]][tz-iana].
+  A misspelled name isn't reported: it silently falls back to UTC, so
+  check the timestamp in a report's front matter.
+- **POSIX-style values** (native Windows): a zone abbreviation, its
+  hours **west** of UTC (so the sign is the reverse of the usual
+  offset), and an optional daylight saving abbreviation: `UTC0`,
+  `EST5EDT` (US Eastern), `PST8PDT` (US Pacific), `CET-1CEST`
+  (Central Europe). The GNU C Library manual explains the format with
+  examples [[2]][tz-gnu]; to find your zone's value, look up its IANA
+  name in the `posix_tz_db` table [[3]][tz-posix-db] and use the part
+  before the first comma (`America/Chicago` gives
+  `CST6CDT,M3.2.0,M11.1.0`, so use `CST6CDT`), since Windows doesn't
+  support the daylight saving rules after it and always follows US
+  rules instead [[4]][tz-ms]. These values also work on Linux and
+  macOS.
+
+References:
+
+1. [List of tz database time zones](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) (Wikipedia)
+2. [The TZ Variable](https://www.gnu.org/software/libc/manual/html_node/TZ-Variable.html) (GNU C Library manual)
+3. `posix_tz_db`: [IANA names mapped to POSIX TZ strings](https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv)
+4. `_tzset`: [Microsoft C runtime documentation](https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/tzset)
+
+[tz-iana]: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+[tz-gnu]: https://www.gnu.org/software/libc/manual/html_node/TZ-Variable.html
+[tz-posix-db]: https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
+[tz-ms]: https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/tzset
+
+To always use a zone, set `TZ` in your shell profile (e.g.
+`export TZ=UTC`), keeping in mind that this affects every program
+started from that shell. The agents inherit `TZ` either way, so it also
+changes the time they see.
+
 ## What you get
 
 Each run creates one run directory, holding its inputs and reports,
@@ -456,6 +512,8 @@ agent-council-reports/
   name is already taken (two runs started in the same second, or local
   time repeating when clocks fall back or are set back), the new run gets
   `hh-mm-ss-2`, `-3`, ... instead, so each run has its own directory.
+- **Time zone**: local by default; see [Time zone](#time-zone) to use
+  UTC or another zone.
 - **Report filenames** carry everything else:
   `<yyyy-mm-dd>-<hh-mm-ss>_<query-slug>_<agent-number>_<harness>_<provider>_<model>.md`,
   so a report stays self-describing when you copy or attach it outside the
