@@ -201,7 +201,6 @@ included: the same one a plain `agent-council` command runs.
 
 ```bash
 pi --list-models                 # models of the providers you have credentials for
-pi --list-models | grep -i kimi  # only models whose provider or name contains "kimi"
 ```
 
 `pi --list-models` lists only the models of providers pi has
