@@ -462,10 +462,11 @@ module AgentCouncil
 
   # A run.json entry for an agent's run_agent result and its elapsed
   # seconds: its report's path under dir (the run dir's reviews_dir for
-  # analysts) on success, its error on failure.
+  # analysts) on success, its error on failure. The harness is per entry,
+  # not per run, so a run can mix harnesses.
   module_function def run_entry(agent, ok, detail, elapsed, usage, index: nil, dir: nil)
-    entry = { 'agent_index' => index, 'provider' => agent['provider'], 'model' => agent['model'], 'ok' => ok }
-      .compact
+    entry = { 'agent_index' => index, 'harness' => HARNESS::NAME, 'provider' => agent['provider'],
+      'model' => agent['model'], 'ok' => ok }.compact
     entry[ok ? 'report' : 'error'] = ok && dir ? File.join(dir, detail) : detail
     entry.merge('duration_seconds' => elapsed.round(1), 'usage' => usage)
   end
@@ -475,7 +476,7 @@ module AgentCouncil
   # reader or a Ctrl-C never sees it half written. A failure to write it is
   # only warned about: the reports are what matter.
   module_function def write_run_file(run_dir, analysts, consolidations)
-    data = { 'harness' => HARNESS::NAME, 'analysts' => analysts, 'consolidations' => consolidations,
+    data = { 'analysts' => analysts, 'consolidations' => consolidations,
       'total_usage' => sum_usage((analysts + consolidations).map { |entry| entry['usage'] }) }
     path = File.join(run_dir, RUN_FILENAME)
     temp = "#{path}.#{Process.pid}.tmp"

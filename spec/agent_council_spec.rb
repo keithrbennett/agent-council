@@ -1031,14 +1031,14 @@ RSpec.describe AgentCouncil do
     it "names a successful run's report under dir, with its duration in seconds" do
       entry = described_class.run_entry(agent, true, 'a.md', 61.26, { 'input' => 1 },
         index: 2, dir: 'reviews')
-      expect(entry).to eq('agent_index' => 2, 'provider' => 'p', 'model' => 'm', 'ok' => true,
-        'report' => 'reviews/a.md', 'duration_seconds' => 61.3, 'usage' => { 'input' => 1 })
+      expect(entry).to eq('agent_index' => 2, 'harness' => 'pi', 'provider' => 'p', 'model' => 'm',
+        'ok' => true, 'report' => 'reviews/a.md', 'duration_seconds' => 61.3, 'usage' => { 'input' => 1 })
     end
 
     it "gives a failed run's error, and null for unknown usage" do
       expect(described_class.run_entry(agent, false, 'boom', 2, nil))
-        .to eq('provider' => 'p', 'model' => 'm', 'ok' => false, 'error' => 'boom', 'duration_seconds' => 2,
-          'usage' => nil)
+        .to eq('harness' => 'pi', 'provider' => 'p', 'model' => 'm', 'ok' => false, 'error' => 'boom',
+          'duration_seconds' => 2, 'usage' => nil)
     end
   end
 

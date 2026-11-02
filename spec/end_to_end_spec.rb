@@ -261,15 +261,14 @@ RSpec.describe 'agent-council end to end' do
     report = File.basename(reports('reviews/*.md').first)
     stored = { 'input' => 1000, 'output' => 200, 'cache_read' => 200, 'cache_write' => 0, 'cost' => 0.02 }
     expect(data).to eq(
-      'harness'        => 'pi',
       'analysts'       => [
-        { 'agent_index' => 1, 'provider' => 'done', 'model' => 'm1', 'ok' => true,
+        { 'agent_index' => 1, 'harness' => 'pi', 'provider' => 'done', 'model' => 'm1', 'ok' => true,
           'report' => "reviews/#{report}", 'usage' => stored },
-        { 'agent_index' => 2, 'provider' => 'fails', 'model' => 'm2', 'ok' => false,
+        { 'agent_index' => 2, 'harness' => 'pi', 'provider' => 'fails', 'model' => 'm2', 'ok' => false,
           'error' => 'pi exited 1: boom', 'usage' => nil },
       ],
       'consolidations' => [
-        { 'provider' => 'done', 'model' => 'c', 'ok' => true,
+        { 'harness' => 'pi', 'provider' => 'done', 'model' => 'c', 'ok' => true,
           'report' => File.basename(reports('*consolidated*.md').first), 'usage' => stored },
       ],
       'total_usage'    => stored.merge('input' => 2000, 'output' => 400, 'cache_read' => 400, 'cost' => 0.04)
@@ -397,7 +396,7 @@ RSpec.describe 'agent-council end to end' do
       expect(reports('*consolidated*.md')).to be_empty
       consolidations = JSON.parse(File.read(File.join(work_dir, run_dir, 'run.json')))['consolidations']
       expect(consolidations.map { |run| run.delete('duration_seconds') }).to all(be_a(Numeric))
-      expect(consolidations).to eq([{ 'provider' => 'fails', 'model' => 'c', 'ok' => false,
+      expect(consolidations).to eq([{ 'harness' => 'pi', 'provider' => 'fails', 'model' => 'c', 'ok' => false,
         'error' => 'pi exited 1: boom', 'usage' => nil }])
     end
 

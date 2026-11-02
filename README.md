@@ -492,9 +492,9 @@ agent-council-reports/
     `timestamp`, the run's start).
 
 - The run dir's **`run.json`** records every agent run, for tools and
-  for analysis across many runs: `harness`; `analysts` and
-  `consolidations`, one entry per run with its `agent_index` (analysts
-  only), `provider`, `model`, `ok`, `report` (its path in the run dir)
+  for analysis across many runs: `analysts` and `consolidations`, one
+  entry per run with its `agent_index` (analysts only), `harness`,
+  `provider`, `model`, `ok`, `report` (its path in the run dir)
   or `error`, `duration_seconds` and `usage`; and `total_usage`, the
   entries' summed usage, whose `cost` is included only if every entry's
   cost is known. Failed runs are included, since their tokens were spent.
