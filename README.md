@@ -376,7 +376,7 @@ agent-council \
   so run your full test suite first; it stops with an error if the coverage
   data looks out of date.
 
-### Default options (`AGENT_COUNCIL_OPTS`)
+### Setting your own defaults with `AGENT_COUNCIL_OPTS`
 
 To use the same options on every run, put them in the
 `AGENT_COUNCIL_OPTS` environment variable. agent-council inserts its
