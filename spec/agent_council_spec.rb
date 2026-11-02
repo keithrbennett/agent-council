@@ -230,6 +230,30 @@ RSpec.describe AgentCouncil do
       expect(File.read(File.join(run_dir, 'taken.md'))).to eq('earlier')
     end
 
+    it 'records the harness usage in the front matter and returns it' do
+      stub_capture3('', instance_double(Process::Status, success?: true))
+      usage = { 'input' => 5, 'output' => 6, 'cache_read' => 0, 'cache_write' => 0 }
+      allow(described_class::HARNESS).to receive_messages(error_message: nil, final_response: 'answer',
+        usage: usage)
+
+      _label, ok, filename, returned = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
+
+      expect(ok).to be(true)
+      expect(returned).to eq(usage)
+      fields, = described_class.parse_front_matter(File.read(File.join(run_dir, filename)))
+      expect(fields['usage']).to eq(usage)
+    end
+
+    it 'returns the usage of a failed run too' do
+      stub_capture3('', instance_double(Process::Status, success?: false, exitstatus: 1))
+      allow(described_class::HARNESS).to receive(:usage).and_return({ 'input' => 5, 'output' => 6 })
+
+      _label, ok, _detail, usage = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
+
+      expect(ok).to be(false)
+      expect(usage).to eq({ 'input' => 5, 'output' => 6 })
+    end
+
     it 'deletes the scratch dir after a failed run' do
       stub_capture3('', instance_double(Process::Status, success?: false, exitstatus: 1))
 
@@ -947,21 +971,71 @@ RSpec.describe AgentCouncil do
     end
   end
 
+  describe '.format_usage' do
+    it 'counts cached input as input, noting it, and shows the cost' do
+      usage = { 'input' => 100, 'output' => 2500, 'cache_read' => 1_200_000, 'cache_write' => 300,
+                'cost' => 1.234 }
+      expect(described_class.format_usage(usage)).to eq('1.2M in (1.2M cached) / 2.5k out, $1.23')
+    end
+
+    it 'leaves out an unknown or zero cost' do
+      expect(described_class.format_usage({ 'input' => 1, 'output' => 2 })).to eq('1 in / 2 out')
+      expect(described_class.format_usage({ 'input' => 1, 'output' => 2, 'cost' => 0 })).to eq('1 in / 2 out')
+    end
+
+    it 'shows a cost under a cent as such, not as $0.00' do
+      expect(described_class.format_usage({ 'input' => 1, 'output' => 2, 'cost' => 0.001 }))
+        .to eq('1 in / 2 out, <$0.01')
+    end
+
+    it 'is nil for unknown usage' do
+      expect(described_class.format_usage(nil)).to be_nil
+    end
+  end
+
+  describe '.format_token_count' do
+    it 'abbreviates thousands and millions to one decimal' do
+      counts = [999, 1000, 45_250, 999_949, 999_950, 12_345_678]
+      expect(counts.map { |n| described_class.format_token_count(n) })
+        .to eq(%w[999 1.0k 45.2k 999.9k 1.0M 12.3M])
+    end
+  end
+
+  describe '.sum_usage' do
+    it 'sums the counts and costs, ignoring unknown usage' do
+      first = { 'input' => 1, 'output' => 2, 'cache_read' => 3, 'cost' => 0.1 }
+      second = { 'input' => 10, 'output' => 20, 'cache_write' => 4, 'cost' => 0.2 }
+      total = described_class.sum_usage([first, nil, second])
+      expect(total).to eq('input' => 11, 'output' => 22, 'cache_read' => 3, 'cache_write' => 4, 'cost' => 0.3)
+    end
+
+    it 'leaves out the cost unless every usage has one' do
+      total = described_class.sum_usage([{ 'input' => 1, 'output' => 2, 'cost' => 0.1 },
+        { 'input' => 1, 'output' => 2 }])
+      expect(total).not_to have_key('cost')
+    end
+
+    it 'is nil when no usage is known' do
+      expect(described_class.sum_usage([nil, nil])).to be_nil
+    end
+  end
+
   describe '.format_result_table' do
     it 'aligns columns under headings, with the report on success and the error on failure' do
-      results = [['claude/opus', true, 'a.md', 61], ['#2 openai/gpt-x', false, 'exit 1', 3]]
+      usage = { 'input' => 1500, 'output' => 20 }
+      results = [['claude/opus', true, 'a.md', 61, usage], ['#2 openai/gpt-x', false, 'exit 1', 3]]
       expect(described_class.format_result_table(results)).to eq([
-        '  Ok  Duration  Agent            Report',
-        '  ✓   00:01:01  claude/opus      a.md',
-        '  ✗   00:00:03  #2 openai/gpt-x  (exit 1)',
+        '  Ok  Duration  Usage             Agent            Report',
+        '  ✓   00:01:01  1.5k in / 20 out  claude/opus      a.md',
+        '  ✗   00:00:03  -                 #2 openai/gpt-x  (exit 1)',
       ])
     end
 
     it 'aligns by display width, so wide characters take two columns' do
       results = [['模型', true, 'a.md', 1], ['abcd', true, 'b.md', 1]]
       expect(described_class.format_result_table(results).drop(1)).to eq([
-        '  ✓   00:00:01  模型   a.md',
-        '  ✓   00:00:01  abcd   b.md',
+        '  ✓   00:00:01  -      模型   a.md',
+        '  ✓   00:00:01  -      abcd   b.md',
       ])
     end
   end
@@ -1019,6 +1093,18 @@ RSpec.describe AgentCouncil do
       table = described_class.byline_table(meta, 'openai', 'gpt-x')
       expect(table).to include('| duration | 00:02:10 |')
       expect(table).to include('| source | a / b (00:00:42) |')
+    end
+
+    it 'adds a usage row and annotates sources with their usage' do
+      meta = { 'role' => 'consolidator', 'usage' => { 'input' => 10, 'output' => 5 },
+        'sources' => ['a / b', 'c / d'],
+        'source_durations' => { 'a / b' => '00:00:42' },
+        'source_usages' => { 'a / b' => { 'input' => 2000, 'output' => 7, 'cost' => 0.5 },
+                             'c / d' => { 'input' => 3, 'output' => 4 } } }
+      table = described_class.byline_table(meta, 'openai', 'gpt-x')
+      expect(table).to include('| usage | 10 in / 5 out |')
+      expect(table).to include('| source | a / b (00:00:42, 2.0k in / 7 out, $0.50) |')
+      expect(table).to include('| source | c / d (3 in / 4 out) |')
     end
 
     it 'omits source rows when there are none (analyst reports)' do
@@ -1102,7 +1188,7 @@ RSpec.describe AgentCouncil do
         expect(captured[:filename]).to eq('prefix_consolidated_pi_zai_glm-5.3.md')
         expect(captured[:meta]['role']).to eq('consolidator')
         expect(captured[:meta]['consolidated_at']).to eq('2026-09-03T19:40:05+07:00')
-        expect(captured[:header].call('00:02:10')).to eq(<<~HEADER)
+        expect(captured[:header].call('duration' => '00:02:10')).to eq(<<~HEADER)
           # Consolidated Report
 
           ### Prompt: prompts/check-prev-commits_prompt.md

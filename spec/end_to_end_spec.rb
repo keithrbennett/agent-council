@@ -36,6 +36,9 @@ RSpec.describe 'agent-council end to end' do
   let(:exited_at) { [] } # filled in by run_council
   # No straight single quotes: the fake pi echoes it inside them.
   let(:non_ascii_answer) { 'Résumé ✓ “quoted”' }
+  # The usage every fake report reports, and how its row shows it.
+  let(:usage) { { input: 1000, output: 200, cacheRead: 200, cacheWrite: 0, cost: { total: 0.02 } } }
+  let(:usage_cell) { Regexp.escape('1.2k in (200 cached) / 200 out, $0.02') }
 
   before do
     [bin_dir, work_dir, child_tmp, started_dir, termed_dir, sigint_dir].each { |dir| FileUtils.mkdir_p(dir) }
@@ -46,7 +49,8 @@ RSpec.describe 'agent-council end to end' do
   after { FileUtils.remove_entry(tmp_root) }
 
   def report_event(text)
-    { type: 'message_end', message: { role: 'assistant', content: [{ type: 'text', text: text }] } }
+    content = [{ type: 'text', text: text }]
+    { type: 'message_end', message: { role: 'assistant', content: content, usage: usage } }
   end
 
   def write_fake_pi
@@ -200,8 +204,10 @@ RSpec.describe 'agent-council end to end' do
 
     expect(status.exitstatus).to eq(0), output_report
     expect(out.scan(/^  ✓ \d\d:\d\d:\d\d  #[12] done/).size).to eq(2), output_report # progress
-    expect(out.scan(/^  ✓   \d\d:\d\d:\d\d  #[12] done/).size).to eq(2), output_report # reviews table
-    expect(out).to include('--- Reviews complete (2/2 succeeded) ---', '--- Consolidation complete ---')
+    reviews_rows = out.scan(/^  ✓   \d\d:\d\d:\d\d  #{usage_cell}  #[12] done/)
+    expect(reviews_rows.size).to eq(2), output_report
+    expect(out).to include('--- Reviews complete (2/2 succeeded; 2.4k in (400 cached) / 400 out, $0.04) ---',
+      '--- Consolidation complete ---')
     expect(out.index('Reviews (in ')).to be < out.index('Consolidation Report (in ')
     expect(out).to match(%r{^Config:  config\.yml\nPrompt:  prompt\.md\nRun Dir: agent-council-reports/\S+$}),
       output_report
@@ -226,12 +232,12 @@ RSpec.describe 'agent-council end to end' do
 
     expect(run_council.exitstatus).to eq(0), output_report
     expect(out)
-      .to match(/^  ✗   \d\d:\d\d:\d\d  fails \/ c  \(pi exited 1: boom\)$/), output_report
+      .to match(/^  ✗   \d\d:\d\d:\d\d  - +  fails \/ c  \(pi exited 1: boom\)$/), output_report
     expect(out).to end_with("\n--- Consolidation error ---\n")
     expect(reports('*consolidated*.md')).to be_empty
   end
 
-  it 'names the prompt and config copies and records durations in analyst front matter' do
+  it 'names the prompt and config copies and records durations and usage in analyst front matter' do
     write_config(%w[done])
 
     expect(run_council.exitstatus).to eq(0), output_report
@@ -242,18 +248,23 @@ RSpec.describe 'agent-council end to end' do
     expect(fields['run_stamp']).to match(/\A\d{4}-\d\d-\d\d-\d\d-\d\d-\d\d\z/)
     expect(fields['duration']).to match(/\A\d\d:\d\d:\d\d\z/)
     expect(text).to include("| duration | #{fields['duration']} |") # in the byline too
+    expect(fields['usage']).to eq('input' => 1000, 'output' => 200, 'cache_read' => 200, 'cache_write' => 0,
+      'cost' => 0.02)
+    expect(text).to include('| usage | 1.2k in (200 cached) / 200 out, $0.02 |')
   end
 
-  it 'lists only the reports consolidated, not failed agents, in source_durations' do
+  it 'lists only the reports consolidated, not failed agents, in source_durations and source_usages' do
     write_config(%w[done fails], consolidator: 'done')
 
     expect(run_council.exitstatus).to eq(1), output_report
-    expect(out).to include('--- Reviews complete (1/2 succeeded) ---', '--- Consolidation complete ---')
-    expect(out).to match(/^  ✗   \d\d:\d\d:\d\d  #2 fails \/ m2  \(pi exited 1: boom\)$/), output_report
+    expect(out).to include('--- Reviews complete (1/2 succeeded; 1.2k in (200 cached) / 200 out, $0.02) ---',
+      '--- Consolidation complete ---')
+    expect(out).to match(/^  ✗   \d\d:\d\d:\d\d  - +  #2 fails \/ m2  \(pi exited 1: boom\)$/), output_report
     consolidated = File.read(reports('*consolidated*.md').first, encoding: 'UTF-8')
     fields, = AgentCouncil.parse_front_matter(consolidated)
     expect(fields['sources']).to eq(['#1 done / m1'])
     expect(fields['source_durations'].keys).to eq(['#1 done / m1'])
+    expect(fields['source_usages'].keys).to eq(['#1 done / m1'])
   end
 
   it 'writes the run dir under --output-dir when given' do
@@ -289,7 +300,8 @@ RSpec.describe 'agent-council end to end' do
       status = run_council(args: ['--consolidate', run_dir])
 
       expect(status.exitstatus).to eq(0), output_report
-      expect(out).to match(/^  ✓   \d\d:\d\d:\d\d  done \/ c  \S+_consolidated_pi_done_c\.md$/), output_report
+      expect(out).to match(/^  ✓   \d\d:\d\d:\d\d  #{usage_cell}  done \/ c  \S+_pi_done_c\.md$/),
+        output_report
       expect(out).to include('--- Consolidation complete ---')
       expect(out).to include(
         "Config:  #{run_dir}/config.yml\nPrompt:  #{run_dir}/prompt.md\nRun Dir: #{run_dir}\n",
@@ -308,7 +320,7 @@ RSpec.describe 'agent-council end to end' do
       analyst, = AgentCouncil.parse_front_matter(File.read(reports('reviews/*.md').first, encoding: 'UTF-8'))
       expect(fields['timestamp']).to eq(analyst['timestamp']) # the run's
       expect(fields['consolidated_at']).to be >= fields['timestamp']
-      expect(text).to match(/^\| source \| #1 done \/ m1 \(\d\d:\d\d:\d\d\) \|$/)
+      expect(text).to match(/^\| source \| #1 done \/ m1 \(\d\d:\d\d:\d\d, #{usage_cell}\) \|$/)
       expect(leftover_scratch_dirs).to be_empty
     end
 
@@ -339,7 +351,7 @@ RSpec.describe 'agent-council end to end' do
       status = run_council(args: ['--consolidate', run_dir])
 
       expect(status.exitstatus).to eq(1), output_report
-      expect(out).to match(/^  ✗   \d\d:\d\d:\d\d  fails \/ c  \(pi exited 1: boom\)$/), output_report
+      expect(out).to match(/^  ✗   \d\d:\d\d:\d\d  - +  fails \/ c  \(pi exited 1: boom\)$/), output_report
       expect(out).to include('--- Consolidation error ---')
       expect(reports('*consolidated*.md')).to be_empty
     end
@@ -418,7 +430,8 @@ RSpec.describe 'agent-council end to end' do
 
     expect(status.exitstatus).to eq(0), output_report
     expect(err).not_to match(/:\d+:in /), output_report # a backtrace line
-    expect(out).to match(/^  ✓   \d\d:\d\d:\d\d  utf8 \/ c  \S+_consolidated_pi_utf8_c\.md$/), output_report
+    expect(out).to match(/^  ✓   \d\d:\d\d:\d\d  #{usage_cell}  utf8 \/ c  \S+_consolidated_pi_utf8_c\.md$/),
+      output_report
     expect(out).to include('Reviews (in ', '2/2 succeeded')
     consolidated = reports('*consolidated*.md')
     expect(consolidated.size).to eq(1)

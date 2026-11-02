@@ -478,16 +478,26 @@ agent-council-reports/
   written by the orchestrator (never by the model):
   - in every report: `role` (`analyst` or `consolidator`), `timestamp`
     (unquoted ISO 8601), `query` (the query slug), `harness`, `provider`, `model`,
-    `duration` (`HH:MM:SS`), `prompt_file` and `config_file` (the names of
+    `duration` (`HH:MM:SS`), `usage` (see below), `prompt_file` and `config_file` (the names of
     the run dir's input copies), `config_source` (where the config was
     found, with `~` for the home directory; informational only) and
     `run_stamp` (the report filenames' date-time prefix, with the run
     dir's suffix, if any);
   - in analyst reports: `agent_index` (the agent number, as an integer);
   - in consolidated reports: `sources` (the analyst labels that were
-    synthesized), `source_durations` (each source label's report duration), and `consolidated_at` (when the
+    synthesized), `source_durations` (each source label's report duration),
+    `source_usages` (each source label's `usage`), and `consolidated_at` (when the
     consolidation ran; with `--consolidate`, possibly long after
     `timestamp`, the run's start).
+
+  `usage` is the model's token usage, summed over every request of the
+  run, as reported by the harness: `input` (excluding cached input),
+  `cache_read`, `cache_write` and `output` token counts, plus `cost` in
+  US dollars when the harness could price the run (pi uses its own price
+  table, so models missing from it have no cost). It is left out when the
+  provider reports no usage. Providers count tokens somewhat differently
+  (reasoning tokens, for example), so compare counts across providers
+  only roughly.
 
   `--consolidate` relies on the analysts' `prompt_file`, `config_file`,
   `run_stamp` and `query`, and on `agent_index` to tell which configured
@@ -528,9 +538,12 @@ While the agents run, a `Review Progress:` section prints one line per
 agent as it finishes: `✓` or `✗`, its duration, its label (e.g.
 `#2 openai / gpt-6.1-sol`) and, for a failure, the reason.
 When all reviews finish, a `Reviews` table shows which models succeeded,
-how long each took (`HH:MM:SS`), and its report file (for a failure,
-the reason in parentheses), followed by a
-`--- Reviews complete (N/M succeeded) ---` line. With a consolidator,
+how long each took (`HH:MM:SS`), its token usage (e.g.
+`45.2k in (30.0k cached) / 3.1k out, $0.21`, where `in` counts cached
+input too, or `-` when unknown; failed runs show what they used), and its
+report file (for a failure, the reason in parentheses), followed by a
+`--- Reviews complete (N/M succeeded; <total usage>) ---` line. The
+total's cost is shown only when every analyst's cost is known. With a consolidator,
 the `Consolidation Report (in <run dir>):` heading (with
 `--consolidate`, `(in <run dir>, from N review(s)):`) then prints while it
 runs, its result row when it finishes, and finally `--- Consolidation
