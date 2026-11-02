@@ -125,8 +125,8 @@ in detail.
    file can live anywhere):
 
    ```bash
-   echo 'In one paragraph, what does this project do?' > ~/what-is-this-prompt.md
-   agent-council ~/what-is-this-prompt.md
+   echo 'In one paragraph, what does this project do?' > what-is-this-prompt.md
+   agent-council what-is-this-prompt.md
    ```
 
    This calls each configured model at your providers' usual rates. Any
