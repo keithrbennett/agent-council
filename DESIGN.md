@@ -2,7 +2,7 @@
 
 ## 1. Goal
 
-The long-term goal is to collect genuinely different viewpoints on the same question from multiple harness/model instances.
+The long-term goal is to collect genuinely different viewpoints on the same question from multiple harness/model instances, and, because every instance gets the identical task, to compare those instances against each other on speed, token usage, cost and quality.
 
 This repository is the first step: it varies only the models, under a single harness (Pi). Harness diversity comes later (§18).
 

@@ -1,13 +1,21 @@
 # agent-council
 
-Get a second opinion, and a third and a fourth, with one command:
+Run one prompt through several AI models at once, against your own
+project, and get two things back: a **consolidated answer** that is
+better than any single model's, and a **head-to-head comparison** of the
+models and providers that produced it, measured on speed, token usage,
+cost and quality.
+
 agent-council runs the **same analytical prompt** through several models
 using the [Pi](https://github.com/earendil-works/pi) coding-agent harness,
-saves each model's final response as a separate Markdown report, and can
+saves each model's final response as a separate Markdown report, records
+how long each one took, how many tokens it used and what it cost, and can
 then have a **consolidator** model synthesize those reports into a single
-one.
+one and assess what each agent contributed.
 
-Why use it:
+## Why use it
+
+### A council of second opinions
 
 - **Catch what one model misses.** Different models notice different
   problems and weigh trade-offs differently; asking several surfaces
@@ -16,15 +24,48 @@ Why use it:
   every analyst report, checks their claims against your project where it
   can, and writes a synthesis, so you can see where the models agree and
   where they differ.
-- **Compare models on your own work.** Each model's report is kept
-  side by side, labeled with its source, for the same prompt and
-  codebase.
-- **Repeatable and cheap to set up.** A prompt file and a short YAML
-  config are all a run needs; every run's reports, prompt, and config
-  are saved together in a timestamped directory.
 
-The project is at an early stage; support for more harnesses than Pi is
-among the [planned features](DESIGN.md#18-status-and-future-work). See
+### A benchmark built from your own work
+
+Public leaderboards tell you how models do on someone else's tasks.
+agent-council tells you how they do on *yours*: your codebase, your
+questions, your standards. Every run is a controlled experiment, with the
+same prompt, the same repository and the same tools at the same moment,
+so the differences you see are differences in the models and in the
+providers serving them.
+
+- **Speed.** Every agent's wall-clock duration, side by side. Find out
+  which models answer in two minutes and which take twenty, and whether
+  the wait buys anything.
+- **Tokens and cost.** Input, cached input and output tokens, and dollar
+  cost where pi can price the model, per agent and in total. See whether
+  the model that costs ten times as much finds ten times as much.
+- **Quality.** The reports sit side by side, labeled by source. The
+  consolidator shows which findings each model shared with the others,
+  which only it found and where models contradicted each other, and its
+  *Agent performance* section assesses each agent's depth of research
+  (did it read the code, run commands, verify its claims?) and how much it
+  added, as opposed to noise or errors.
+- **Providers, not just models.** Run the same model through different
+  providers, such as its maker's API and an aggregator, and compare their
+  latency, price and reliability. Failures are recorded with their
+  reasons, so an unreliable provider shows up in the record.
+- **Evidence that accumulates.** Each run's measurements are saved in a
+  machine-readable `run.json`. Over weeks of real work, those files
+  become a dataset for choosing your default model, your ensemble and
+  your budget from your own results, not from marketing or hunches.
+
+### Repeatable and cheap to set up
+
+A prompt file and a short YAML config are all a run needs; every run's
+reports, prompt, config and measurements are saved together in a
+timestamped directory, so a comparison can be rerun next month, against
+next month's models.
+
+The project is at an early stage; support for more harnesses than Pi,
+such as Claude Code and Codex, is among the
+[planned features](DESIGN.md#18-status-and-future-work), and will extend
+these comparisons to the same model running under different harnesses. See
 [`DESIGN.md`](DESIGN.md) for the rationale.
 
 > **Between releases**, the documentation in the repository describes the
