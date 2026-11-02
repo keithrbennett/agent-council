@@ -422,6 +422,46 @@ any suffix). Exit status is 0 only if the consolidation succeeded.
   is told only which configured agents have no report, with a note that
   the reason wasn't recorded.
 
+### Time zone
+
+Run dir names, report filenames and the front matter's `timestamp` and
+`consolidated_at` all use the **local time zone**. There is no
+agent-council option to change it; instead, set the standard `TZ`
+environment variable, which Ruby (like most programs) honors. Timestamps
+always carry their UTC offset (`2026-09-02T16:21:43+00:00` in UTC), so
+they stay unambiguous whatever the zone.
+
+| Platform | One run in UTC | Value format |
+|---|---|---|
+| Linux, macOS, WSL (bash, zsh, fish) | `TZ=UTC agent-council prompt.md` | IANA name |
+| Windows PowerShell | `$env:TZ = 'UTC0'; agent-council prompt.md` | POSIX-style |
+| Windows cmd | `set "TZ=UTC0" && agent-council prompt.md` | POSIX-style |
+
+On Windows, `TZ` set this way lasts for the rest of the shell session.
+Git Bash on Windows accepts the Linux syntax but runs Windows Ruby, so it
+takes POSIX-style values.
+
+**Finding the value to use:**
+
+- **IANA names** (Linux, macOS, WSL): `Area/City`, such as
+  `America/Chicago` or `Europe/Berlin`, plus `UTC`. List them with
+  `ls /usr/share/zoneinfo`, or see the
+  [list on Wikipedia](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones).
+  A misspelled name isn't reported: it silently falls back to UTC, so
+  check the timestamp in a report's front matter.
+- **POSIX-style values** (native Windows): a zone abbreviation, its
+  hours **west** of UTC (so the sign is the reverse of the usual
+  offset), and an optional daylight saving abbreviation: `UTC0`,
+  `EST5EDT` (US Eastern), `PST8PDT` (US Pacific), `CET-1CEST`
+  (Central Europe). Daylight saving follows US rules; see Microsoft's
+  [`_tzset` documentation](https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/tzset).
+  These values also work on Linux and macOS.
+
+To always use a zone, set `TZ` in your shell profile (e.g.
+`export TZ=UTC`), keeping in mind that this affects every program
+started from that shell. The agents inherit `TZ` either way, so it also
+changes the time they see.
+
 ## What you get
 
 Each run creates one run directory, holding its inputs and reports,
@@ -456,14 +496,8 @@ agent-council-reports/
   name is already taken (two runs started in the same second, or local
   time repeating when clocks fall back or are set back), the new run gets
   `hh-mm-ss-2`, `-3`, ... instead, so each run has its own directory.
-- **Time zone**: run dir names, report filenames and front matter
-  timestamps all use the local time zone, which the standard `TZ`
-  environment variable overrides. For UTC, run `TZ=UTC agent-council ...`
-  (timestamps then end in `+00:00`). On Linux and macOS, `TZ` takes IANA
-  names such as `UTC` or `America/Chicago`; a misspelled name may fall
-  back to UTC silently. Native Windows accepts only POSIX-style
-  values such as `UTC0` (PowerShell: `$env:TZ = 'UTC0'`). The agents
-  inherit `TZ` too.
+- **Time zone**: local by default; see [Time zone](#time-zone) to use
+  UTC or another zone.
 - **Report filenames** carry everything else:
   `<yyyy-mm-dd>-<hh-mm-ss>_<query-slug>_<agent-number>_<harness>_<provider>_<model>.md`,
   so a report stays self-describing when you copy or attach it outside the
