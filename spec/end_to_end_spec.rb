@@ -48,6 +48,11 @@ RSpec.describe 'agent-council end to end' do
 
   after { FileUtils.remove_entry(tmp_root) }
 
+  # A consolidated report's sources table row for a fake report's source.
+  def source_row(label)
+    "#{Regexp.escape("| #{label} | ")}\\d\\d:\\d\\d:\\d\\d#{Regexp.escape(' | 1.2k | 200 | 200 | $0.02 |')}"
+  end
+
   def report_event(text)
     content = [{ type: 'text', text: text }]
     { type: 'message_end', message: { role: 'assistant', content: content, usage: usage } }
@@ -285,8 +290,7 @@ RSpec.describe 'agent-council end to end' do
     consolidated = File.read(reports('*consolidated*.md').first, encoding: 'UTF-8')
     fields, = AgentCouncil.parse_front_matter(consolidated)
     expect(fields['sources']).to eq(['#1 done / m1'])
-    expect(consolidated.scan(/^\| source \| .*$/))
-      .to match([/\A\| source \| #1 done \/ m1 \(\d\d:\d\d:\d\d, #{usage_cell}\) \|\z/])
+    expect(consolidated.scan(/^\| #.*$/)).to match([/\A#{source_row('#1 done / m1')}\z/])
   end
 
   it 'writes the run dir under --output-dir when given' do
@@ -342,7 +346,7 @@ RSpec.describe 'agent-council end to end' do
       analyst, = AgentCouncil.parse_front_matter(File.read(reports('reviews/*.md').first, encoding: 'UTF-8'))
       expect(fields['timestamp']).to eq(analyst['timestamp']) # the run's
       expect(fields['consolidated_at']).to be >= fields['timestamp']
-      expect(text).to match(/^\| source \| #1 done \/ m1 \(\d\d:\d\d:\d\d, #{usage_cell}\) \|$/)
+      expect(text).to match(/^#{source_row('#1 done / m1')}$/)
       expect(leftover_scratch_dirs).to be_empty
     end
 

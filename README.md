@@ -518,8 +518,10 @@ agent-council-reports/
   `provider` and `model` front matter are ignored.
 - Below the front matter, the orchestrator adds a metadata table
   summarizing its main fields and its run's duration and token usage
-  (for consolidated reports, also each source's, and under a
-  `# Consolidated Report` title and a `### Prompt:` line), followed by the
+  (for consolidated reports, under a `# Consolidated Report` title and a
+  `### Prompt:` line, and followed by a `### Sources` table giving each
+  source's duration, input (cached included), cached input, output and
+  cost, from `run.json`), followed by the
   model's final message, minus any top-level `#` heading the message
   starts with.
 - The copied prompt, config and report-format addendum keep an analyst

@@ -331,9 +331,7 @@ module AgentCouncil
 
   # Markdown table of the report's main front-matter fields and its run's
   # duration and usage, leading the body (under the title, in consolidated
-  # reports); one row per consulted agent, when present, with its run's
-  # duration and usage from meta['source_runs'] (source label => run.json
-  # entry) when known.
+  # reports, followed by sources_table).
   module_function def byline_table(meta, provider, model)
     fields = {
       'role'            => meta['role'],
@@ -348,13 +346,6 @@ module AgentCouncil
       'usage'           => format_usage(meta['usage']),
     }.compact
     rows = fields.map { |field, value| "| #{field} | #{value} |" }
-    source_runs = meta['source_runs'] || {}
-    rows += Array(meta['sources']).map do |label|
-      run = source_runs[label] || {}
-      seconds = run['duration_seconds']
-      details = [(format_duration(seconds) if seconds.is_a?(Numeric)), format_usage(run['usage'])].compact
-      "| source | #{label}#{" (#{details.join(', ')})" unless details.empty?} |"
-    end
     <<~TABLE
       | Field     | Value |
       | :-------- | :---------------------------- |
@@ -362,10 +353,32 @@ module AgentCouncil
     TABLE
   end
 
+  # Markdown table of a consolidated report's sources, one row per label in
+  # sources, with its run's duration and usage from source_runs (label =>
+  # run.json entry); - where unknown. Input counts cached input too.
+  module_function def sources_table(sources, source_runs)
+    rows = sources.map do |label|
+      run = source_runs[label] || {}
+      seconds = run['duration_seconds']
+      duration = format_duration(seconds) if seconds.is_a?(Numeric)
+      input, cached, output, cost = usage_figures(run['usage'])
+      counts = [input, cached, output].map { |count| count && format_token_count(count) }
+      cells = [label, duration, *counts, cost && format_cost(cost)]
+      "| #{cells.map { |cell| cell || '-' }.join(' | ')} |"
+    end
+    <<~TABLE
+      ### Sources
+
+      | Source | Duration | Input | Cached | Output | Cost |
+      | :----- | -------: | ----: | -----: | -----: | ---: |
+      #{rows.join("\n")}
+    TABLE
+  end
+
   # Runs the configured consolidator model over a run's reports and writes
   # its report into the same run dir. Returns as run_agent; never raises.
-  # analyst_runs: the run's run.json analyst entries, for the byline's
-  # source durations and usage. failures: as for consolidation_prompt.
+  # analyst_runs: the run's run.json analyst entries, for the sources
+  # table's durations and usage. failures: as for consolidation_prompt.
   # pool: as for run_agent.
   module_function def run_consolidation(consolidator, original_prompt, run_dir, file_prefix,
     meta: {}, prompt_path: nil, failures: [], analyst_runs: [], pool: nil)
@@ -388,8 +401,8 @@ module AgentCouncil
       'sources' => reports.map(&:first))
     prompt_line = prompt_path ? "### Prompt: #{prompt_path}\n\n" : ''
     header = ->(run_fields) do
-      byline = byline_table(meta.merge(run_fields, 'source_runs' => source_runs), provider, model)
-      "# Consolidated Report\n\n#{prompt_line}#{byline}"
+      "# Consolidated Report\n\n#{prompt_line}#{byline_table(meta.merge(run_fields), provider, model)}\n" \
+        "#{sources_table(meta['sources'], source_runs)}"
     end
     run_agent(consolidator, prompt, run_dir, file_prefix,
       filename: consolidated_filename(file_prefix, provider, model),
@@ -423,14 +436,22 @@ module AgentCouncil
   # $0.85", where "in" counts all input, cached or not. The cost is left out
   # when unknown. nil for nil usage.
   module_function def format_usage(usage)
+    input, cached, output, cost = usage_figures(usage)
+    return nil unless input
+
+    cached_note = " (#{format_token_count(cached)} cached)" if cached.positive?
+    text = "#{format_token_count(input)} in#{cached_note} / #{format_token_count(output)} out"
+    cost ? "#{text}, #{format_cost(cost)}" : text
+  end
+
+  # [input (cached or not), cached input, output, cost (nil when unknown)]
+  # from a usage hash (see HARNESS), or nil for unknown usage.
+  module_function def usage_figures(usage)
     return nil unless usage.is_a?(Hash)
 
     cached = usage['cache_read'].to_i
-    input = usage['input'].to_i + cached + usage['cache_write'].to_i
-    cached_note = " (#{format_token_count(cached)} cached)" if cached.positive?
-    text = "#{format_token_count(input)} in#{cached_note} / #{format_token_count(usage['output'].to_i)} out"
-    cost = usage['cost']
-    cost.is_a?(Numeric) && cost.positive? ? "#{text}, #{format_cost(cost)}" : text
+    cost = usage['cost'] if usage['cost'].is_a?(Numeric) && usage['cost'].positive?
+    [usage['input'].to_i + cached + usage['cache_write'].to_i, cached, usage['output'].to_i, cost]
   end
 
   # 950, 45.2k, 1.2M.

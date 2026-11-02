@@ -1132,7 +1132,7 @@ RSpec.describe AgentCouncil do
   end
 
   describe '.byline_table' do
-    it 'lists the main front matter fields, one row per source' do
+    it 'lists the main front matter fields, leaving sources to sources_table' do
       meta = {
         'role'      => 'consolidator',
         'query'     => 'check-prev-commits',
@@ -1147,33 +1147,15 @@ RSpec.describe AgentCouncil do
         "| harness | pi |\n" \
         "| provider | zai |\n" \
         "| model | glm-5.3 |\n" \
-        "| timestamp | 2026-09-03T19:23:57 |\n" \
-        "| source | openai / gpt-x |\n" \
-        "| source | zai / glm-5.3 |\n"
+        "| timestamp | 2026-09-03T19:23:57 |\n"
       )
     end
 
-    it 'adds duration and usage rows, and annotates sources with their runs' do
+    it 'adds duration and usage rows' do
       meta = { 'role' => 'consolidator', 'duration' => '00:02:10',
-        'usage' => { 'input' => 10, 'output' => 5 }, 'sources' => ['a / b', 'c / d', 'e / f'],
-        'source_runs' => {
-          'a / b' => { 'duration_seconds' => 42.4,
-                       'usage'            => { 'input' => 2000, 'output' => 7, 'cost' => 0.5 } },
-          'c / d' => { 'duration_seconds' => 3, 'usage' => nil },
-        } }
+        'usage' => { 'input' => 10, 'output' => 5 } }
       table = described_class.byline_table(meta, 'openai', 'gpt-x')
       expect(table).to include('| duration | 00:02:10 |', '| usage | 10 in / 5 out |')
-      expect(table).to include('| source | a / b (00:00:42, 2.0k in / 7 out, $0.50) |')
-      expect(table).to include('| source | c / d (00:00:03) |')
-      expect(table).to include('| source | e / f |')
-    end
-
-    it 'omits source rows when there are none (analyst reports)' do
-      meta = { 'role' => 'analyst', 'query' => 'review', 'timestamp' => '2026-09-03T19:23:57' }
-      table = described_class.byline_table(meta, 'openai', 'gpt-x')
-      expect(table).not_to include('| source |')
-      expect(table).to include('| role | analyst |')
-      expect(table).to include('| model | gpt-x |')
     end
 
     it 'adds an agent row when an agent_index is present' do
@@ -1187,6 +1169,26 @@ RSpec.describe AgentCouncil do
       meta = { 'role' => 'consolidator', 'query' => 'review', 'timestamp' => '2026-09-03T19:23:57' }
       table = described_class.byline_table(meta, 'openai', 'gpt-x')
       expect(table).not_to include('| agent |')
+    end
+  end
+
+  describe '.sources_table' do
+    it "gives each source's duration, input (cached included), cached input, output and cost, or -" do
+      runs = {
+        'a / b' => { 'duration_seconds' => 42.4,
+                     'usage'            => { 'input' => 500, 'cache_read' => 1500, 'output' => 7,
+                                             'cost' => 0.5 } },
+        'c / d' => { 'duration_seconds' => 3, 'usage' => nil },
+      }
+      expect(described_class.sources_table(['a / b', 'c / d', 'e / f'], runs)).to eq(<<~TABLE)
+        ### Sources
+
+        | Source | Duration | Input | Cached | Output | Cost |
+        | :----- | -------: | ----: | -----: | -----: | ---: |
+        | a / b | 00:00:42 | 2.0k | 1.5k | 7 | $0.50 |
+        | c / d | 00:00:03 | - | - | - | - |
+        | e / f | - | - | - | - | - |
+      TABLE
     end
   end
 
@@ -1265,7 +1267,12 @@ RSpec.describe AgentCouncil do
           | timestamp | 2026-09-03T19:23:57 |
           | consolidated_at | 2026-09-03T19:40:05+07:00 |
           | duration | 00:02:10 |
-          | source | openai / gpt-x (00:01:05) |
+
+          ### Sources
+
+          | Source | Duration | Input | Cached | Output | Cost |
+          | :----- | -------: | ----: | -----: | -----: | ---: |
+          | openai / gpt-x | 00:01:05 | - | - | - | - |
         HEADER
         expect(File.read(File.join(dir, captured[:filename]))).to eq('consolidated body')
         expect(Dir.exist?(File.join(dir, 'consolidated'))).to be(false)
