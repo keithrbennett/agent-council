@@ -465,8 +465,8 @@ References:
 
 1. [List of tz database time zones](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) (Wikipedia)
 2. [The TZ Variable](https://www.gnu.org/software/libc/manual/html_node/TZ-Variable.html) (GNU C Library manual)
-3. [`posix_tz_db`: IANA names mapped to POSIX TZ strings](https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv)
-4. [`_tzset`](https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/tzset) (Microsoft C runtime documentation)
+3. `posix_tz_db`: [IANA names mapped to POSIX TZ strings](https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv)
+4. `_tzset`: [Microsoft C runtime documentation](https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/tzset)
 
 [tz-iana]: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
 [tz-gnu]: https://www.gnu.org/software/libc/manual/html_node/TZ-Variable.html
