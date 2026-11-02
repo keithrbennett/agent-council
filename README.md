@@ -298,26 +298,6 @@ agent-council -v
 agent-council --consolidate agent-council-reports/2026-09-03/09-14-02
 ```
 
-`AGENT_COUNCIL_OPTS` holds arguments that agent-council inserts before the
-command-line ones, so an option given on the command line overrides the
-same option there:
-
-```bash
-export AGENT_COUNCIL_OPTS="--output-dir tmp/council"
-agent-council my-analysis-prompt.md
-# Overrides AGENT_COUNCIL_OPTS
-agent-council --output-dir other-reports my-analysis-prompt.md
-```
-
-Its arguments are treated exactly as if typed first on the command line,
-so set it with care: for example, an `--output-dir` there makes
-`--consolidate` fail, as if both were typed on the command line. The value is split into
-words like a shell would, but agent-council doesn't expand variables in
-it: `~` works, but a literal `$HOME` stays literal. (In a double-quoted
-`export`, your shell has already expanded it.) A malformed value, such as
-one with an unclosed quote, makes every command fail, `-h` and `-v`
-included, with a message naming `AGENT_COUNCIL_OPTS`.
-
 Relative paths are resolved from the working directory. agent-council
 expands `~` itself only in `--output-dir`; in other paths, the shell
 must expand it.
@@ -395,6 +375,29 @@ agent-council \
   [cov-loupe](https://github.com/keithrbennett/cov-loupe) and runs no tests,
   so run your full test suite first; it stops with an error if the coverage
   data looks out of date.
+
+### Default options (`AGENT_COUNCIL_OPTS`)
+
+To use the same options on every run, put them in the
+`AGENT_COUNCIL_OPTS` environment variable. agent-council inserts its
+arguments before the command-line ones, so an option given on the command
+line overrides the same option there:
+
+```bash
+export AGENT_COUNCIL_OPTS="--output-dir tmp/council"
+agent-council my-analysis-prompt.md
+# Overrides AGENT_COUNCIL_OPTS
+agent-council --output-dir other-reports my-analysis-prompt.md
+```
+
+Its arguments are treated exactly as if typed first on the command line,
+so set it with care: for example, an `--output-dir` there makes
+`--consolidate` fail, as if both were typed on the command line. The value is split into
+words like a shell would, but agent-council doesn't expand variables in
+it: `~` works, but a literal `$HOME` stays literal. (In a double-quoted
+`export`, your shell has already expanded it.) A malformed value, such as
+one with an unclosed quote, makes every command fail, `-h` and `-v`
+included, with a message naming `AGENT_COUNCIL_OPTS`.
 
 ### Stopping a run
 
