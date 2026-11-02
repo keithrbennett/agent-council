@@ -495,9 +495,11 @@ agent-council-reports/
   for analysis across many runs: `analysts` and `consolidations`, one
   entry per run with its `agent_index` (analysts only), `harness`,
   `provider`, `model`, `ok`, `report` (its path in the run dir)
-  or `error`, `duration_seconds` and `usage`; and `total_usage`, the
-  entries' summed usage, whose `cost` is included only if every entry's
-  cost is known. Failed runs are included, since their tokens were spent.
+  or `error`, `duration_seconds` and `usage`; `total_usage`, the
+  entries' summed usage, whose `cost` is included only if every summed
+  entry's cost is known; and `total_usage_runs`, how many entries reported
+  usage (and so are in the total). Failed runs are included, since their
+  tokens were spent.
   It is written once the reviews finish and updated after each
   consolidation, including each `--consolidate`; a `--consolidate` of a
   run dir without a readable `run.json` warns and writes none.
@@ -551,15 +553,17 @@ ls agent-council-reports/*/*/reviews/*codebase-review*
 
 While the agents run, a `Review Progress:` section prints one line per
 agent as it finishes: `✓` or `✗`, its duration, its label (e.g.
-`#2 openai / gpt-6.1-sol`) and, for a failure, the reason.
-When all reviews finish, a `Reviews` table shows which models succeeded,
-how long each took (`HH:MM:SS`), its token usage (e.g.
-`45.2k in (30.0k cached) / 3.1k out, $0.21`, where `in` counts cached
-input too, or `-` when unknown; failed runs show what they used) and,
-in an `Error` column shown only when something failed, why a run failed,
-followed by a
-`--- Reviews complete (N/M succeeded; <total usage>) ---` line. The
-total's cost is shown only when every analyst's cost is known. With a consolidator,
+`#2 openai / gpt-6.1-sol`) and, for a failure, the reason on the line
+below. When all reviews finish, a `Reviews` table shows which models
+succeeded, how long each took (`HH:MM:SS`) and their token usage in
+`In`, `Cached`, `Out` and `Cost` columns (`In` counts cached input too;
+`-` when unknown; failed runs show what they used), with the failures'
+reasons listed below it under `Errors:`. A
+`--- Reviews complete (N/M succeeded; <total usage>) ---` line follows,
+e.g. `2.1M in (2.0M cached) / 32.7k out, $0.18`. The total's cost is
+shown only when every counted analyst's cost is known, and the total
+notes `(from K of M agents)` when some reported no usage (as some
+providers don't). With a consolidator,
 the `Consolidation Report (in <run dir>):` heading (with
 `--consolidate`, `(in <run dir>, from N review(s)):`) then prints while it
 runs, its result row when it finishes, and finally `--- Consolidation

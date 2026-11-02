@@ -360,11 +360,8 @@ module AgentCouncil
     rows = sources.map do |label|
       run = source_runs[label] || {}
       seconds = run['duration_seconds']
-      duration = format_duration(seconds) if seconds.is_a?(Numeric)
-      input, cached, output, cost = usage_figures(run['usage'])
-      counts = [input, cached, output].map { |count| count && format_token_count(count) }
-      cells = [label, duration, *counts, cost && format_cost(cost)]
-      "| #{cells.map { |cell| cell || '-' }.join(' | ')} |"
+      duration = seconds.is_a?(Numeric) ? format_duration(seconds) : '-'
+      "| #{[label, duration, *usage_cells(run['usage'])].join(' | ')} |"
     end
     <<~TABLE
       ### Sources
@@ -444,6 +441,14 @@ module AgentCouncil
     cost ? "#{text}, #{format_cost(cost)}" : text
   end
 
+  # Display cells for a usage's input (cached included), cached input,
+  # output and cost; - for each unknown one.
+  module_function def usage_cells(usage)
+    input, cached, output, cost = usage_figures(usage)
+    counts = [input, cached, output].map { |count| count ? format_token_count(count) : '-' }
+    [*counts, cost ? format_cost(cost) : '-']
+  end
+
   # [input (cached or not), cached input, output, cost (nil when unknown)]
   # from a usage hash (see HARNESS), or nil for unknown usage.
   module_function def usage_figures(usage)
@@ -493,12 +498,14 @@ module AgentCouncil
   end
 
   # Writes the run dir's run.json: every analyst's and consolidation's
-  # entry (see run_entry) and their total usage. Replaced atomically, so a
+  # entry (see run_entry), their total usage and how many runs it covers
+  # (those that reported usage). Replaced atomically, so a
   # reader or a Ctrl-C never sees it half written. A failure to write it is
   # only warned about: the reports are what matter.
   module_function def write_run_file(run_dir, analysts, consolidations)
+    usages = (analysts + consolidations).map { |entry| entry['usage'] }
     data = { 'analysts' => analysts, 'consolidations' => consolidations,
-      'total_usage' => sum_usage((analysts + consolidations).map { |entry| entry['usage'] }) }
+      'total_usage' => sum_usage(usages), 'total_usage_runs' => usages.grep(Hash).size }
     path = File.join(run_dir, RUN_FILENAME)
     temp = "#{path}.#{Process.pid}.tmp"
     File.write(temp, "#{JSON.pretty_generate(data)}\n")
@@ -525,24 +532,41 @@ module AgentCouncil
     [result, Process.clock_gettime(Process::CLOCK_MONOTONIC) - started]
   end
 
-  RESULT_HEADINGS = %w[Ok Duration Agent Usage Error].freeze
+  RESULT_HEADINGS = %w[Ok Duration Agent In Cached Out Cost].freeze
+  # The usage columns, right-aligned so their figures line up.
+  RIGHT_ALIGNED_COLUMNS = (3..6)
 
   # Indented result table lines for [label, ok, detail, elapsed, usage]
-  # results: a heading row, then one row per result, with ✓ or ✗, - for
-  # unknown usage, and a failure's error. The Error column is left out when
-  # nothing failed. Report filenames aren't shown: an analyst's is found by
-  # its agent number, and the consolidated report is the run dir's only one.
+  # results: a heading row, then one row per result, with ✓ or ✗ and its
+  # usage (as for usage_cells), then the failures' errors, if any, listed
+  # below the table so long messages don't widen it. Report filenames
+  # aren't shown: an analyst's is found by its agent number, and the
+  # consolidated report is the run dir's only one.
   module_function def format_result_table(results)
-    rows = results.map do |label, ok, detail, elapsed, usage|
-      [ok ? '✓' : '✗', format_duration(elapsed), label, format_usage(usage) || '-', ok ? '' : detail]
+    rows = results.map do |label, ok, _detail, elapsed, usage|
+      [ok ? '✓' : '✗', format_duration(elapsed), label, *usage_cells(usage)]
     end
     table = [RESULT_HEADINGS, *rows]
-    table = table.map { |row| row[0...-1] } if rows.all? { |row| row.last.empty? }
     widths = table.transpose.map { |column| column.map { |cell| display_width(cell) }.max }
-    table.map do |row|
-      cells = row.zip(widths).map { |cell, width| cell + (' ' * (width - display_width(cell))) }
+    lines = table.map do |row|
+      cells = row.each_with_index.map do |cell, i|
+        padding = ' ' * (widths[i] - display_width(cell))
+        RIGHT_ALIGNED_COLUMNS.cover?(i) ? padding + cell : cell + padding
+      end
       "  #{cells.join('  ')}".rstrip
     end
+    errors = results.reject { |_, ok| ok }.map { |label, _, detail| "    #{label}: #{detail}" }
+    errors.empty? ? lines : [*lines, '', '  Errors:', *errors]
+  end
+
+  # "; <total usage>" for a summary line, noting how many of the runs it
+  # covers when some reported no usage; "" when none reported any.
+  module_function def usage_summary(usages)
+    total = format_usage(sum_usage(usages))
+    return '' unless total
+
+    reported = usages.grep(Hash).size
+    "; #{total}#{" (from #{reported} of #{usages.size} agents)" if reported < usages.size}"
   end
 
   # East Asian wide and fullwidth characters (CJK, Hangul, fullwidth forms,
@@ -854,15 +878,14 @@ module AgentCouncil
     end
     results = pool.collect do |label, ok, detail, elapsed|
       duration = format_duration(elapsed)
-      puts(ok ? "  ✓ #{duration}  #{label}" : "  ✗ #{duration}  #{label}  (#{detail})")
+      puts(ok ? "  ✓ #{duration}  #{label}" : "  ✗ #{duration}  #{label}\n      #{detail}")
     end
 
     failed = results.count { |_, ok, _| !ok }
     puts "\nReviews (in #{relative_path(reviews_dir)}):"
     puts format_result_table(results)
-    total_usage = format_usage(sum_usage(results.map(&:last)))
     puts "\n--- Reviews complete (#{results.size - failed}/#{results.size} succeeded" \
-      "#{"; #{total_usage}" if total_usage}) ---"
+      "#{usage_summary(results.map(&:last))}) ---"
     # Written now, so it's there even if the consolidation is interrupted.
     analyst_runs = agents.zip(results).each_with_index.map do |(agent, (_, ok, detail, elapsed, usage)), i|
       run_entry(agent, ok, detail, elapsed, usage, index: i + 1, dir: REVIEWS_DIR_NAME)

@@ -38,7 +38,8 @@ RSpec.describe 'agent-council end to end' do
   let(:non_ascii_answer) { 'Résumé ✓ “quoted”' }
   # The usage every fake report reports, and how its row shows it.
   let(:usage) { { input: 1000, output: 200, cacheRead: 200, cacheWrite: 0, cost: { total: 0.02 } } }
-  let(:usage_cell) { Regexp.escape('1.2k in (200 cached) / 200 out, $0.02') }
+  # The fake reports' usage cells in a result table row.
+  let(:usage_cell) { '1\.2k +200 +200 +\$0\.02' }
 
   before do
     [bin_dir, work_dir, child_tmp, started_dir, termed_dir, sigint_dir].each { |dir| FileUtils.mkdir_p(dir) }
@@ -49,6 +50,13 @@ RSpec.describe 'agent-council end to end' do
   after { FileUtils.remove_entry(tmp_root) }
 
   # A consolidated report's sources table row for a fake report's source.
+  # A result table's row, and the Errors list below it, for a lone failed
+  # run whose fake pi exited 1.
+  def failed_result(label)
+    name = Regexp.escape(label)
+    /^  ✗   \d\d:\d\d:\d\d  #{name}(?: +-){4}\n\n  Errors:\n    #{name}: pi exited 1: boom$/
+  end
+
   def source_row(label)
     "#{Regexp.escape("| #{label} | ")}\\d\\d:\\d\\d:\\d\\d#{Regexp.escape(' | 1.2k | 200 | 200 | $0.02 |')}"
   end
@@ -236,8 +244,7 @@ RSpec.describe 'agent-council end to end' do
     write_config(%w[done], consolidator: 'fails')
 
     expect(run_council.exitstatus).to eq(0), output_report
-    expect(out)
-      .to match(/^  ✗   \d\d:\d\d:\d\d  fails \/ c  - +  pi exited 1: boom$/), output_report
+    expect(out).to match(failed_result('fails / c')), output_report
     expect(out).to end_with("\n--- Consolidation error ---\n")
     expect(reports('*consolidated*.md')).to be_empty
   end
@@ -266,17 +273,19 @@ RSpec.describe 'agent-council end to end' do
     report = File.basename(reports('reviews/*.md').first)
     stored = { 'input' => 1000, 'output' => 200, 'cache_read' => 200, 'cache_write' => 0, 'cost' => 0.02 }
     expect(data).to eq(
-      'analysts'       => [
+      'analysts'         => [
         { 'agent_index' => 1, 'harness' => 'pi', 'provider' => 'done', 'model' => 'm1', 'ok' => true,
           'report' => "reviews/#{report}", 'usage' => stored },
         { 'agent_index' => 2, 'harness' => 'pi', 'provider' => 'fails', 'model' => 'm2', 'ok' => false,
           'error' => 'pi exited 1: boom', 'usage' => nil },
       ],
-      'consolidations' => [
+      'consolidations'   => [
         { 'harness' => 'pi', 'provider' => 'done', 'model' => 'c', 'ok' => true,
           'report' => File.basename(reports('*consolidated*.md').first), 'usage' => stored },
       ],
-      'total_usage'    => stored.merge('input' => 2000, 'output' => 400, 'cache_read' => 400, 'cost' => 0.04)
+      'total_usage'      => stored.merge('input' => 2000, 'output' => 400, 'cache_read' => 400,
+        'cost' => 0.04),
+      'total_usage_runs' => 2
     )
   end
 
@@ -284,9 +293,14 @@ RSpec.describe 'agent-council end to end' do
     write_config(%w[done fails], consolidator: 'done')
 
     expect(run_council.exitstatus).to eq(1), output_report
-    expect(out).to include('--- Reviews complete (1/2 succeeded; 1.2k in (200 cached) / 200 out, $0.02) ---',
-      '--- Consolidation complete ---')
-    expect(out).to match(/^  ✗   \d\d:\d\d:\d\d  #2 fails \/ m2  - +  pi exited 1: boom$/), output_report
+    expect(out).to include(
+      '--- Reviews complete (1/2 succeeded; 1.2k in (200 cached) / 200 out, $0.02 ' \
+      '(from 1 of 2 agents)) ---',
+      '--- Consolidation complete ---'
+    )
+    # The progress line, with its error on a line of its own.
+    expect(out).to match(/^  ✗ \d\d:\d\d:\d\d  #2 fails \/ m2\n      pi exited 1: boom$/), output_report
+    expect(out).to match(failed_result('#2 fails / m2')), output_report
     consolidated = File.read(reports('*consolidated*.md').first, encoding: 'UTF-8')
     fields, = AgentCouncil.parse_front_matter(consolidated)
     expect(fields['sources']).to eq(['#1 done / m1'])
@@ -395,7 +409,7 @@ RSpec.describe 'agent-council end to end' do
       status = run_council(args: ['--consolidate', run_dir])
 
       expect(status.exitstatus).to eq(1), output_report
-      expect(out).to match(/^  ✗   \d\d:\d\d:\d\d  fails \/ c  - +  pi exited 1: boom$/), output_report
+      expect(out).to match(failed_result('fails / c')), output_report
       expect(out).to include('--- Consolidation error ---')
       expect(reports('*consolidated*.md')).to be_empty
       consolidations = JSON.parse(File.read(File.join(work_dir, run_dir, 'run.json')))['consolidations']

@@ -1078,31 +1078,50 @@ RSpec.describe AgentCouncil do
   end
 
   describe '.format_result_table' do
-    it 'aligns columns under headings, with the error of a failure' do
-      usage = { 'input' => 1500, 'output' => 20 }
+    it 'right-aligns the usage columns, listing errors below the table' do
+      usage = { 'input' => 500, 'cache_read' => 1000, 'output' => 20, 'cost' => 0.123 }
       results = [['claude/opus', true, 'a.md', 61, usage], ['#2 openai/gpt-x', false, 'exit 1', 3]]
       expect(described_class.format_result_table(results)).to eq([
-        '  Ok  Duration  Agent            Usage             Error',
-        '  ✓   00:01:01  claude/opus      1.5k in / 20 out',
-        '  ✗   00:00:03  #2 openai/gpt-x  -                 exit 1',
+        '  Ok  Duration  Agent              In  Cached  Out   Cost',
+        '  ✓   00:01:01  claude/opus      1.5k    1.0k   20  $0.12',
+        '  ✗   00:00:03  #2 openai/gpt-x     -       -    -      -',
+        '',
+        '  Errors:',
+        '    #2 openai/gpt-x: exit 1',
       ])
     end
 
-    it 'leaves out the Error column, and report filenames, when nothing failed' do
+    it 'lists no errors, and no report filenames, when nothing failed' do
       results = [['claude/opus', true, 'a.md', 61], ['#2 openai/gpt-x', true, 'b.md', 3]]
       expect(described_class.format_result_table(results)).to eq([
-        '  Ok  Duration  Agent            Usage',
-        '  ✓   00:01:01  claude/opus      -',
-        '  ✓   00:00:03  #2 openai/gpt-x  -',
+        '  Ok  Duration  Agent            In  Cached  Out  Cost',
+        '  ✓   00:01:01  claude/opus       -       -    -     -',
+        '  ✓   00:00:03  #2 openai/gpt-x   -       -    -     -',
       ])
     end
 
     it 'aligns by display width, so wide characters take two columns' do
-      results = [['模型', false, 'x', 1], ['abcd', false, 'y', 1]]
+      results = [['模型', true, 'x', 1], ['abcd', true, 'y', 1]]
       expect(described_class.format_result_table(results).drop(1)).to eq([
-        '  ✗   00:00:01  模型   -      x',
-        '  ✗   00:00:01  abcd   -      y',
+        '  ✓   00:00:01  模型    -       -    -     -',
+        '  ✓   00:00:01  abcd    -       -    -     -',
       ])
+    end
+  end
+
+  describe '.usage_summary' do
+    let(:usage) { { 'input' => 1, 'output' => 2 } }
+
+    it 'gives the total usage' do
+      expect(described_class.usage_summary([usage, usage])).to eq('; 2 in / 4 out')
+    end
+
+    it 'notes how many runs the total covers when some reported no usage' do
+      expect(described_class.usage_summary([usage, nil, usage])).to eq('; 2 in / 4 out (from 2 of 3 agents)')
+    end
+
+    it 'is empty when no run reported usage' do
+      expect(described_class.usage_summary([nil, nil])).to eq('')
     end
   end
 
