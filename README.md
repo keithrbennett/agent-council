@@ -138,7 +138,12 @@ in detail.
 
 Each model's answer is saved as a Markdown file under
 `agent-council-reports/<yyyy-mm-dd>/<hh-mm-ss>/reviews/`, and the
-consolidated report is written to the run directory itself; see
+consolidated report is written to the run directory itself, split into a
+`_findings.md` file (findings, contradictions and overall assessment, with
+no front matter or orchestration tables, so it can be pasted into an AI chat as is) and a
+`_meta.md` file (front matter, tables, agents consulted and agent
+performance), or a single `_consolidated_...md` file if the model's report
+couldn't be split; see
 [What you get](#what-you-get). To add more models or change the
 consolidator, see
 [Discovering and configuring models](#discovering-and-configuring-models).
@@ -435,8 +440,8 @@ agent-council --consolidate agent-council-reports/2026-09-03/09-14-02
 ```
 
 This runs only the consolidator, over the analyst reports in that run's
-`reviews/`, and writes its report into the same run dir, named as in a
-normal run, with the run's original `run_stamp` (its date and time, plus
+`reviews/`, and writes its report (split into findings and meta files,
+as in a normal run) into the same run dir, named as in a normal run, with the run's original `run_stamp` (its date and time, plus
 any suffix). Exit status is 0 only if the consolidation succeeded.
 
 - **Run it from the analyzed project's directory**, as for a normal run:
@@ -455,9 +460,10 @@ any suffix). Exit status is 0 only if the consolidation succeeded.
   installed gem's, or a checkout's own), which may have changed since
   the run.
 - **Existing reports are kept.** If a file with the name the new
-  report would get already exists (as it does when the same model
-  configuration, meaning harness, provider and model, consolidated the run
-  before), nothing runs; rename or delete that file to redo it. Reports
+  report would get, or the name of its `_findings` or `_meta` file, already
+  exists (as it does when the same model configuration, meaning harness,
+  provider and model, consolidated the run before), nothing runs; rename
+  or delete the file or files the message lists to redo it. Reports
   from different model configurations have different names and sit side
   by side, so you can compare their syntheses.
 - **The run needs at least one analyst report written by
@@ -546,8 +552,12 @@ agent-council-reports/
         2026-09-02-16-21-43_codebase-review_02_pi_opencode-go_kimi-k3.md
         2026-09-02-16-21-43_codebase-review_03_pi_openai_gpt-6.1-sol.md
         2026-09-02-16-21-43_codebase-review_04_pi_cursor_claude-sonnet-5-5-high.md
-      # consolidated report, if a consolidator is configured:
-      2026-09-02-16-21-43_codebase-review_consolidated_pi_opencode-go_glm-5.3.md
+      # consolidated report, if a consolidator is configured, normally in two
+      # files: the findings, ready to paste into a chat, and the run's
+      # metadata (a report that can't be split is one file, without the
+      # _findings or _meta suffix)
+      2026-09-02-16-21-43_codebase-review_consolidated_pi_opencode-go_glm-5.3_findings.md
+      2026-09-02-16-21-43_codebase-review_consolidated_pi_opencode-go_glm-5.3_meta.md
     18-05-11/
       ...
   2026-09-03/
@@ -566,7 +576,7 @@ agent-council-reports/
   `<yyyy-mm-dd>-<hh-mm-ss>_<query-slug>_<agent-number>_<harness>_<provider>_<model>.md`,
   so a report stays self-describing when you copy or attach it outside the
   tree (a consolidated report has `consolidated` in place of
-  `<agent-number>`); `<hh-mm-ss>` includes the run dir's suffix, if any,
+  `<agent-number>`, and, if the report was split, ends in `_findings` or `_meta` before `.md`); `<hh-mm-ss>` includes the run dir's suffix, if any,
   and `<provider>` and `<model>` are sanitized like the query slug below,
   but keep their case. `<harness>` is currently always `pi`, the only
   harness agent-council supports so far.
@@ -581,7 +591,7 @@ agent-council-reports/
   `my-prompt-draft`); a name left empty becomes `prompt`.
 - **Day buckets** keep the reports directory itself navigable when you have hundreds
   of runs.
-- Each report file begins with a small **YAML front matter** block,
+- Each report file, except a consolidated report's `_findings.md`, begins with a small **YAML front matter** block,
   written by the orchestrator (never by the model), identifying the
   report (what was measured about its run is in `run.json`, below):
   - in every report: `role` (`analyst` or `consolidator`), `timestamp`
@@ -600,8 +610,10 @@ agent-council-reports/
 - The run dir's **`run.json`** records every agent run, for tools and
   for analysis across many runs: `analysts` and `consolidations`, one
   entry per run with its `agent_index` (analysts only), `harness`,
-  `provider`, `model`, `ok`, `report` (its path in the run dir)
-  or `error`, `duration_seconds` and `usage`; `total_usage`, the
+  `provider`, `model`, `ok`, `duration_seconds`, `usage`, and `report` (its
+  path in the run dir; for a split consolidation, the `_findings.md` file)
+  or `error`; a split consolidation also has `meta_report`, the `_meta.md`
+  file, which has the front matter; `total_usage`, the
   entries' summed usage, whose `cost` is included only if every summed
   entry's cost is known; and `total_usage_runs`, how many entries reported
   usage (and so are in the total). Failed runs are included, since their
@@ -631,7 +643,18 @@ agent-council-reports/
   source's duration, input (cached included), cached input, output and
   cost, from `run.json`), followed by the
   model's final message, minus any top-level `#` heading the message
-  starts with.
+  starts with. The consolidator is asked to put a line containing only `=== META ===`
+  between its findings and its `Agent Consultants` and `Agent performance`
+  sections, and the report is split there: the text after the marker stays
+  with this header and front matter in the `_meta.md` file, and the text
+  before it goes to the `_findings.md` file under a `# Consolidated Findings`
+  title, a few lines identifying the run (its stamp and query, the prompt
+  file, and the consolidator and time) and a legend of the agents (number,
+  harness, provider, model). If
+  the marker is missing, repeated, inside a code fence or not followed by
+  the `Agent Consultants` heading, or the report no longer starts with the
+  header written to it, the report is left unsplit, under the unsuffixed
+  name, and a warning says why.
 - The copied prompt, config and report-format addendum keep an analyst
   run's inputs recoverable after the fact. The pi and agent-council
   versions, the scaffolding text appended to pi's system prompt and the

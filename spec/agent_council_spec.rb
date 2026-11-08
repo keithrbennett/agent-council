@@ -595,6 +595,23 @@ RSpec.describe AgentCouncil do
       expect_abort(/Consolidated report already exists/)
     end
 
+    %w[findings meta].each do |part|
+      it "aborts when the report's #{part} file already exists, before any model call" do
+        write_run
+        File.write(File.join(run_dir, "2026-09-03-09-14-02_review_consolidated_pi_c_cm_#{part}.md"),
+          'earlier')
+        expect(described_class).not_to receive(:run_consolidation)
+        expect_abort(/Consolidated report already exists: .*_#{part}\.md/)
+      end
+    end
+
+    it 'lists every existing report file, with the plural wording' do
+      write_run
+      names = %w[_findings _meta].map { |part| "2026-09-03-09-14-02_review_consolidated_pi_c_cm#{part}.md" }
+      names.each { |name| File.write(File.join(run_dir, name), 'earlier') }
+      expect_abort(/already exists: .*_findings\.md, .*_meta\.md\nRename or delete all of them/)
+    end
+
     it 'aborts when query is missing' do
       write_run(fields: analyst_fields.except('query'))
       expect_abort(/lack prompt_file, config_file, run_stamp or query/)
@@ -1038,6 +1055,16 @@ RSpec.describe AgentCouncil do
         'ok' => true, 'report' => 'reviews/a.md', 'duration_seconds' => 61.3, 'usage' => { 'input' => 1 })
     end
 
+    it "adds the meta file to a split consolidation's entry, and only then" do
+      split = described_class.run_entry(agent, true, 'f.md', 1, nil, meta_report: 'm.md')
+      expect(split).to include('report' => 'f.md', 'meta_report' => 'm.md')
+      expect(described_class.run_entry(agent, true, 'f.md', 1, nil, dir: 'd', meta_report: 'm.md'))
+        .to include('report' => 'd/f.md', 'meta_report' => 'd/m.md')
+      expect(described_class.run_entry(agent, true, 'f.md', 1, nil)).not_to include('meta_report')
+      expect(described_class.run_entry(agent, false, 'boom', 1, nil, meta_report: 'm.md'))
+        .not_to include('meta_report')
+    end
+
     it "gives a failed run's error, and null for unknown usage" do
       expect(described_class.run_entry(agent, false, 'boom', 2, nil))
         .to eq('harness' => 'pi', 'provider' => 'p', 'model' => 'm', 'ok' => false, 'error' => 'boom',
@@ -1261,16 +1288,20 @@ RSpec.describe AgentCouncil do
           ['zai / glm-5.3', true, filename]
         end
 
-        label, ok, = described_class.run_consolidation({ 'provider' => 'zai', 'model' => 'glm-5.3' },
-          'prompt', dir, 'prefix', meta: {
-            'query'     => 'check-prev-commits',
-            'timestamp' => '2026-09-03T19:23:57',
-          }, prompt_path: 'prompts/check-prev-commits_prompt.md',
-          analyst_runs: [{ 'provider' => 'openai', 'model' => 'gpt-x', 'duration_seconds' => 65 }])
+        label = ok = nil
+        expect do
+          label, ok, = described_class.run_consolidation({ 'provider' => 'zai', 'model' => 'glm-5.3' },
+            'prompt', dir, 'prefix', meta: {
+              'query'     => 'check-prev-commits',
+              'timestamp' => '2026-09-03T19:23:57',
+            }, prompt_path: 'prompts/check-prev-commits_prompt.md',
+            analyst_runs: [{ 'provider' => 'openai', 'model' => 'gpt-x', 'duration_seconds' => 65 }])
+        end.to output(/Not splitting/).to_stderr # the stubbed report has no marker
         expect(ok).to be(true)
         expect(label).to eq('zai / glm-5.3')
         expect(captured[:run_dir]).to eq(dir)
-        expect(captured[:filename]).to eq('prefix_consolidated_pi_zai_glm-5.3.md')
+        # written to the meta name, which keeps it taken, then renamed as it can't be split
+        expect(captured[:filename]).to eq('prefix_consolidated_pi_zai_glm-5.3_meta.md')
         expect(captured[:meta]['role']).to eq('consolidator')
         expect(captured[:meta]['consolidated_at']).to eq('2026-09-03T19:40:05+07:00')
         expect(captured[:meta].keys).not_to include('source_runs')
@@ -1296,9 +1327,269 @@ RSpec.describe AgentCouncil do
           | :----- | -------: | ----: | -----: | -----: | ---: |
           | openai / gpt-x | 00:01:05 | - | - | - | - |
         HEADER
-        expect(File.read(File.join(dir, captured[:filename]))).to eq('consolidated body')
+        expect(File.read(File.join(dir, 'prefix_consolidated_pi_zai_glm-5.3.md'))).to eq('consolidated body')
         expect(Dir.exist?(File.join(dir, 'consolidated'))).to be(false)
       end
+    end
+  end
+
+  describe '.consolidated_split' do
+    def split_text(text) = described_class.consolidated_split(text).first
+
+    it 'splits the findings from the meta part at the marker line' do
+      findings, meta = split_text(
+        "## Findings\n\n1. x\n\n=== META ===\n\n## Agent Consultants\n\n- #1 a / b\n")
+      expect(findings).to eq("## Findings\n\n1. x\n\n")
+      expect(meta).to eq("\n## Agent Consultants\n\n- #1 a / b\n")
+    end
+
+    it 'tolerates trailing whitespace on the marker line' do
+      expect(split_text("f\n=== META ===  \n## Agent Consultants\n"))
+        .to eq(["f\n", "## Agent Consultants\n"])
+    end
+
+    it 'accepts a CRLF line ending on the marker line' do
+      expect(split_text("f\r\n=== META ===\r\n## Agent Consultants\r\n"))
+        .to eq(["f\r\n", "## Agent Consultants\r\n"])
+    end
+
+    it 'does not take a marker quoted in the findings for the real one' do
+      quoted = "f\n```\n=== META ===\n```\n\nmore findings\n"
+      expect(split_text(quoted)).to be_nil
+      # even when more findings headings follow the quoted marker
+      expect(split_text("f\n=== META ===\n\n## Contradictions\n\nc\n")).to be_nil
+      expect(split_text("#{quoted}\n=== META ===\n\n## Agent Consultants\n"))
+        .to be_nil # twice, so ambiguous
+    end
+
+    it 'does not take a marker inside an unclosed code fence for the real one' do
+      quoted = "## Findings\n\n```\n=== META ===\n\n## Agent Consultants\n\nquoted\n```\n"
+      expect(split_text(quoted)).to be_nil
+      tilde = "## Findings\n\n~~~\n=== META ===\n\n## Agent Consultants\n"
+      expect(split_text(tilde)).to be_nil
+      closed = "## Findings\n\n```\ncode\n```\n\n=== META ===\n\n## Agent Consultants\n"
+      expect(split_text(closed)).not_to be_nil
+    end
+
+    it 'follows CommonMark fence rules: character and length must match to close' do
+      nested = "## Findings\n\n````\n```\ncode\n```\n=== META ===\n\n## Agent Consultants\n"
+      expect(split_text(nested)).to be_nil # still inside the four-backtick block
+      closed = "## Findings\n\n````\n```\ncode\n```\n````\n\n=== META ===\n\n## Agent Consultants\n"
+      expect(split_text(closed)).not_to be_nil # a valid block containing ```
+      mixed = "## Findings\n\n```\n~~~\n\n=== META ===\n\n## Agent Consultants\n"
+      expect(split_text(mixed)).to be_nil # ~~~ doesn't close ```
+    end
+
+    it 'returns nil unless the marker occurs once with text on both sides' do
+      expect(split_text("## Findings\n\nf\n")).to be_nil
+      expect(split_text("f\n=== META ===\n## m\n=== META ===\n## n\n")).to be_nil
+      expect(split_text("=== META ===\n## m\n")).to be_nil
+      expect(split_text("f\n=== META ===\nno heading\n")).to be_nil
+      expect(split_text("f\n=== META ===\n  \n")).to be_nil
+    end
+
+    it 'treats a backtick line with backticks in its info string as no fence' do
+      text = "## Findings\n\n```x`\n\n=== META ===\n\n## Agent Consultants\n"
+      expect(split_text(text)).not_to be_nil
+    end
+
+    it 'closes fences by tilde, with an info string never, and with a longer fence' do
+      meta = "\n=== META ===\n\n## Agent Consultants\n"
+      expect(split_text("~~~\ncode\n~~~\n#{meta}")).not_to be_nil
+      expect(split_text("```\ncode\n``` text\n#{meta}")).to be_nil
+      expect(split_text("```\ncode\n`````\n#{meta}")).not_to be_nil
+    end
+
+    it 'says why it refuses' do
+      expect(described_class.consolidated_split("f\n=== META ===\n## m\n=== META ===\n## n\n").last)
+        .to include('more than one')
+    end
+
+    it 'ignores the marker inside a line' do
+      expect(split_text("see === META === here\n")).to be_nil
+    end
+  end
+
+  describe '.full_label' do
+    it 'gives agent number, harness, provider and model, defaulting the harness' do
+      expect(described_class.full_label('agent_index' => 2, 'harness' => 'h', 'provider' => 'p',
+        'model' => 'm'))
+        .to eq('#2 h / p / m')
+      expect(described_class.full_label('provider' => 'p', 'model' => 'm')).to eq('pi / p / m')
+    end
+  end
+
+  describe '.split_consolidated_report' do
+    let(:head) { "# Consolidated Report\n\n| t |\n" }
+    let(:meta_name) { 'p_consolidated_pi_zai_glm_meta.md' }
+    let(:findings_name) { 'p_consolidated_pi_zai_glm_findings.md' }
+    let(:unsplit_name) { 'p_consolidated_pi_zai_glm.md' }
+    let(:text) do
+      "---\nrole: consolidator\n---\n\n#{head}\n## Findings\n\n1. f\n\n=== META ===\n\n" \
+        "## Agent Consultants\n\nc\n"
+    end
+
+    def split(dir, head: self.head, info: [])
+      described_class.split_consolidated_report(dir, meta_name, 'p', 'zai', 'glm', head, ['#1 pi / a / b'],
+        info)
+    end
+
+    it 'writes the findings file and rewrites the report in place as the meta file' do
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, meta_name), text)
+
+        result = split(dir, info: ['Run: p', 'Consolidated by: pi / zai / glm'])
+
+        expect(result).to eq([findings_name, meta_name])
+        expect(Dir.children(dir)).to contain_exactly(findings_name, meta_name)
+        findings = File.read(File.join(dir, findings_name))
+        expect(findings).to start_with(
+          "# Consolidated Findings\n\n- Run: p\n- Consolidated by: pi / zai / glm\n\nAgents consulted")
+        expect(findings).to include("- #1 pi / a / b\n", "## Findings\n\n1. f\n")
+        expect(findings).not_to include('---', 'Agent Consultants', '=== META', 'Consolidated Report')
+        meta = File.read(File.join(dir, meta_name))
+        expect(meta).to eq("---\nrole: consolidator\n---\n\n#{head}\n## Agent Consultants\n\nc\n")
+      end
+    end
+
+    it 'keeps the meta file taken, so the unsplit name is never the only guard' do
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, meta_name), text)
+        split(dir)
+        expect(File.exist?(File.join(dir, unsplit_name))).to be(false)
+        expect { File.open(File.join(dir, meta_name), 'wx') }.to raise_error(Errno::EEXIST)
+      end
+    end
+
+    it 'removes what it wrote and keeps the whole report when writing the meta file fails' do
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, meta_name), text)
+        allow(File).to receive(:rename).and_call_original
+        allow(File).to receive(:rename).with("#{File.join(dir, meta_name)}.tmp", File.join(dir, meta_name))
+          .and_raise(Errno::ENOSPC)
+
+        result = nil
+        expect { result = split(dir) }.to output(/Could not split.*No space left/).to_stderr
+
+        expect(result).to eq([unsplit_name, nil])
+        expect(Dir.children(dir)).to eq([unsplit_name])
+        expect(File.read(File.join(dir, unsplit_name))).to eq(text)
+      end
+    end
+
+    it 'removes a partly written findings file, but not one it did not create' do
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, meta_name), text)
+        allow(File).to receive(:open).and_call_original
+        allow(File).to receive(:open).with(File.join(dir, findings_name), 'wx')
+          .and_wrap_original do |original, path, mode, &block|
+            original.call(path, mode) do |file|
+              block.call(file)
+              raise Errno::ENOSPC
+            end
+          end
+
+        result = nil
+        expect { result = split(dir) }.to output(/Could not split.*No space left/).to_stderr
+
+        expect(result).to eq([unsplit_name, nil])
+        expect(Dir.children(dir)).to eq([unsplit_name])
+      end
+    end
+
+    it 'leaves the report and the file in its way alone when the findings file already exists' do
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, meta_name), text)
+        File.write(File.join(dir, findings_name), 'stale')
+
+        result = nil
+        expect { result = split(dir) }.to output(/Could not split/).to_stderr
+
+        expect(result).to eq([unsplit_name, nil])
+        expect(File.read(File.join(dir, findings_name))).to eq('stale')
+        expect(File.read(File.join(dir, unsplit_name))).to eq(text)
+      end
+    end
+
+    it 'keeps the report when it cannot be decoded, rather than failing the consolidation' do
+      Dir.mktmpdir do |dir|
+        File.binwrite(File.join(dir, meta_name), "#{head}\nbad \xFF\n=== META ===\n## Agent Consultants\n")
+        result = nil
+        expect { result = split(dir) }.to output(/Could not split/).to_stderr
+        expect(result).to eq([unsplit_name, nil])
+        expect(Dir.children(dir)).to eq([unsplit_name])
+      end
+    end
+
+    it 'renames a report without the marker to the unsplit name, with a warning' do
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, meta_name), "---\na: b\n---\n\n#{head}\nno marker\n")
+        result = nil
+        expect { result = split(dir) }
+          .to output(/Not splitting .*_meta\.md: it has no === META === line/).to_stderr
+        expect(result).to eq([unsplit_name, nil])
+        expect(Dir.children(dir)).to eq([unsplit_name])
+      end
+    end
+
+    it 'keeps the report under its meta name, with a warning, if the unsplit name is taken' do
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, meta_name), "#{head}\nno marker\n")
+        File.write(File.join(dir, unsplit_name), 'other')
+        result = nil
+        expect { result = split(dir) }.to output(/Not splitting.*\n.*exists; leaving the report as/).to_stderr
+        expect(result).to eq([meta_name, nil])
+        expect(File.read(File.join(dir, unsplit_name))).to eq('other')
+      end
+    end
+
+    it 'keeps the report under its meta name, with a warning, if it cannot be renamed' do
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, meta_name), "#{head}\nno marker\n")
+        allow(File).to receive(:rename).and_raise(Errno::EACCES)
+        result = nil
+        expect { result = split(dir) }.to output(/Could not rename .*Permission denied/).to_stderr
+        expect(result).to eq([meta_name, nil])
+      end
+    end
+
+    it 'says why a report is not split' do
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, meta_name),
+          "#{head}\n## Findings\n\nf\n=== META ===\n\n## Contradictions\n\nc\n")
+        expect { split(dir) }.to output(/not followed by an Agent Consultants section/).to_stderr
+      end
+    end
+
+    it 'does not split a report whose header is not the one that was written' do
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, meta_name), text)
+        result = nil
+        expect { result = split(dir, head: 'other') }
+          .to output(/Could not split .*header is not what was written/).to_stderr
+        expect(result).to eq([unsplit_name, nil])
+        expect(Dir.children(dir)).to eq([unsplit_name])
+      end
+    end
+
+    it 'takes the whole body as the report when there is no header to skip' do
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, meta_name), "\n## Findings\n\nf\n=== META ===\n## Agent Consultants\n")
+        expect(split(dir, head: nil)).to eq([findings_name, meta_name])
+        expect(File.read(File.join(dir,
+          findings_name))).to include('Agents consulted (agent number, harness, ' \
+          "provider, model):\n\n- #1 pi / a / b\n\n\n## Findings")
+      end
+    end
+  end
+
+  describe 'the consolidation template' do
+    it 'asks for the marker line the splitter looks for' do
+      template = File.read(described_class::CONSOLIDATE_PROMPT_PATH, encoding: 'UTF-8')
+      expect(template.lines.map(&:chomp)).to include(described_class::CONSOLIDATED_META_MARKER)
+      # directly followed by the section the splitter requires to open the meta part
+      marker = Regexp.escape(described_class::CONSOLIDATED_META_MARKER)
+      expect(template).to match(/^#{marker}\n\n## Agent Consultants$/)
     end
   end
 
@@ -1317,6 +1608,14 @@ RSpec.describe AgentCouncil do
       expect(text).to include('## Report from openai-codex / gpt-5.4', 'findings A')
       expect(text).to include('## Report from zai / glm-5.3', 'findings B')
       expect(text).to match(/consolidat/i) # the instructions template
+    end
+
+    it "states each report's harness, defaulting to the current one" do
+      reports = [['#1 zai / glm-5.3', 'findings A', { 'harness' => 'other' }],
+        ['#2 openai / gpt-x', 'findings B', {}]]
+      text = described_class.consolidation_prompt('THE QUESTION', reports)
+      expect(text).to include("## Report from #1 zai / glm-5.3\n\nHarness: other\n\nfindings A")
+      expect(text).to include("## Report from #2 openai / gpt-x\n\nHarness: pi\n\nfindings B")
     end
 
     it 'lists failed agents, with their reasons, after the reports' do

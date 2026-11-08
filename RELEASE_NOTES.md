@@ -13,7 +13,9 @@ sample prompts and configs under `examples/`, and a `pi-models` helper that
 lists the provider/model pairs available to pi. Each run directory's
 `run.json` records every agent run's outcome, duration, token usage and,
 where pi can price it, cost; reports show their duration and usage, and the
-console shows usage per agent and in total.
+console shows usage per agent and in total. The consolidated report is
+split into a `_findings.md` file, which can be pasted into an AI chat as
+is, and a `_meta.md` file with the run's metadata.
 
 agent-council does not sandbox the agents: they get pi's `bash` tool,
 running as you. See [Safety and privacy](README.md#safety-and-privacy) in the README before running it.

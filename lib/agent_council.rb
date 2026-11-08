@@ -298,7 +298,10 @@ module AgentCouncil
   # consolidator can't otherwise know about those.
   module_function def consolidation_prompt(original_prompt, reports, failures = [])
     template = File.read(CONSOLIDATE_PROMPT_PATH, encoding: ENCODING)
-    body = reports.map { |label, text| "## Report from #{label}\n\n#{text}" }.join("\n\n---\n\n")
+    body = reports.map do |label, text, fields|
+      harness = (fields && fields['harness']) || HARNESS::NAME
+      "## Report from #{label}\n\nHarness: #{harness}\n\n#{text}"
+    end.join("\n\n---\n\n")
     failed = failures.empty? ? 'None.' : failures.map { |label, reason| "- #{label}: #{reason}" }.join("\n")
     <<~MARKDOWN
       #{template}
@@ -325,8 +328,135 @@ module AgentCouncil
 
   # The consolidator's output filename; lives at the top level of the run
   # dir, and stays self-describing when copied out of the tree.
-  module_function def consolidated_filename(file_prefix, provider, model)
-    "#{file_prefix}_consolidated_#{HARNESS::NAME}_#{sanitize(provider)}_#{sanitize(model)}.md"
+  # part: 'findings' or 'meta' for the files a consolidated report is split
+  # into (see split_consolidated_report); none for the report as written.
+  module_function def consolidated_filename(file_prefix, provider, model, part = nil)
+    suffix = part ? "_#{part}" : ''
+    "#{file_prefix}_consolidated_#{HARNESS::NAME}_#{sanitize(provider)}_#{sanitize(model)}#{suffix}.md"
+  end
+
+  # The line the consolidator is asked to write between its findings and
+  # the sections describing the consultation (see consolidate_prompt.md).
+  CONSOLIDATED_META_MARKER = '=== META ==='
+
+  # An analyst's label with its harness: "#<index> <harness> / <provider> /
+  # <model>", for the findings file's legend.
+  module_function def full_label(fields)
+    index = fields['agent_index']
+    parts = [fields['harness'] || HARNESS::NAME, fields['provider'], fields['model']].join(' / ')
+    index ? "##{index} #{parts}" : parts
+  end
+
+  # [[findings, meta], nil] if text can be split on its marker line, else
+  # [nil, why]: a split that can't be trusted isn't made. The marker must occur once, with text on both sides and the
+  # Agent Consultants heading opening the second (the template puts that
+  # section first), and not inside a code fence, so that a marker the
+  # findings quote is not taken for the real one.
+  module_function def consolidated_split(text)
+    parts = text.split(/^#{Regexp.escape(CONSOLIDATED_META_MARKER)}[ \t\r]*$\n?/, -1)
+    line = "#{CONSOLIDATED_META_MARKER} line"
+    return [nil, "it has no #{line}"] if parts.size == 1
+    return [nil, "it has more than one #{line}"] if parts.size > 2
+    return [nil, "there is no text on one side of the #{line}"] if parts.any? { |part| part.strip.empty? }
+    unless parts.last.match?(/\A\s*## Agent Consultants/i)
+      return [nil, "the #{line} is not followed by an Agent Consultants section"]
+    end
+    return [nil, "the #{line} is inside a code fence"] if inside_code_fence?(parts.first)
+
+    [parts, nil]
+  end
+
+  # True if text ends inside a fenced code block, going by CommonMark's
+  # rules for top-level fences: three or more backticks or tildes, closed by
+  # a fence of the same character at least as long. A backtick fence's info
+  # string can't contain a backtick. Fences nested in block quotes or deeply
+  # indented list items aren't tracked.
+  module_function def inside_code_fence?(text)
+    open_fence = nil
+    text.each_line do |line|
+      fence = line[/\A {0,3}(`{3,}|~{3,})/, 1] or next
+      if open_fence.nil?
+        open_fence = fence unless fence.start_with?('`') && line.delete_prefix(fence).include?('`')
+      elsif fence[0] == open_fence[0] && fence.size >= open_fence.size && line.strip == fence
+        open_fence = nil
+      end
+    end
+    !open_fence.nil?
+  end
+
+  # Splits the consolidated report written to filename (the meta file's
+  # name: run_agent creates it exclusively, so the name stays taken from
+  # then on and concurrent consolidations of the same configuration can't
+  # both succeed) in run_dir into a findings file, free of front matter and
+  # tables so it can be pasted into a chat as is, and the meta file with the
+  # rest, rewritten in place. head: the header run_agent put before the
+  # model's text, which stays in the meta file; labels: the analysts' full
+  # labels, for the findings file's legend; info: lines (without bullets)
+  # identifying the run, for its top. Returns the findings filename and the
+  # meta filename, or, if the report can't be split or the split files
+  # can't be written, the report under the unsplit name (see
+  # consolidated_filename) and nil, with a warning.
+  module_function def split_consolidated_report(run_dir, filename, file_prefix, provider, model, head,
+    labels, info = [])
+    path = File.join(run_dir, filename)
+    unsplit_name = consolidated_filename(file_prefix, provider, model)
+    findings_name = consolidated_filename(file_prefix, provider, model, 'findings')
+    written = []
+    content = File.read(path, encoding: ENCODING)
+    front = content[/\A---\n.+?\n---\n\n?/m] || ''
+    body = content.delete_prefix(front)
+    # The header run_agent put before the model's text must still be there,
+    # or it would end up in the findings file.
+    if head && !body.start_with?("#{head}\n")
+      warn "Could not split #{relative_path(path)}: its header is not what was written"
+      return keep_unsplit(run_dir, filename, unsplit_name)
+    end
+    parts, problem = consolidated_split(head ? body.delete_prefix("#{head}\n") : body)
+    unless parts
+      warn "Not splitting #{relative_path(path)}: #{problem}"
+      return keep_unsplit(run_dir, filename, unsplit_name)
+    end
+
+    findings, meta = parts
+    about = info.map { |line| "- #{line}\n" }.join
+    legend = labels.map { |label| "- #{label}" }.join("\n")
+    # Recorded once the file exists, even if writing it then fails, so
+    # cleanup removes a partial file; one that was already there (the
+    # exclusive create raises) is not ours to remove.
+    File.open(File.join(run_dir, findings_name), 'wx') do |file|
+      written << findings_name
+      file.write("# Consolidated Findings\n\n#{about}\nAgents consulted (agent number, harness, " \
+                 "provider, model):\n\n#{legend}\n\n#{findings}")
+    end
+    # Replaced atomically, so the whole report survives a failed write.
+    temp = "#{path}.tmp"
+    written << File.basename(temp)
+    File.write(temp, "#{front}#{head}\n#{meta.lstrip}")
+    File.rename(temp, path)
+    [findings_name, filename]
+  rescue => e
+    # A failed split must not fail the consolidation, whose model run is
+    # already paid for and whose report is intact.
+    warn "Could not split #{relative_path(path)}: #{e.message}"
+    written.each { |name| FileUtils.rm_f(File.join(run_dir, name)) }
+    keep_unsplit(run_dir, filename, unsplit_name)
+  end
+
+  # Renames the report filename to unsplit_name, unless that is taken (then
+  # it stays as it is). Returns the name it ends up under and nil, as
+  # split_consolidated_report does for an unsplit report.
+  module_function def keep_unsplit(run_dir, filename, unsplit_name)
+    target = File.join(run_dir, unsplit_name)
+    if File.exist?(target)
+      warn "#{relative_path(target)} exists; leaving the report as #{filename}"
+      return [filename, nil]
+    end
+
+    File.rename(File.join(run_dir, filename), target)
+    [unsplit_name, nil]
+  rescue SystemCallError => e
+    warn "Could not rename #{filename} to #{unsplit_name} (#{e.message}); leaving the report as #{filename}"
+    [filename, nil]
   end
 
   # Markdown table of the report's main front-matter fields and its run's
@@ -373,7 +503,10 @@ module AgentCouncil
   end
 
   # Runs the configured consolidator model over a run's reports and writes
-  # its report into the same run dir. Returns as run_agent; never raises.
+  # its report into the same run dir. Returns as run_agent, except that
+  # detail is the findings file's name when the report was split (see
+  # split_consolidated_report) and the meta file's name follows usage;
+  # never raises.
   # analyst_runs: the run's run.json analyst entries, for the sources
   # table's durations and usage. failures: as for consolidation_prompt.
   # pool: as for run_agent.
@@ -397,15 +530,25 @@ module AgentCouncil
     meta = meta.merge('role' => 'consolidator', 'consolidated_at' => iso_timestamp(Time.now),
       'sources' => reports.map(&:first))
     prompt_line = prompt_path ? "### Prompt: #{prompt_path}\n\n" : ''
+    head = nil
     header = ->(run_fields) do
-      "# Consolidated Report\n\n#{prompt_line}#{byline_table(meta.merge(run_fields), provider, model)}\n" \
+      head = "# Consolidated Report\n\n#{prompt_line}#{byline_table(meta.merge(run_fields), provider,
+        model)}\n" \
         "#{sources_table(meta['sources'], source_runs)}"
     end
-    run_agent(consolidator, prompt, run_dir, file_prefix,
-      filename: consolidated_filename(file_prefix, provider, model),
+    label, ok, detail, usage = run_agent(consolidator, prompt, run_dir, file_prefix,
+      filename: consolidated_filename(file_prefix, provider, model, 'meta'),
       header:   header,
       meta:     meta,
       pool:     pool)
+    if ok
+      labels = reports.map { |_, _, fields| full_label(fields) }
+      info = ["Run: #{file_prefix}", prompt_path && "Prompt: #{File.basename(prompt_path)}",
+        "Consolidated by: #{HARNESS::NAME} / #{provider} / #{model}, #{meta['consolidated_at']}"].compact
+      detail, meta_name = split_consolidated_report(run_dir, detail, file_prefix, provider, model, head,
+        labels, info)
+    end
+    [label, ok, detail, usage, meta_name]
   rescue => e
     [agent_label(provider, model), false, "#{e.class}: #{e.message}"]
   end
@@ -489,11 +632,14 @@ module AgentCouncil
   # A run.json entry for an agent's run_agent result and its elapsed
   # seconds: its report's path under dir (the run dir's reviews_dir for
   # analysts) on success, its error on failure. The harness is per entry,
-  # not per run, so a run can mix harnesses.
-  module_function def run_entry(agent, ok, detail, elapsed, usage, index: nil, dir: nil)
+  # not per run, so a run can mix harnesses. meta_report: for a
+  # consolidation whose report was split (its detail is the findings file's
+  # name), the other file, which carries the front matter.
+  module_function def run_entry(agent, ok, detail, elapsed, usage, index: nil, dir: nil, meta_report: nil)
     entry = { 'agent_index' => index, 'harness' => HARNESS::NAME, 'provider' => agent['provider'],
       'model' => agent['model'], 'ok' => ok }.compact
     entry[ok ? 'report' : 'error'] = ok && dir ? File.join(dir, detail) : detail
+    entry['meta_report'] = (dir ? File.join(dir, meta_report) : meta_report) if ok && meta_report
     entry.merge('duration_seconds' => elapsed.round(1), 'usage' => usage)
   end
 
@@ -541,7 +687,7 @@ module AgentCouncil
   # usage (as for usage_cells), then the failures' errors, if any, listed
   # below the table so long messages don't widen it. Report filenames
   # aren't shown: an analyst's is found by its agent number, and the
-  # consolidated report is the run dir's only one.
+  # consolidated report is at the run dir's top level.
   module_function def format_result_table(results)
     rows = results.map do |label, ok, _detail, elapsed, usage|
       [ok ? '✓' : '✗', format_duration(elapsed), label, *usage_cells(usage)]
@@ -902,9 +1048,10 @@ module AgentCouncil
             pool: pool)
         end
       end
-      (label, ok, detail, usage), elapsed = pool.collect.first
+      (label, ok, detail, usage, meta_name), elapsed = pool.collect.first
       puts format_result_table([[label, ok, detail, elapsed, usage]])
-      write_run_file(run_dir, analyst_runs, [run_entry(consolidator, ok, detail, elapsed, usage)])
+      entry = run_entry(consolidator, ok, detail, elapsed, usage, meta_report: meta_name)
+      write_run_file(run_dir, analyst_runs, [entry])
       puts_consolidation_status(ok)
     end
 
@@ -962,9 +1109,15 @@ module AgentCouncil
     unless bare_name?(filename)
       abort "Invalid run_stamp or query in #{reviews_dir}: #{fields.values_at('run_stamp', 'query').inspect}"
     end
-    if File.exist?(File.join(run_dir, filename))
-      abort "Consolidated report already exists: #{relative_path(File.join(run_dir, filename))}\n" \
-        'Rename or delete it to consolidate again with the same model configuration.'
+    names = [nil, 'findings', 'meta'].map do |part|
+      consolidated_filename(file_prefix, consolidator['provider'], consolidator['model'], part)
+    end
+    existing = names.select { |name| File.exist?(File.join(run_dir, name)) }
+    unless existing.empty?
+      listed = existing.map { |name| relative_path(File.join(run_dir, name)) }.join(', ')
+      abort "Consolidated report already exists: #{listed}\n" \
+        "Rename or delete #{existing.size == 1 ? 'it' : 'all of them'} to consolidate again with the " \
+        'same model configuration.'
     end
     prompt = File.read(prompt_path, encoding: ENCODING)
     abort "Prompt copy is empty: #{prompt_path}" if prompt.empty?
@@ -993,13 +1146,13 @@ module AgentCouncil
           analyst_runs: analysts || [], pool: pool)
       end
     end
-    (label, ok, detail, usage), elapsed = pool.collect.first
+    (label, ok, detail, usage, meta_name), elapsed = pool.collect.first
     puts format_result_table([[label, ok, detail, elapsed, usage]])
     # Added to the run's run.json. Without one (deleted, or unreadable),
     # none is written: a total covering only this consolidation would
     # pass for the run's.
     if analysts
-      entry = run_entry(consolidator, ok, detail, elapsed, usage)
+      entry = run_entry(consolidator, ok, detail, elapsed, usage, meta_report: meta_name)
       write_run_file(run_dir, analysts, consolidations + [entry])
     else
       warn "No readable #{RUN_FILENAME} in #{relative_path(run_dir)}; not recording this consolidation's run"

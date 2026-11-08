@@ -6,6 +6,8 @@
 # SIGTERM agent-council sends them; a fake pi that gets SIGINT records it.
 # The fake pi's behavior is chosen by provider name:
 # - done: answers at once with a report.
+# - split: like done, but answers with a report whose findings and meta
+#   parts are divided by the marker line, as a consolidator should.
 # - utf8: answers at once with a report containing non-ASCII text.
 # - escaped: the same, but \u-escaped, so pi's output itself is ASCII.
 # - fails: exits 1 at once.
@@ -34,7 +36,10 @@ RSpec.describe 'agent-council end to end' do
   let(:grace) { AgentCouncil::INTERRUPT_GRACE_SECONDS }
   let(:survivors) { [] } # filled in by run_council
   let(:exited_at) { [] } # filled in by run_council
-  # No straight single quotes: the fake pi echoes it inside them.
+  let(:split_answer) do # no straight single quotes: the fake pi echoes it inside them
+    "## Findings\n\n1. A finding.\n\n#{AgentCouncil::CONSOLIDATED_META_MARKER}\n\n" \
+      "## Agent Consultants\n\n- #1\n"
+  end
   let(:non_ascii_answer) { 'Résumé ✓ “quoted”' }
   # The usage every fake report reports, and how its row shows it.
   let(:usage) { { input: 1000, output: 200, cacheRead: 200, cacheWrite: 0, cost: { total: 0.02 } } }
@@ -78,6 +83,7 @@ RSpec.describe 'agent-council end to end' do
       trap 'touch "#{sigint_dir}/$$"' INT
       case " $* " in
         *" --provider done "*) echo '#{JSON.generate(report_event('Answer.'))}'; exit 0 ;;
+        *" --provider split "*) echo '#{JSON.generate(report_event(split_answer))}'; exit 0 ;;
         *" --provider utf8 "*) echo '#{JSON.generate(report_event(non_ascii_answer))}'; exit 0 ;;
         *" --provider escaped "*) echo '#{JSON.generate(report_event(non_ascii_answer), ascii_only: true)}'; exit 0 ;;
         *" --provider fails "*) echo 'boom' >&2; exit 1 ;;
@@ -307,6 +313,35 @@ RSpec.describe 'agent-council end to end' do
     expect(consolidated.scan(/^\| #.*$/)).to match([/\A#{source_row('#1 done / m1')}\z/])
   end
 
+  it 'splits the consolidator\'s report into findings and meta files, recorded in run.json' do
+    write_config(%w[done], consolidator: 'split')
+
+    status = run_council
+
+    expect(status.exitstatus).to eq(0), output_report
+    expect(reports('*consolidated*.md').map { |path| File.basename(path)[/_(findings|meta)\.md\z/, 1] }.sort)
+      .to eq(%w[findings meta])
+    findings = File.read(reports('*_findings.md').first, encoding: 'UTF-8')
+    meta = File.read(reports('*_meta.md').first, encoding: 'UTF-8')
+    expect(findings).to start_with("# Consolidated Findings\n\n- Run: ")
+    expect(findings).to match(/^- Run: \d{4}-\d\d-\d\d-\d\d-\d\d-\d\d_prompt$/)
+    expect(findings).to match(/^- Prompt: .*prompt\.md$/)
+    expect(findings).to match(/^- Consolidated by: pi \/ split \/ c, \d{4}-\d\d-\d\dT/)
+    expect(findings).to include("\nAgents consulted")
+    expect(findings).to include('- #1 pi / done / m1', "## Findings\n\n1. A finding.\n")
+    expect(findings).not_to match(/^---$|Consolidated Report|\| Field|=== META|Agent Consultants/)
+    fields, = AgentCouncil.parse_front_matter(meta)
+    expect(fields['role']).to eq('consolidator')
+    expect(meta).to start_with("---\n")
+    expect(meta).to include('# Consolidated Report', '### Sources', '## Agent Consultants')
+    expect(meta).not_to include('=== META', '## Findings')
+    run = JSON.parse(File.read(Dir.glob(File.join(work_dir, 'agent-council-reports/*/*/run.json')).first))
+    expect(run['consolidations'].first['report']).to end_with('_consolidated_pi_split_c_findings.md')
+    expect(run['consolidations'].first['meta_report']).to end_with('_consolidated_pi_split_c_meta.md')
+    meta_report = run['consolidations'].first['meta_report']
+    expect(File.basename(reports('*_meta.md').first)).to eq(File.basename(meta_report))
+  end
+
   it 'writes the run dir under --output-dir when given' do
     write_config(%w[done])
 
@@ -362,6 +397,18 @@ RSpec.describe 'agent-council end to end' do
       expect(fields['consolidated_at']).to be >= fields['timestamp']
       expect(text).to match(/^#{source_row('#1 done / m1')}$/)
       expect(leftover_scratch_dirs).to be_empty
+    end
+
+    it 'refuses to consolidate again once the report has been split' do
+      run_dir = finished_run('split')
+      expect(run_council(args: ['--consolidate', run_dir]).exitstatus).to eq(0), output_report
+      expect(reports('*_findings.md').size).to eq(1)
+
+      status = run_council(args: ['--consolidate', run_dir])
+
+      expect(status.exitstatus).not_to eq(0)
+      expect(err).to match(/Consolidated report already exists: .*_findings\.md/)
+      expect(reports('*consolidated*.md').size).to eq(2)
     end
 
     it 'adds the consolidation to run.json, or warns when there is none' do
