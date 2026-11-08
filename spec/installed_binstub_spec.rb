@@ -12,7 +12,9 @@ require 'tmpdir'
 
 RSpec.describe 'installed agent-council binstub' do
   let(:project_root) { File.expand_path('..', __dir__) }
-  let(:tmp_dir) { Dir.mktmpdir('agent-council-gem') }
+  # realpath: on macOS the temp dir is under /var, a symlink to /private/var,
+  # and RubyGems reports the resolved path.
+  let(:tmp_dir) { File.realpath(Dir.mktmpdir('agent-council-gem')) }
   let(:gem_home) { File.join(tmp_dir, 'gems') }
   let(:gem_file) { File.join(tmp_dir, 'agent-council.gem') }
 
