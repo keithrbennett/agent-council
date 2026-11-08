@@ -47,7 +47,7 @@ Gem::Specification.new do |spec|
   spec.files = Dir.chdir(File.expand_path(__dir__)) do
     patterns = %w[
       lib/**/* exe/* examples/prompts/*.md examples/configs/*.yml
-      README.md RELEASE_NOTES.md LICENSE.txt DESIGN.md code-review-agents.md
+      README.md INSTALL.md RELEASE_NOTES.md LICENSE.txt DESIGN.md code-review-agents.md
     ]
     tracked = `git ls-files -z`
     # Outside a git checkout this would otherwise build a gem with no files.

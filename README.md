@@ -13,6 +13,8 @@ how long each one took, how many tokens it used and what it cost, and can
 then have a **consolidator** model synthesize those reports into a single
 one and assess what each agent contributed.
 
+**New to Ruby? [Install agent-council from scratch](INSTALL.md)**
+
 ## Why use it
 
 ### A council of second opinions
@@ -81,7 +83,8 @@ in detail.
 
 1. **Install the prerequisites:** Ruby 3.3+ (or JRuby 10+) and the
    [`pi` CLI](https://github.com/earendil-works/pi) (`pi --version`). See
-   [Prerequisites](#prerequisites).
+   [Prerequisites](#prerequisites), or [INSTALL.md](INSTALL.md) if you
+   need to install Ruby too.
 2. **Set up credentials for at least one provider in pi** (see
    [pi's documentation][pi-docs]), then list the models available to pi
    (a listed model can still be one your plan doesn't include). Two
@@ -151,15 +154,17 @@ consolidator, see
   viewpoints), configured through pi itself (see
   [pi's documentation][pi-docs])
 - On Windows, WSL (e.g. Ubuntu): native Windows is not supported. Install
-  and run Ruby, pi and agent-council inside WSL, from a WSL shell. Windows
-  drives are reachable at `/mnt/c/...`, but file access there is much
-  slower than in the Linux filesystem (e.g. `~/projects`). Set up pi's
-  provider credentials inside WSL too; WSL doesn't share them with Windows.
+  and run Ruby, pi and agent-council inside WSL, from a WSL shell
+  ([INSTALL.md](INSTALL.md) has the steps). Windows drives are reachable
+  at `/mnt/c/...`, but file access there is much slower than in the Linux
+  filesystem (e.g. `~/projects`). Set up pi's provider credentials inside
+  WSL too; WSL doesn't share them with Windows.
 
 ## Installation
 
-Install the gem to make the `agent-council` command available on your
-RubyGems executable path:
+With [the prerequisites](#prerequisites) in place (or following
+[INSTALL.md](INSTALL.md) from scratch), install the gem to make the
+`agent-council` command available on your RubyGems executable path:
 
 ```bash
 gem install agent-council
@@ -173,11 +178,11 @@ to write one. To work on agent-council itself, see
 
 ### Finding the installed documentation and examples
 
-The installed gem contains this README, [`DESIGN.md`](DESIGN.md),
-[`code-review-agents.md`](code-review-agents.md), `RELEASE_NOTES.md`, and the
-sample prompts and configs under `examples/`, all matching the installed
-version. The help output shows where they are for the copy of
-`agent-council` you are actually running:
+The installed gem contains this README, [`INSTALL.md`](INSTALL.md),
+[`DESIGN.md`](DESIGN.md), [`code-review-agents.md`](code-review-agents.md),
+`RELEASE_NOTES.md`, and the sample prompts and configs under `examples/`,
+all matching the installed version. The help output shows where they are
+for the copy of `agent-council` you are actually running:
 
 ```bash
 agent-council -h   # see "Documentation (Local)" and "Examples (Local)"
