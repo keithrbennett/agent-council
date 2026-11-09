@@ -78,7 +78,7 @@ output, follow the documented steps and examples, and execute commands to
 confirm or refute what the documentation claims. Don't rely on a claim being
 plausible: check it. Don't install software, though: check installation
 steps by reading them against the code and packaging instead. Don't run
-test suites, builds, servers or database tasks either. Don't run
+test suites, builds, servers, or database tasks either. Don't run
 commands that call paid or remote services (such as AI models); check
 those steps by reading the code instead.
 

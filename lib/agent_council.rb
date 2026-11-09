@@ -284,7 +284,7 @@ module AgentCouncil
     "#{prompt.chomp}\n\n#{addendum}"
   end
 
-  # An agent's label in progress lines, report sources and consolidation
+  # An agent's label in progress lines, report sources, and consolidation
   # prompts: "#<index> <provider> / <model>", or without the index when
   # there is none (the consolidator). missing_agents matches reports by it.
   module_function def agent_label(provider, model, index = nil)
@@ -585,7 +585,7 @@ module AgentCouncil
   end
 
   # Display cells for a usage's input (cached included), cached input,
-  # output and cost; - for each unknown one.
+  # output, and cost; - for each unknown one.
   module_function def usage_cells(usage)
     input, cached, output, cost = usage_figures(usage)
     counts = [input, cached, output].map { |count| count ? format_token_count(count) : '-' }
@@ -644,7 +644,7 @@ module AgentCouncil
   end
 
   # Writes the run dir's run.json: every analyst's and consolidation's
-  # entry (see run_entry), their total usage and how many runs it covers
+  # entry (see run_entry), their total usage, and how many runs it covers
   # (those that reported usage). Replaced atomically, so a
   # reader or a Ctrl-C never sees it half written. A failure to write it is
   # only warned about: the reports are what matter.
@@ -923,7 +923,7 @@ module AgentCouncil
     copied_paths = { 'prompt' => prompt_path, 'config' => config_path, 'addendum' => ANALYST_FORMAT_PATH }
     copied_names = copied_paths.transform_values { |path| File.basename(path) }
     unless copied_names.values.uniq.size == copied_names.size
-      abort "The prompt, config and #{File.basename(ANALYST_FORMAT_PATH)} need different file names, " \
+      abort "The prompt, config, and #{File.basename(ANALYST_FORMAT_PATH)} need different file names, " \
         'since all three are copied into the run dir: ' \
         "#{copied_names.map { |role, name| "#{role} #{name}" }.join(', ')}"
     end
@@ -1078,7 +1078,7 @@ module AgentCouncil
     fields = reports.map { |report| report[2] }
       .find { |f| f.values_at('prompt_file', 'config_file', 'run_stamp', 'query').all? }
     unless fields
-      abort "Reports in #{reviews_dir} lack prompt_file, config_file, run_stamp or query; " \
+      abort "Reports in #{reviews_dir} lack prompt_file, config_file, run_stamp, or query; " \
         'runs made before --consolidate existed cannot be consolidated'
     end
     %w[prompt_file config_file].each do |key|

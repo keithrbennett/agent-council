@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# WorkerPool's threads, agent tracking and shutdown. The signal traps and
+# WorkerPool's threads, agent tracking, and shutdown. The signal traps and
 # end-to-end Ctrl-C behavior are covered in spec/end_to_end_spec.rb.
 require 'spec_helper'
 require 'fileutils'
@@ -92,7 +92,7 @@ RSpec.describe AgentCouncil::WorkerPool do
   end
 
   describe '#capture3' do
-    it 'returns stdout, stderr and status, feeding stdin' do
+    it 'returns stdout, stderr, and status, feeding stdin' do
       script = 'cat; echo "$X" >&2; exit 3'
       out, err, status = pool.capture3({ 'X' => 'y' }, 'sh', '-c', script, stdin_data: 'in')
       expect([out, err, status.exitstatus]).to eq(['in', "y\n", 3])

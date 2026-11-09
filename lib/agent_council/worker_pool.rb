@@ -4,12 +4,12 @@ require 'open3'
 
 module AgentCouncil
   # Worker threads and agent processes for a run, and what Ctrl-C (or
-  # SIGTERM, SIGHUP or SIGQUIT) does to them. main's rescue Interrupt calls
+  # SIGTERM, SIGHUP, or SIGQUIT) does to them. main's rescue Interrupt calls
   # into this class for everything but its own message.
   #
   # Each agent process runs in its own process group (see #capture3), so a
   # terminal's Ctrl-C reaches only agent-council, never the agents. Once
-  # #trap_signals is installed, the first INT, TERM, HUP or QUIT (not on
+  # #trap_signals is installed, the first INT, TERM, HUP, or QUIT (not on
   # JRuby; see TERMINATING_SIGNALS) raises Interrupt in the main thread,
   # whose rescue calls #shutdown: it sends every agent SIGTERM (pi then also
   # stops any commands its bash tool started, which run detached and so would

@@ -10,7 +10,7 @@ never used Ruby. It takes you from a bare machine to a working
 
 - **macOS and Linux:** any terminal works. Linux needs `curl` installed.
 - **Windows:** native Windows is **not supported**. Everything, including
-  Ruby, Pi and agent-council, must be installed and run inside
+  Ruby, Pi, and agent-council, must be installed and run inside
   [WSL](https://learn.microsoft.com/windows/wsl/install) with Ubuntu. In
   an administrator PowerShell, run `wsl --install -d Ubuntu`, restart if
   asked, then open an Ubuntu terminal and follow the Linux steps below
@@ -28,7 +28,7 @@ sudo apt update && sudo apt install -y curl build-essential
 [Mise](https://mise.jdx.dev) is a version manager for languages. It is
 used here because it provides current Ruby versions, installs them in
 your home directory without touching any system Ruby, and works the same
-way on macOS, Linux and WSL.
+way on macOS, Linux, and WSL.
 
 Install Mise and activate it in your shell.
 
@@ -94,5 +94,5 @@ If the help text appears, you're done.
 ## Next steps
 
 Continue with the README's [Quick start](README.md#quick-start) to list
-your models, write a config and do your first run. You've already done its
+your models, write a config, and do your first run. You've already done its
 steps for installing the prerequisites and the gem.

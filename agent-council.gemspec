@@ -17,7 +17,7 @@ Gem::Specification.new do |spec|
     harness/model instances (currently the pi harness) and saves each model's final
     response as a separate Markdown report. An optional consolidator model can then
     synthesize all the reports into one combined answer. Each run also records
-    every agent's duration, token usage and cost, making it a side-by-side
+    every agent's duration, token usage, and cost, making it a side-by-side
     comparison of models and providers on your own project.
   DESCRIPTION
   spec.license       = 'MIT'

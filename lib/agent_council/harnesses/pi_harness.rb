@@ -2,7 +2,7 @@
 
 # AgentCouncil::Harnesses::PiHarness — all knowledge specific to the pi
 # coding-agent harness: how to invoke the pi CLI for one model run, the
-# tool allowlist and read-only scaffolding delivered with it, and how to
+# tool allowlist, and read-only scaffolding delivered with it, and how to
 # read pi's JSONL event stream afterward.
 #
 # AgentCouncil is harness-agnostic and refers to this module only via
@@ -60,7 +60,7 @@ module AgentCouncil
             services (databases, servers, fixed ports, Docker). Otherwise, if
             running such a command would materially improve your analysis,
             describe what you would run and why instead of running it.
-          - You may run clearly read-only commands: reading, searching and
+          - You may run clearly read-only commands: reading, searching, and
             listing files; inspecting git history and status; inspecting
             dependency and configuration information.
           - If you need scratch space for temporary artifacts, use this
@@ -125,7 +125,7 @@ module AgentCouncil
 
       # Token usage summed over all assistant messages (each is a separate
       # model request), as AgentCouncil expects it: integer 'input', 'output',
-      # 'cache_read' and 'cache_write', plus 'cost' in US dollars when pi
+      # 'cache_read', and 'cache_write', plus 'cost' in US dollars when pi
       # priced the run. nil when the stream reports no usage, as some
       # providers don't.
       module_function def usage(jsonl)
@@ -141,7 +141,7 @@ module AgentCouncil
         value.is_a?(Numeric) && value.positive? ? value : 0
       end
 
-      # Stop reasons meaning a message was cut off, cancelled or failed, not
+      # Stop reasons meaning a message was cut off, cancelled, or failed, not
       # completed. error normally comes with an errorMessage, which is reported
       # instead; this catches one that is missing or blank.
       UNUSABLE_STOP_REASONS = %w[length aborted error].freeze

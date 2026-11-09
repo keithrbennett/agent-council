@@ -4,12 +4,12 @@ Run one prompt through several AI models at once, against your own
 project, and get two things back: a **consolidated answer** that is
 better than any single model's, and a **head-to-head comparison** of the
 models and providers that produced it, measured on speed, token usage,
-cost and quality.
+cost, and quality.
 
 agent-council runs the **same analytical prompt** through several models
 using the [Pi](https://github.com/earendil-works/pi) coding-agent harness,
 saves each model's final response as a separate Markdown report, records
-how long each one took, how many tokens it used and what it cost, and can
+how long each one took, how many tokens it used, and what it cost, and can
 then have a **consolidator** model synthesize those reports into a single
 one and assess what each agent contributed.
 
@@ -32,35 +32,35 @@ one and assess what each agent contributed.
 Public leaderboards tell you how models do on someone else's tasks.
 agent-council tells you how they do on *yours*: your codebase, your
 questions, your standards. Every run is a controlled experiment, with the
-same prompt, the same repository and the same tools at the same moment,
+same prompt, the same repository, and the same tools at the same moment,
 so the differences you see are differences in the models and in the
 providers serving them.
 
 - **Speed.** Every agent's wall-clock duration, side by side. Find out
   which models answer in two minutes and which take twenty, and whether
   the wait buys anything.
-- **Tokens and cost.** Input, cached input and output tokens, and dollar
+- **Tokens and cost.** Input, cached input, and output tokens, and dollar
   cost where pi can price the model, per agent and in total. See whether
   the model that costs ten times as much finds ten times as much.
 - **Quality.** The reports sit side by side, labeled by source. The
   consolidator shows which findings each model shared with the others,
-  which only it found and where models contradicted each other, and its
+  which only it found, and where models contradicted each other, and its
   *Agent performance* section assesses each agent's depth of research
   (did it read the code, run commands, verify its claims?) and how much it
   added, as opposed to noise or errors.
 - **Providers, not just models.** Run the same model through different
   providers, such as its maker's API and an aggregator, and compare their
-  latency, price and reliability. Failures are recorded with their
+  latency, price, and reliability. Failures are recorded with their
   reasons, so an unreliable provider shows up in the record.
 - **Evidence that accumulates.** Each run's measurements are saved in a
   machine-readable `run.json`. Over weeks of real work, those files
-  become a dataset for choosing your default model, your ensemble and
+  become a dataset for choosing your default model, your ensemble, and
   your budget from your own results, not from marketing or hunches.
 
 ### Repeatable and cheap to set up
 
 A prompt file and a short YAML config are all a run needs; every run's
-reports, prompt, config and measurements are saved together in a
+reports, prompt, config, and measurements are saved together in a
 timestamped directory, so a comparison can be rerun next month, against
 next month's models.
 
@@ -139,9 +139,9 @@ in detail.
 Each model's answer is saved as a Markdown file under
 `agent-council-reports/<yyyy-mm-dd>/<hh-mm-ss>/reviews/`, and the
 consolidated report is written to the run directory itself, split into a
-`_findings.md` file (findings, contradictions and overall assessment, with
+`_findings.md` file (findings, contradictions, and overall assessment, with
 no front matter or orchestration tables, so it can be pasted into an AI chat as is) and a
-`_meta.md` file (front matter, tables, agents consulted and agent
+`_meta.md` file (front matter, tables, agents consulted, and agent
 performance), or a single `_consolidated_...md` file if the model's report
 couldn't be split; see
 [What you get](#what-you-get). To add more models or change the
@@ -159,7 +159,7 @@ consolidator, see
   viewpoints), configured through pi itself (see
   [pi's documentation][pi-docs])
 - On Windows, WSL (e.g. Ubuntu): native Windows is not supported. Install
-  and run Ruby, pi and agent-council inside WSL, from a WSL shell
+  and run Ruby, pi, and agent-council inside WSL, from a WSL shell
   ([INSTALL.md](INSTALL.md) has the steps). Windows drives are reachable
   at `/mnt/c/...`, but file access there is much slower than in the Linux
   filesystem (e.g. `~/projects`). Set up pi's provider credentials inside
@@ -247,7 +247,7 @@ consolidating a single report adds cost without adding anything.
 The config must be a YAML mapping with a non-empty `agents` list. Each
 agent, and the consolidator, needs string `provider` and `model` values
 (quote any value YAML would read as something else, such as a number,
-a date or `yes`); other keys are ignored.
+a date, or `yes`); other keys are ignored.
 
 More samples are in [`examples/configs/`](examples/configs/), which is
 included in the installed gem. For scripts and agents,
@@ -374,7 +374,7 @@ agent-council \
   that checkout; agents need an authenticated
   [`gh`](https://cli.github.com/) and read the PR through it.
 - `examples/prompts/review-docs-prompt.md` — a documentation review: checks
-  the README, other Markdown files, help output, code comments and samples
+  the README, other Markdown files, help output, code comments, and samples
   against the code for accuracy, completeness, consistency, first-run
   usability, and clarity (including duplication);
   run it from the repository whose docs you want reviewed.
@@ -411,14 +411,14 @@ included, with a message naming `AGENT_COUNCIL_OPTS`.
 
 ### Stopping a run
 
-Ctrl-C (or SIGTERM, SIGHUP or SIGQUIT) stops the run, keeping reports
+Ctrl-C (or SIGTERM, SIGHUP, or SIGQUIT) stops the run, keeping reports
 already written:
 
 - Running agents, the consolidator included, get SIGTERM (pi then also
   stops the commands it started) and a shared 5 seconds to exit before
   they are killed. A killed agent can't stop the commands it started, so
   those may keep running.
-- A second SIGINT, SIGTERM or SIGQUIT kills them at once; further SIGHUPs
+- A second SIGINT, SIGTERM, or SIGQUIT kills them at once; further SIGHUPs
   are ignored.
 - agent-council then dies by that signal, so a shell loop running it
   stops too; for SIGQUIT it exits with status 131 instead of dumping core.
@@ -454,15 +454,15 @@ any suffix). Exit status is 0 only if the consolidation succeeded.
   - If the run had no consolidator, add a `consolidator:` entry to the
     copy first; otherwise `--consolidate` exits with an error.
   - Leave the copy's `agents:` exactly as they were (same order,
-    providers and models): an agent counts as having no report when no
-    report carries its number, provider and model.
+    providers, and models): an agent counts as having no report when no
+    report carries its number, provider, and model.
 - **The consolidation instructions are the current template's** (the
   installed gem's, or a checkout's own), which may have changed since
   the run.
 - **Existing reports are kept.** If a file with the name the new
   report would get, or the name of its `_findings` or `_meta` file, already
   exists (as it does when the same model configuration, meaning harness,
-  provider and model, consolidated the run before), nothing runs; rename
+  provider, and model, consolidated the run before), nothing runs; rename
   or delete the file or files the message lists to redo it. Reports
   from different model configurations have different names and sit side
   by side, so you can compare their syntheses.
@@ -478,7 +478,7 @@ any suffix). Exit status is 0 only if the consolidation succeeded.
 
 ### Time zone
 
-Run dir names, report filenames and the front matter's `timestamp` and
+Run dir names, report filenames, and the front matter's `timestamp` and
 `consolidated_at` all use the **local time zone**. There is no
 agent-council option to change it; instead, set the standard `TZ`
 environment variable, which Ruby (like most programs) honors. Timestamps
@@ -546,7 +546,7 @@ agent-council-reports/
       codebase-review.md   # prompt copy
       analyst_format.md    # report-format addendum copy
       consolidated.yml     # config copy
-      run.json             # every agent run's outcome, duration and token usage
+      run.json             # every agent run's outcome, duration, and token usage
       reviews/             # analyst reports
         2026-09-02-16-21-43_codebase-review_01_pi_opencode-go_glm-5.3.md
         2026-09-02-16-21-43_codebase-review_02_pi_opencode-go_kimi-k3.md
@@ -586,7 +586,7 @@ agent-council-reports/
   is the prompt file name without its extension, minus any trailing
   `-prompt` or `_prompt` in any case (`codebase-review-prompt.md` and
   `codebase-review_prompt.md` both become `codebase-review`), lowercased, with each run of characters
-  other than ASCII letters, digits, `.`, `_` and `-` replaced by `-` and
+  other than ASCII letters, digits, `.`, `_`, and `-` replaced by `-` and
   leading or trailing `-` and `.` dropped (`My Prompt (draft).md` becomes
   `my-prompt-draft`); a name left empty becomes `prompt`.
 - **Day buckets** keep the reports directory itself navigable when you have hundreds
@@ -624,7 +624,7 @@ agent-council-reports/
 
   `usage` is the model's token usage, summed over every request of the
   run, as reported by the harness: `input` (excluding cached input),
-  `cache_read`, `cache_write` and `output` token counts, plus `cost` in
+  `cache_read`, `cache_write`, and `output` token counts, plus `cost` in
   US dollars when the harness could price the run (pi uses its own price
   table, so models missing from it have no cost). It is `null` when the
   provider reports no usage. Providers count tokens somewhat differently
@@ -632,7 +632,7 @@ agent-council-reports/
   only roughly.
 
   `--consolidate` relies on the analysts' `prompt_file`, `config_file`,
-  `run_stamp` and `query`, and on `agent_index` to tell which configured
+  `run_stamp`, and `query`, and on `agent_index` to tell which configured
   agents have no report. Reports are identified by their front matter,
   not by filename parsing, so `.md` files in `reviews/` without
   `provider` and `model` front matter are ignored.
@@ -640,7 +640,7 @@ agent-council-reports/
   summarizing its main fields and its run's duration and token usage
   (for consolidated reports, under a `# Consolidated Report` title and a
   `### Prompt:` line, and followed by a `### Sources` table giving each
-  source's duration, input (cached included), cached input, output and
+  source's duration, input (cached included), cached input, output, and
   cost, from `run.json`), followed by the
   model's final message, minus any top-level `#` heading the message
   starts with. The consolidator is asked to put a line containing only `=== META ===`
@@ -649,22 +649,22 @@ agent-council-reports/
   with this header and front matter in the `_meta.md` file, and the text
   before it goes to the `_findings.md` file under a `# Consolidated Findings`
   title, a few lines identifying the run (its stamp and query, the prompt
-  file, and the consolidator and time) and a legend of the agents (number,
+  file, and the consolidator and time), and a legend of the agents (number,
   harness, provider, model). If
-  the marker is missing, repeated, inside a code fence or not followed by
+  the marker is missing, repeated, inside a code fence, or not followed by
   the `Agent Consultants` heading, or the report no longer starts with the
   header written to it, the report is left unsplit, under the unsuffixed
   name, and a warning says why.
-- The copied prompt, config and report-format addendum keep an analyst
+- The copied prompt, config, and report-format addendum keep an analyst
   run's inputs recoverable after the fact. The pi and agent-council
-  versions, the scaffolding text appended to pi's system prompt and the
+  versions, the scaffolding text appended to pi's system prompt, and the
   consolidation template are not recorded.
 - The prompt and config copies keep their own file names (e.g.
-  `single.yml`), so the prompt, the config and `analyst_format.md` must
+  `single.yml`), so the prompt, the config, and `analyst_format.md` must
   have different file names, and none can be named `reviews`; a run that
   would break either rule stops before starting.
 
-Each run starts by printing its config, prompt and run directory
+Each run starts by printing its config, prompt, and run directory
 (`Run Dir: agent-council-reports/2026-09-03/09-14-02`), then its agents
 under `Review Agents (N):` and, if configured, `Consolidator Agent:`;
 these labels also name the harness (e.g. `#2 pi / openai / gpt-6.1-sol`).
@@ -685,7 +685,7 @@ agent as it finishes: `✓` or `✗`, its duration, its label (e.g.
 `#2 openai / gpt-6.1-sol`) and, for a failure, the reason on the line
 below. When all reviews finish, a `Reviews` table shows which models
 succeeded, how long each took (`HH:MM:SS`) and their token usage in
-`In`, `Cached`, `Out` and `Cost` columns (`In` counts cached input too;
+`In`, `Cached`, `Out`, and `Cost` columns (`In` counts cached input too;
 `-` when unknown; failed runs show what they used), with the failures'
 reasons listed below it under `Errors:`. A
 `--- Reviews complete (N/M succeeded; <total usage>) ---` line follows,
@@ -725,17 +725,17 @@ which default was picked up.
    --provider P --model M --append-system-prompt <scaffolding>`.
 - `--no-session` keeps runs independent: no conversation state leaks
   between ensemble members.
-- `--tools` is an allowlist for pi's built-in, extension and custom
+- `--tools` is an allowlist for pi's built-in, extension, and custom
   tools: `bash` remains for investigation (`git log`, dependency
   inspection, ...), while file-editing tools and unlisted extension and
   custom tools are unavailable, as are MCP tools. The allowlist is the
   only enforced restriction (see [Safety and privacy](#safety-and-privacy)). A fixed
   scaffolding text appended to the system prompt (identical for all
   agents, the consolidator included, except the scratch path) tells agents
-  not to modify project files, git state, software or configuration, or
+  not to modify project files, git state, software, or configuration, or
   start persistent services (they get a scratch directory for temporary
   files), and
-  not to run tests, builds or similar commands, which can collide between
+  not to run tests, builds, or similar commands, which can collide between
   concurrent analysts, unless the prompt permits them (as
   `examples/prompts/review-latest-commit-prompt.md` does for tests and
   linters); where such a command isn't permitted but would help, the
@@ -764,7 +764,7 @@ agent-council does not sandbox the agents. Before running it, know that:
 - **Agents have a shell.** Each agent, the consolidator included, gets pi's
   `bash` tool, running as you, in the directory you run from, with your
   environment (including any API keys in it; agent-council only sets
-  `TMPDIR`), your file permissions and your network access. Of pi's
+  `TMPDIR`), your file permissions, and your network access. Of pi's
   built-in tools, only `edit` and `write` (and the Windows-only
   `powershell`) are withheld. The read-only rules described above are
   instructions in the system prompt, which a model can ignore or misapply.
@@ -791,7 +791,7 @@ agent-council does not sandbox the agents. Before running it, know that:
   an `--output-dir`; add that directory to the project's `.gitignore` if
   you don't want them committed.
 
-Run agent-council only on repositories you trust, or inside a container, VM
+Run agent-council only on repositories you trust, or inside a container, VM,
 or disposable checkout that holds no credentials you aren't willing to
 expose.
 
@@ -806,7 +806,7 @@ the directory layout is the index. See [`DESIGN.md`](DESIGN.md) §18–19.
 ## Stability
 
 This is a 0.x release. The config format, command-line interface, run
-directory layout and report front matter may change incompatibly before 1.0.
+directory layout, and report front matter may change incompatibly before 1.0.
 
 ## Development
 
@@ -819,7 +819,7 @@ its full path. Sample prompts such as `recommend-model-ensemble-prompt.md`
 expect `pi-models` on your `PATH`; to use them from a checkout, add its
 `exe/` directory (`export PATH="/path/to/agent-council/exe:$PATH"`).
 
-Setup, tests, lint, the pre-commit hook and the security audit are
+Setup, tests, lint, the pre-commit hook, and the security audit are
 described in [`CONTRIBUTING.md`](https://github.com/keithrbennett/agent-council/blob/main/CONTRIBUTING.md)
 in the source repository. Before submitting a pull request, open an
 issue and wait for explicit approval; `CONTRIBUTING.md` describes the

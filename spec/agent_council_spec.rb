@@ -581,7 +581,7 @@ RSpec.describe AgentCouncil do
       expect_abort(/No analyst reports found/)
     end
 
-    it 'aborts when the reports predate --consolidate (no prompt_file, config_file, run_stamp or query)' do
+    it 'aborts when the reports predate --consolidate (no prompt_file, config_file, run_stamp, or query)' do
       write_run(fields: analyst_fields.except('prompt_file', 'config_file', 'run_stamp'))
       expect_abort(/runs made before --consolidate existed cannot be consolidated/)
     end
@@ -614,7 +614,7 @@ RSpec.describe AgentCouncil do
 
     it 'aborts when query is missing' do
       write_run(fields: analyst_fields.except('query'))
-      expect_abort(/lack prompt_file, config_file, run_stamp or query/)
+      expect_abort(/lack prompt_file, config_file, run_stamp, or query/)
     end
 
     %w[prompt_file config_file].each do |key|
@@ -1222,7 +1222,7 @@ RSpec.describe AgentCouncil do
   end
 
   describe '.sources_table' do
-    it "gives each source's duration, input (cached included), cached input, output and cost, or -" do
+    it "gives each source's duration, input (cached included), cached input, output, and cost, or -" do
       runs = {
         'a / b' => { 'duration_seconds' => 42.4,
                      'usage'            => { 'input' => 500, 'cache_read' => 1500, 'output' => 7,
@@ -1411,7 +1411,7 @@ RSpec.describe AgentCouncil do
   end
 
   describe '.full_label' do
-    it 'gives agent number, harness, provider and model, defaulting the harness' do
+    it 'gives agent number, harness, provider, and model, defaulting the harness' do
       expect(described_class.full_label('agent_index' => 2, 'harness' => 'h', 'provider' => 'p',
         'model' => 'm'))
         .to eq('#2 h / p / m')
