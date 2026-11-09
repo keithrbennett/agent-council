@@ -1,17 +1,19 @@
 # agent-council
 
-Run one prompt through several AI models at once, against your own
-project, and get two things back: a **consolidated answer** that is
-better than any single model's, and a **head-to-head comparison** of the
-models and providers that produced it, measured on speed, token usage,
+Run one prompt through several AI coding agents at once, against your
+own project, and get two things back: a **consolidated report** that is
+better than any single agent's, and a **head-to-head comparison** of the
+models and providers behind the agents, measured on speed, token usage,
 cost, and quality.
 
-agent-council runs the **same analytical prompt** through several models
+agent-council runs the **same analytical prompt** through each agent
 using the [Pi](https://github.com/earendil-works/pi) coding-agent harness,
-saves each model's final response as a separate Markdown report, records
-how long each one took, how many tokens it used, and what it cost, and can
-then have a **consolidator** model synthesize those reports into a single
-one and assess what each agent contributed.
+with whatever mix of providers and models you choose. It saves each
+agent's final response as a separate Markdown report and records how long
+it took, how many tokens it used, and what it cost. A **consolidator**
+agent then combines the reports into a findings report of consensus
+findings, unique findings, and contradictions, and a companion report
+that assesses what each agent contributed.
 
 **New to Ruby? [Install agent-council from scratch](INSTALL.md)**
 

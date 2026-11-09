@@ -9,16 +9,19 @@ Gem::Specification.new do |spec|
   spec.authors       = ['Keith R. Bennett']
   spec.email         = ['keithrbennett@gmail.com']
 
-  spec.summary       = 'Run one analytical prompt through several AI models and save each ' \
-    'response, with optional consolidation of all reports by another model'
+  spec.summary       = 'Run one prompt through several AI coding agents on your project and get ' \
+    'a consolidated report of their consensus findings, unique findings, and contradictions. ' \
+    "A companion report assesses each agent's work and lists its duration, token usage, " \
+    "and cost. Each agent's own report is saved too."
 
   spec.description   = <<~DESCRIPTION.strip
-    AgentCouncil runs the same prompt through multiple coding-agent
-    harness/model instances (currently the pi harness) and saves each model's final
-    response as a separate Markdown report. An optional consolidator model can then
-    synthesize all the reports into one combined answer. Each run also records
-    every agent's duration, token usage, and cost, making it a side-by-side
-    comparison of models and providers on your own project.
+    AgentCouncil runs the same prompt through several AI coding agents on your
+    project (currently using the pi harness), with any mix of providers and
+    models, and saves each agent's final response as a Markdown report. A
+    consolidating agent then combines the reports into a findings report of
+    consensus findings, unique findings, and contradictions, ready to paste into
+    an AI chat, and a companion report that assesses each agent's work and
+    lists its duration, token usage, and cost.
   DESCRIPTION
   spec.license       = 'MIT'
 
