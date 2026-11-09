@@ -42,8 +42,8 @@ providers serving them.
   which models answer in two minutes and which take twenty, and whether
   the wait buys anything.
 - **Tokens and cost.** Input, cached input, and output tokens, and dollar
-  cost where pi can price the model, per agent and in total. See whether
-  the model that costs ten times as much finds ten times as much.
+  cost where the harness can price the model, per agent and in total. See
+  whether the model that costs ten times as much finds ten times as much.
 - **Quality.** The reports sit side by side, labeled by source. The
   consolidator shows which findings each model shared with the others,
   which only it found, and where models contradicted each other, and its
@@ -141,9 +141,9 @@ in detail.
 Each model's answer is saved as a Markdown file under
 `agent-council-reports/<yyyy-mm-dd>/<hh-mm-ss>/reviews/`, and the
 consolidated report is written to the run directory itself, split into a
-`_findings.md` file (findings, contradictions, and overall assessment, with
+`*_findings.md` file (findings, contradictions, and overall assessment, with
 no front matter or orchestration tables, so it can be pasted into an AI chat as is) and a
-`_meta.md` file (front matter, tables, agents consulted, and agent
+`*_meta.md` file (front matter, tables, agents consulted, and agent
 performance), or a single `_consolidated_...md` file if the model's report
 couldn't be split; see
 [What you get](#what-you-get). To add more models or change the
@@ -593,7 +593,7 @@ agent-council-reports/
   `my-prompt-draft`); a name left empty becomes `prompt`.
 - **Day buckets** keep the reports directory itself navigable when you have hundreds
   of runs.
-- Each report file, except a consolidated report's `_findings.md`, begins with a small **YAML front matter** block,
+- Each report file, except a consolidated report's `*_findings.md`, begins with a small **YAML front matter** block,
   written by the orchestrator (never by the model), identifying the
   report (what was measured about its run is in `run.json`, below):
   - in every report: `role` (`analyst` or `consolidator`), `timestamp`
@@ -613,8 +613,8 @@ agent-council-reports/
   for analysis across many runs: `analysts` and `consolidations`, one
   entry per run with its `agent_index` (analysts only), `harness`,
   `provider`, `model`, `ok`, `duration_seconds`, `usage`, and `report` (its
-  path in the run dir; for a split consolidation, the `_findings.md` file)
-  or `error`; a split consolidation also has `meta_report`, the `_meta.md`
+  path in the run dir; for a split consolidation, the `*_findings.md` file)
+  or `error`; a split consolidation also has `meta_report`, the `*_meta.md`
   file, which has the front matter; `total_usage`, the
   entries' summed usage, whose `cost` is included only if every summed
   entry's cost is known; and `total_usage_runs`, how many entries reported
@@ -648,8 +648,8 @@ agent-council-reports/
   starts with. The consolidator is asked to put a line containing only `=== META ===`
   between its findings and its `Agent Consultants` and `Agent performance`
   sections, and the report is split there: the text after the marker stays
-  with this header and front matter in the `_meta.md` file, and the text
-  before it goes to the `_findings.md` file under a `# Consolidated Findings`
+  with this header and front matter in the `*_meta.md` file, and the text
+  before it goes to the `*_findings.md` file under a `# Consolidated Findings`
   title, a few lines identifying the run (its stamp and query, the prompt
   file, and the consolidator and time), and a legend of the agents (number,
   harness, provider, model). If
