@@ -2,6 +2,10 @@
 
 ## 0.2.0 (unreleased)
 
+- `code-review-agents.md`, a sample code-review ensemble, is removed;
+  model offerings change too often to keep it current. To get a current
+  recommendation, run `examples/prompts/recommend-model-ensemble-prompt.md`.
+
 ## 0.1.0 (2026-11-09)
 
 Initial release. agent-council runs one prompt through several AI coding

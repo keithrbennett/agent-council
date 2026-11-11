@@ -306,7 +306,6 @@ RELEASE_NOTES.md
 LICENSE.txt
 REVIEW_NOTES.md          # settled review findings; not shipped in the gem
 CONTRIBUTING.md          # contribution process; not shipped in the gem
-code-review-agents.md    # sample code-review ensemble recommendation
 agent-council.gemspec
 exe/                     # executable entry points; nearly all code lives in lib/
   agent-council

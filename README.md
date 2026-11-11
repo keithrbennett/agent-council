@@ -186,10 +186,10 @@ to write one. To work on agent-council itself, see
 ### Finding the installed documentation and examples
 
 The installed gem contains this README, [`INSTALL.md`](INSTALL.md),
-[`DESIGN.md`](DESIGN.md), [`code-review-agents.md`](code-review-agents.md),
-`RELEASE_NOTES.md`, and the sample prompts and configs under `examples/`,
-all matching the installed version. The help output shows where they are
-for the copy of `agent-council` you are actually running:
+[`DESIGN.md`](DESIGN.md), `RELEASE_NOTES.md`, and the sample prompts and
+configs under `examples/`, all matching the installed version. The help
+output shows where they are for the copy of `agent-council` you are
+actually running:
 
 ```bash
 agent-council -h   # see "Documentation (Local)" and "Examples (Local)"
@@ -255,10 +255,6 @@ More samples are in [`examples/configs/`](examples/configs/), which is
 included in the installed gem. For scripts and agents,
 [`pi-models`](#occasional-utility-pi-models) lists the models in
 machine-readable forms.
-
-For a recommended code-review ensemble, see
-[`code-review-agents.md`](code-review-agents.md). It is Markdown, not a
-config file: copy its YAML block into your config.
 
 An optional top-level `consolidator:` entry (provider + model, same
 shape as an agent) runs after all agents finish. That model receives:
@@ -364,9 +360,7 @@ agent-council \
   list); its sample
   code-review recommendation is in
   [`examples/results/recommend-model-ensemble-code-review.md`](https://github.com/keithrbennett/agent-council/blob/main/examples/results/recommend-model-ensemble-code-review.md)
-  (generated output, in the source repository only — not in the gem; it
-  shares its title with, but is not, the curated
-  [`code-review-agents.md`](code-review-agents.md)).
+  (generated output, in the source repository only — not in the gem).
 - `examples/prompts/review-latest-commit-prompt.md` — a code-review prompt
   for the latest commit (plus any uncommitted changes); run it from the
   repository under review with a multi-model config.
