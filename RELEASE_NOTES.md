@@ -4,6 +4,7 @@
 
 - `--gem-dir` prints the root directory of the agent-council application,
   which holds its documentation and examples, and exits.
+- `--project-url` prints the project's GitHub URL and exits.
 - `code-review-agents.md`, a sample code-review ensemble, is removed;
   model offerings change too often to keep it current. To get a current
   recommendation, run `examples/prompts/recommend-model-ensemble-prompt.md`.

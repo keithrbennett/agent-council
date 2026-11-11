@@ -30,6 +30,8 @@ module AgentCouncil
   # only for locating documentation and examples (the local paths in help
   # text, and what --gem-dir prints), not for runtime data.
   PROJECT_ROOT = File.expand_path('..', __dir__)
+  # Matches the gemspec's homepage (a spec checks).
+  PROJECT_URL = 'https://github.com/keithrbennett/agent-council'
   EXAMPLES_DIR = File.join(PROJECT_ROOT, 'examples')
   TEMPLATES_DIR = File.join(__dir__, 'agent_council', 'templates')
   CONSOLIDATE_PROMPT_PATH = File.join(TEMPLATES_DIR, 'consolidate_prompt.md')
@@ -787,7 +789,7 @@ module AgentCouncil
         -------------------------------------------------------------------------------
         Usage:                 agent-council [options] PROMPT_FILE [CONFIG_FILE]
                                agent-council --consolidate RUN_DIR
-        Repository:            https://github.com/keithrbennett/agent-council
+        Repository:            #{PROJECT_URL}
         Documentation (Local): #{File.join(PROJECT_ROOT, 'README.md')}
         Examples (Local):      #{EXAMPLES_DIR}
         Version:               #{VERSION}
@@ -827,6 +829,11 @@ module AgentCouncil
 
       opts.on('--gem-dir', 'Show the root directory of the agent-council application and exit') do
         puts PROJECT_ROOT
+        exit 0
+      end
+
+      opts.on('--project-url', "Show the project's GitHub URL and exit") do
+        puts PROJECT_URL
         exit 0
       end
 

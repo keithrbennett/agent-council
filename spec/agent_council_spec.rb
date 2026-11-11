@@ -377,6 +377,23 @@ RSpec.describe AgentCouncil do
         .and output(/^\s+--gem-dir\s+Show the root directory of the agent-council application/).to_stdout
     end
 
+    it 'prints the project URL and exits 0 for --project-url, without a prompt or config' do
+      expect { described_class.main(['--project-url']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
+        .and output("#{described_class::PROJECT_URL}\n").to_stdout
+    end
+
+    it 'has a PROJECT_URL matching the gemspec homepage' do
+      gemspec = Gem::Specification.load(File.join(described_class::PROJECT_ROOT, 'agent-council.gemspec'))
+      expect(described_class::PROJECT_URL).to eq(gemspec.homepage)
+    end
+
+    it 'lists --project-url in the -h options' do
+      expect { described_class.main(['-h']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
+        .and output(/^\s+--project-url\s+Show the project's GitHub URL and exit$/).to_stdout
+    end
+
     it 'lists --version in the -h options' do
       expect { described_class.main(['-h']) }
         .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
@@ -446,7 +463,7 @@ RSpec.describe AgentCouncil do
         .and output(/Invalid AGENT_COUNCIL_OPTS value/).to_stderr
     end
 
-    %w[-h -v --gem-dir].each do |flag|
+    %w[-h -v --gem-dir --project-url].each do |flag|
       it "aborts #{flag} too when AGENT_COUNCIL_OPTS is bad" do
         ENV[described_class::ENV_OPTS_VAR] = '--output-dir "'
         expect { described_class.main([flag]) }

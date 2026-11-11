@@ -297,6 +297,8 @@ agent-council -h
 agent-council -v
 # Root directory of agent-council, holding its docs and examples
 agent-council --gem-dir
+# The project's GitHub URL
+agent-council --project-url
 # See Consolidating a finished run
 agent-council --consolidate agent-council-reports/2026-09-03/09-14-02
 ```
@@ -399,8 +401,9 @@ so set it with care: for example, an `--output-dir` there makes
 words like a shell would, but agent-council doesn't expand variables in
 it: `~` works, but a literal `$HOME` stays literal. (In a double-quoted
 `export`, your shell has already expanded it.) A malformed value, such as
-one with an unclosed quote, makes every command fail, `-h`, `-v`, and
-`--gem-dir` included, with a message naming `AGENT_COUNCIL_OPTS`.
+one with an unclosed quote, makes every command fail, `-h`, `-v`,
+`--gem-dir`, and `--project-url` included, with a message naming
+`AGENT_COUNCIL_OPTS`.
 
 ### Stopping a run
 
