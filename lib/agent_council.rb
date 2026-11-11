@@ -27,8 +27,8 @@ module AgentCouncil
   # Runtime data files (prompt templates) ship inside lib/, resolved
   # relative to this file, so the gem is self-contained: what gets loaded at runtime never depends on which
   # files happen to survive the gemspec's file list. PROJECT_ROOT remains
-  # only for documentation references (e.g. the local README path in help
-  # text), not for runtime data.
+  # only for locating documentation and examples (the local paths in help
+  # text, and what --gem-dir prints), not for runtime data.
   PROJECT_ROOT = File.expand_path('..', __dir__)
   EXAMPLES_DIR = File.join(PROJECT_ROOT, 'examples')
   TEMPLATES_DIR = File.join(__dir__, 'agent_council', 'templates')
@@ -822,6 +822,11 @@ module AgentCouncil
 
       opts.on('-v', '--version', 'Show the version and exit') do
         puts "agent-council #{VERSION}"
+        exit 0
+      end
+
+      opts.on('--gem-dir', 'Show the root directory of the agent-council application and exit') do
+        puts PROJECT_ROOT
         exit 0
       end
 

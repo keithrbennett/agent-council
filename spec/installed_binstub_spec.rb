@@ -45,5 +45,13 @@ RSpec.describe 'installed agent-council binstub' do
     expect(File.file?(docs_path)).to be(true)
     expect(File.file?(File.join(examples_path, 'configs', 'single.yml'))).to be(true)
     expect(File.file?(File.join(examples_path, 'prompts', 'smoke-test-prompt.md'))).to be(true)
+
+    # --gem-dir prints the installed gem's directory, the one holding those docs and examples.
+    out, err, status = run_cmd(env, File.join(gem_home, 'bin', 'agent-council'), '--gem-dir')
+    expect(status).to be_success, err
+    gem_dir = out.chomp
+    expect(gem_dir).to start_with(gem_home)
+    expect(gem_dir).to eq(File.dirname(docs_path))
+    expect(gem_dir).to eq(File.dirname(examples_path))
   end
 end

@@ -365,6 +365,18 @@ RSpec.describe AgentCouncil do
       end
     end
 
+    it 'prints the gem directory and exits 0 for --gem-dir, without a prompt or config' do
+      expect { described_class.main(['--gem-dir']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
+        .and output("#{described_class::PROJECT_ROOT}\n").to_stdout
+    end
+
+    it 'lists --gem-dir in the -h options' do
+      expect { described_class.main(['-h']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
+        .and output(/^\s+--gem-dir\s+Show the root directory of the agent-council application/).to_stdout
+    end
+
     it 'lists --version in the -h options' do
       expect { described_class.main(['-h']) }
         .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
@@ -434,7 +446,7 @@ RSpec.describe AgentCouncil do
         .and output(/Invalid AGENT_COUNCIL_OPTS value/).to_stderr
     end
 
-    %w[-h -v].each do |flag|
+    %w[-h -v --gem-dir].each do |flag|
       it "aborts #{flag} too when AGENT_COUNCIL_OPTS is bad" do
         ENV[described_class::ENV_OPTS_VAR] = '--output-dir "'
         expect { described_class.main([flag]) }

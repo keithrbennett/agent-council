@@ -195,19 +195,12 @@ actually running:
 agent-council -h   # see "Documentation (Local)" and "Examples (Local)"
 ```
 
-To get the gem's directory in a shell variable:
+To get that copy's directory in a shell variable, used by the examples
+below:
 
 ```bash
-AC_HOME=$(ruby <<'RUBY'
-print Gem::Specification
-  .find_by_name('agent-council', '>= 0.a')
-  .full_gem_path
-RUBY
-)
+AC_HOME=$(agent-council --gem-dir)
 ```
-
-If several versions are installed, this finds the newest, prereleases
-included: the same one a plain `agent-council` command runs.
 
 ## Discovering and configuring models
 
@@ -302,6 +295,8 @@ agent-council -o tmp/council my-analysis-prompt.md
 agent-council -h
 # Version
 agent-council -v
+# Root directory of agent-council, holding its docs and examples
+agent-council --gem-dir
 # See Consolidating a finished run
 agent-council --consolidate agent-council-reports/2026-09-03/09-14-02
 ```
@@ -312,11 +307,13 @@ must expand it.
 
 [`examples/`](examples/) holds sample prompts and configs — pure samples, not
 used at runtime. `examples/prompts/` and `examples/configs/` are included in
-the installed gem. The commands below use `$AC_HOME`, the installed gem's
-directory (see [Finding the installed documentation and
-examples](#finding-the-installed-documentation-and-examples)); in a source
-checkout, set `AC_HOME` to the checkout's path and put its `exe/` on
-your `PATH` (see [Development](#development)). They still analyze your
+the installed gem. The commands below use `$AC_HOME`, agent-council's
+root directory (see [Finding the installed documentation and
+examples](#finding-the-installed-documentation-and-examples)). To use a
+source checkout instead, use its `exe/agent-council` wherever
+`agent-council` appears, including when setting `AC_HOME`: run it by its
+full path, or put its `exe/` on your `PATH` (see
+[Development](#development)). They still analyze your
 current directory, and the sample configs name specific providers and
 models — copy and edit one if yours differ.
 
@@ -402,8 +399,8 @@ so set it with care: for example, an `--output-dir` there makes
 words like a shell would, but agent-council doesn't expand variables in
 it: `~` works, but a literal `$HOME` stays literal. (In a double-quoted
 `export`, your shell has already expanded it.) A malformed value, such as
-one with an unclosed quote, makes every command fail, `-h` and `-v`
-included, with a message naming `AGENT_COUNCIL_OPTS`.
+one with an unclosed quote, makes every command fail, `-h`, `-v`, and
+`--gem-dir` included, with a message naming `AGENT_COUNCIL_OPTS`.
 
 ### Stopping a run
 
