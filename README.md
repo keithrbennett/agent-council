@@ -7,13 +7,27 @@ models and providers behind the agents, measured on speed, token usage,
 cost, and quality.
 
 agent-council runs the **same analytical prompt** through each agent
-using the [Pi](https://github.com/earendil-works/pi) coding-agent harness,
-with whatever mix of providers and models you choose. It saves each
-agent's final response as a separate Markdown report and records how long
-it took, how many tokens it used, and what it cost. A **consolidator**
-agent then combines the reports into a findings report of consensus
-findings, unique findings, and contradictions, and a companion report
-that assesses what each agent contributed.
+using the [Pi](https://github.com/earendil-works/pi) coding-agent harness.
+The agents can use any mix of providers and models, including the same
+provider and model more than once.
+
+A **consolidator** agent then reads every agent's report, checks their
+claims against the project where it can, and writes two reports:
+
+- **The consolidated findings report**, better than any single agent's:
+  - consensus findings;
+  - unique findings;
+  - contradictions.
+- **A companion meta report**, on each agent:
+  - its statistics: duration, token counts, and estimated cost;
+  - how deeply it researched: did it read the code, run commands,
+    verify its claims?
+  - how much it added, as opposed to noise or errors.
+
+Each agent's own report is saved too, and each run's measurements
+(every agent's outcome, duration, token usage, and estimated cost)
+go into a machine-readable `run.json`, so your runs build up into a
+dataset for comparing models and providers on your own work.
 
 **New to Ruby? [Install agent-council from scratch](INSTALL.md)**
 
@@ -41,9 +55,10 @@ providers serving them.
 - **Speed.** Every agent's wall-clock duration, side by side. Find out
   which models answer in two minutes and which take twenty, and whether
   the wait buys anything.
-- **Tokens and cost.** Input, cached input, and output tokens, and dollar
-  cost where the harness can price the model, per agent and in total. See
-  whether the model that costs ten times as much finds ten times as much.
+- **Tokens and cost.** Input, cached input, and output tokens, and an
+  estimated dollar cost where the harness can price the model, per agent
+  and in total. See whether the model that costs ten times as much finds
+  ten times as much.
 - **Quality.** The reports sit side by side, labeled by source. The
   consolidator shows which findings each model shared with the others,
   which only it found, and where models contradicted each other, and its
@@ -71,6 +86,34 @@ such as Claude Code and Codex, is among the
 [planned features](DESIGN.md#18-status-and-future-work), and will extend
 these comparisons to the same model running under different harnesses. See
 [`DESIGN.md`](DESIGN.md) for the rationale.
+
+## What makes a good fit
+
+agent-council can help with any question about a set of readable files
+(or about no files at all) that meets these conditions:
+
+- **It can be asked in one prompt.** Agents run non-interactively, with
+  no clarification or steering partway through.
+- **It can be investigated by several agents at once without
+  collisions.** Reading files and running read-only commands is fine.
+  Agents run tests and builds only when the prompt permits them, and
+  even then skip any that need shared services (databases, servers,
+  fixed ports, Docker).
+- **It has a text answer.** Only each agent's final message is saved as
+  its report. Agents are told not to change the project and to keep
+  temporary files in a scratch directory, which is deleted after the
+  run. Actions such as posting or deploying would happen once per agent.
+- **It gains from several independent answers and a synthesis of
+  them.** Open-ended questions ("what's wrong with this?", "what should
+  we do?") gain the most; one with an obvious answer gains nothing.
+
+Weigh two costs as well: a council costs several times what one agent
+costs and takes as long as its slowest agent plus the consolidation, and
+whatever the agents read goes to their providers (see
+[Safety and privacy](#safety-and-privacy)).
+
+For a catalog of uses, from code review to choosing models, see
+[`USE_CASES.md`](USE_CASES.md).
 
 > **Between releases**, the documentation in the repository describes the
 > next release, not the latest published one, so it may cover features
@@ -186,8 +229,9 @@ to write one. To work on agent-council itself, see
 ### Finding the installed documentation and examples
 
 The installed gem contains this README, [`INSTALL.md`](INSTALL.md),
-[`DESIGN.md`](DESIGN.md), `RELEASE_NOTES.md`, and the sample prompts and
-configs under `examples/`, all matching the installed version. The help
+[`USE_CASES.md`](USE_CASES.md), [`DESIGN.md`](DESIGN.md),
+`RELEASE_NOTES.md`, and the sample prompts and configs under
+`examples/`, all matching the installed version. The help
 output shows where they are for the copy of `agent-council` you are
 actually running:
 
@@ -622,7 +666,10 @@ agent-council-reports/
   run, as reported by the harness: `input` (excluding cached input),
   `cache_read`, `cache_write`, and `output` token counts, plus `cost` in
   US dollars when the harness could price the run (pi uses its own price
-  table, so models missing from it have no cost). It is `null` when the
+  table, so models missing from it have no cost). The cost is an
+  estimate from that table's per-token prices, not what you're billed:
+  your provider's actual charges may differ, and on a subscription the
+  marginal cost of a run may be nothing. `usage` is `null` when the
   provider reports no usage. Providers count tokens somewhat differently
   (reasoning tokens, for example), so compare counts across providers
   only roughly.

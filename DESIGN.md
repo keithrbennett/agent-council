@@ -301,6 +301,7 @@ There are no retries of agent-council's own (pi may retry transient provider fai
 ```text
 README.md
 INSTALL.md
+USE_CASES.md
 DESIGN.md
 RELEASE_NOTES.md
 LICENSE.txt

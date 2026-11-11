@@ -8,6 +8,10 @@
 - `code-review-agents.md`, a sample code-review ensemble, is removed;
   model offerings change too often to keep it current. To get a current
   recommendation, run `examples/prompts/recommend-model-ensemble-prompt.md`.
+- `USE_CASES.md`, a catalog of what agent-council can be used for, is
+  added, and the README gains a "What makes a good fit" section.
+- Costs are now described as estimates from pi's price table, not what
+  you're billed.
 
 ## 0.1.0 (2026-11-09)
 
