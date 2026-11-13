@@ -21,15 +21,8 @@ cost to fix, and give a high-level strategy for addressing it.
   Do not run anything that deploys, publishes, migrates real data, or calls paid or production services.
 - Follow the Project-Specific Instructions at the end, if any; they override these general rules where they
   conflict.
-- If earlier reports of this kind exist in the output directory, compare with the most recent one and note
-  what has improved or regressed.
 
 ## Output
-
-Write the report to `untracked/` (create it if needed) unless the Project-Specific Instructions name another
-directory. Name it `YYYY-MM-DD-HH-MM-SS-state-of-the-code-base-<agent>.md`, where the timestamp is the current
-UTC time to the second and `<agent>` is your lowercase tool or model family name (e.g. `claude`, `codex`,
-`gemini`, `zai`).
 
 Begin the report with:
 

@@ -18,8 +18,8 @@ several agents run it concurrently against the same coverage data.
 
 This prompt never asks the user anything, so it runs the same interactively or
 headless. Never stop to wait for input: when a precondition fails, stop with an
-error message instead. The invocation may name a different report location
-(e.g. "write the report to `tmp/reports`") or coverage file location.
+error message instead. The invocation may name a different coverage file
+location.
 
 ### Preconditions
 
@@ -55,8 +55,9 @@ Before you begin the analysis:
   importance of uncovered code.
 - Do not run the test suite, and do not modify source files, test files, or
   coverage output. Other agents may be running this analysis concurrently
-  against the same data. This is a read-only analysis; the only file you
-  write is the report.
+  against the same data. This is a read-only analysis: write no
+  files except in a temporary directory of your own outside the
+  project (see Step 4).
 - Before recommending tests for uncovered code, check whether it is
   intentionally excluded or untested: SimpleCov filters and `# :nocov:`
   markers, and any project documentation or code comments explaining why.
@@ -66,7 +67,8 @@ Before you begin the analysis:
 The user must run the full, passing test suite before this analysis. Verify
 what you can, and if any check below fails, stop with an error that names the
 failed check, gives the coverage file's path, size, and modification time (if
-it exists), and tells the user to rerun the full suite. Do not write a report.
+it exists), and tells the user to rerun the full suite. Give only that
+error, not a report.
 
 1. Find the SimpleCov configuration (`.simplecov`, `spec/spec_helper.rb`,
    `test/test_helper.rb`, or wherever the project starts SimpleCov) and the
@@ -242,18 +244,7 @@ Keep this qualitative and evidence-based; cite test files and line numbers.
 
 ## Report
 
-Write your analysis in the project root (or in the directory the invocation
-names) as a Markdown file whose name is:
-- today's date in UTC `%Y-%m-%d-%H-%M` format +
-- '-test-coverage-analysis-' +
-- your name (e.g. 'codex', 'claude', 'gemini') +
-- the `.md` extension.
-
-If a file with that name already exists (another agent finished in the same
-minute), append `-2`, `-3`, and so on before the extension. Never overwrite an
-existing report.
-
-The file should have the following structure:
+The report should have the following structure:
 
 ---
 
@@ -341,6 +332,6 @@ report can be reproduced.
 
 ---
 
-End your final message with the report's path and the one-line verdict, or,
-if you stopped early, with the error. A headless caller can then find the
+End the report by repeating the one-line verdict, or, if you stopped early,
+give only the error. A headless caller can then find the
 outcome without parsing the rest of your output.

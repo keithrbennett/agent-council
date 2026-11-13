@@ -12,6 +12,11 @@
   added, and the README gains a "What makes a good fit" section.
 - Costs are now described as estimates from pi's price table, not what
   you're billed.
+- The state-of-the-codebase and test-coverage-analysis sample prompts
+  no longer tell agents to write their report to a file in the project;
+  like the other samples, they deliver it as the final message, which
+  agent-council saves. The state-of-the-codebase prompt no longer
+  compares with earlier reports.
 
 ## 0.1.0 (2026-11-09)
 
