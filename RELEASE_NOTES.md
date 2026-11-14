@@ -25,6 +25,12 @@
   later.
 - The test-coverage-analysis sample prompt uses only the cov-loupe CLI,
   since agents have no MCP tools.
+- Agents and the consolidator accept an optional `harness` config value,
+  in preparation for harnesses other than pi; `pi`, the default, is the
+  only one so far, and an unknown name is rejected at startup (with
+  `--consolidate`, only the consolidator's, since no analysts run). A config
+  error in an agent's entry now names the agent (e.g. "Agent #2 in
+  ...").
 
 ## 0.1.0 (2026-11-09)
 

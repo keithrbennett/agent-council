@@ -181,6 +181,7 @@ RSpec.describe AgentCouncil do
 
   describe '.run_agent' do
     let(:agent) { { 'provider' => 'p', 'model' => 'm' } }
+    let(:pi_harness) { AgentCouncil::Harnesses::PiHarness }
     let(:run_dir) { Dir.mktmpdir }
     let(:scratch_dirs) { [] }
 
@@ -196,9 +197,31 @@ RSpec.describe AgentCouncil do
       end
     end
 
+    it "runs and reads the output of the agent's own harness, naming it in the filename and front matter" do
+      other = Module.new do
+        const_set(:NAME, 'other')
+        module_function def argv(provider, model, _scratch_dir) = ['sh', '-c', "echo #{provider}-#{model}"]
+        module_function def usage(_stdout) = { 'input' => 1, 'output' => 2 }
+        module_function def error_message(_stdout) = nil
+        module_function def final_response(stdout) = "answer from #{stdout.strip}"
+      end
+      stub_const('AgentCouncil::Harnesses::BY_NAME', { 'pi' => AgentCouncil::Harnesses::PiHarness,
+        'other' => other })
+
+      _label, ok, filename, usage = described_class.run_agent(agent.merge('harness' => 'other'), 'prompt',
+        run_dir, 'prefix', index: 1)
+
+      expect(ok).to be(true), filename
+      expect(filename).to eq('prefix_01_other_p_m.md')
+      expect(usage).to eq({ 'input' => 1, 'output' => 2 })
+      fields, body = described_class.parse_front_matter(File.read(File.join(run_dir, filename)))
+      expect(fields['harness']).to eq('other')
+      expect(body).to eq("answer from p-m\n")
+    end
+
     it 'deletes the scratch dir after a successful run' do
       stub_capture3('', instance_double(Process::Status, success?: true))
-      allow(described_class::HARNESS).to receive_messages(error_message: nil, final_response: 'answer')
+      allow(pi_harness).to receive_messages(error_message: nil, final_response: 'answer')
 
       _label, ok, = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
 
@@ -210,7 +233,7 @@ RSpec.describe AgentCouncil do
     it 'gives the header its HH:MM:SS duration and usage, keeping them out of the front matter' do
       stub_capture3('', instance_double(Process::Status, success?: true))
       usage = { 'input' => 5, 'output' => 6 }
-      allow(described_class::HARNESS).to receive_messages(error_message: nil, final_response: 'answer',
+      allow(pi_harness).to receive_messages(error_message: nil, final_response: 'answer',
         usage: usage)
       header_fields = nil
       header = ->(run_fields) { (header_fields = run_fields) && 'HEADER' }
@@ -227,7 +250,7 @@ RSpec.describe AgentCouncil do
 
     it 'fails rather than replace an existing report' do
       stub_capture3('', instance_double(Process::Status, success?: true))
-      allow(described_class::HARNESS).to receive_messages(error_message: nil, final_response: 'answer')
+      allow(pi_harness).to receive_messages(error_message: nil, final_response: 'answer')
       File.write(File.join(run_dir, 'taken.md'), 'earlier')
 
       _label, ok, detail = described_class.run_agent(agent, 'prompt', run_dir, 'prefix', filename: 'taken.md')
@@ -240,7 +263,7 @@ RSpec.describe AgentCouncil do
     it 'returns the harness usage' do
       stub_capture3('', instance_double(Process::Status, success?: true))
       usage = { 'input' => 5, 'output' => 6, 'cache_read' => 0, 'cache_write' => 0 }
-      allow(described_class::HARNESS).to receive_messages(error_message: nil, final_response: 'answer',
+      allow(pi_harness).to receive_messages(error_message: nil, final_response: 'answer',
         usage: usage)
 
       _label, ok, _filename, returned = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
@@ -251,7 +274,7 @@ RSpec.describe AgentCouncil do
 
     it 'returns the usage of a failed run too' do
       stub_capture3('', instance_double(Process::Status, success?: false, exitstatus: 1))
-      allow(described_class::HARNESS).to receive(:usage).and_return({ 'input' => 5, 'output' => 6 })
+      allow(pi_harness).to receive(:usage).and_return({ 'input' => 5, 'output' => 6 })
 
       _label, ok, _detail, usage = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
 
@@ -272,7 +295,7 @@ RSpec.describe AgentCouncil do
     it 'reads harness output as UTF-8 under a non-UTF-8 locale, without a pool' do
       message = { role: 'assistant', content: [{ type: 'text', text: 'Résumé ✓' }] }
       event = { type: 'message_end', message: message }
-      allow(described_class::HARNESS).to receive(:argv)
+      allow(pi_harness).to receive(:argv)
         .and_return(['sh', '-c', "printf '%s\\n' #{Shellwords.escape(JSON.generate(event))}"])
 
       _label, ok, detail = with_us_ascii_locale do
@@ -286,7 +309,7 @@ RSpec.describe AgentCouncil do
     it 'fails, saving no report, when the final message was cut off' do
       message = { role: 'assistant', content: [{ type: 'text', text: 'cut o' }], stopReason: 'length' }
       event = { type: 'message_end', message: message }
-      allow(described_class::HARNESS).to receive(:argv)
+      allow(pi_harness).to receive(:argv)
         .and_return(['sh', '-c', "printf '%s\\n' #{Shellwords.escape(JSON.generate(event))}"])
 
       _label, ok, detail = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
@@ -306,7 +329,7 @@ RSpec.describe AgentCouncil do
         File.chmod(0o500, locked)
         ['', '', instance_double(Process::Status, success?: true)]
       end
-      allow(described_class::HARNESS).to receive_messages(error_message: nil, final_response: 'answer')
+      allow(pi_harness).to receive_messages(error_message: nil, final_response: 'answer')
 
       _label, ok, detail = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
 
@@ -429,7 +452,7 @@ RSpec.describe AgentCouncil do
       File.write('p_prompt.md', 'hi')
       File.write('config.yml', YAML.dump('agents' => [{ 'provider' => 'p', 'model' => 'm' }]))
       ENV[described_class::ENV_OPTS_VAR] = '--output-dir from-env'
-      allow(described_class).to receive(:abort_unless_harness_installed)
+      allow(described_class).to receive(:abort_unless_harnesses_installed)
       allow(described_class).to receive(:run_agent).and_return(['#1 p / m', true, 'report.md'])
       allow(described_class).to receive(:puts_consolidation_status)
 
@@ -444,7 +467,7 @@ RSpec.describe AgentCouncil do
       File.write('p_prompt.md', 'hi')
       File.write('config.yml', YAML.dump('agents' => [{ 'provider' => 'p', 'model' => 'm' }]))
       ENV[described_class::ENV_OPTS_VAR] = '--output-dir from-env'
-      allow(described_class).to receive(:abort_unless_harness_installed)
+      allow(described_class).to receive(:abort_unless_harnesses_installed)
       allow(described_class).to receive(:run_agent).and_return(['#1 p / m', true, 'report.md'])
       allow(described_class).to receive(:puts_consolidation_status)
 
@@ -517,7 +540,7 @@ RSpec.describe AgentCouncil do
     it 'aborts with a message, not a backtrace, when the run dir cannot be created' do
       File.write('p_prompt.md', 'hi')
       File.write('config.yml', YAML.dump('agents' => [{ 'provider' => 'p', 'model' => 'm' }]))
-      allow(described_class).to receive(:abort_unless_harness_installed)
+      allow(described_class).to receive(:abort_unless_harnesses_installed)
       allow(described_class).to receive(:claim_run_dir).and_raise(Errno::EACCES, 'out')
       expect { described_class.main(['-o', 'out', 'p_prompt.md', 'config.yml']) }
         .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
@@ -562,15 +585,72 @@ RSpec.describe AgentCouncil do
       expect(File).not_to exist('agent-council-reports')
     end
 
-    it 'aborts before creating a run dir when the harness executable is not on PATH' do
+    it 'aborts before creating a run dir when the harness executable is not on PATH, naming it once' do
       File.write('p_prompt.md', 'hi')
-      File.write('config.yml', YAML.dump('agents' => [{ 'provider' => 'p', 'model' => 'm' }]))
+      agents = Array.new(2) { { 'provider' => 'p', 'model' => 'm' } }
+      File.write('config.yml', YAML.dump('agents' => agents))
       Dir.mkdir('empty-bin')
       allow(ENV).to receive(:fetch).and_call_original
       allow(ENV).to receive(:fetch).with('PATH', '').and_return(File.expand_path('empty-bin'))
       expect { described_class.main(['p_prompt.md', 'config.yml']) }
         .to raise_error(SystemExit)
-        .and output(/pi executable not found; is `pi` installed.*\n.*Prerequisites/).to_stderr
+        .and output(a_string_matching(/pi executable not found; is `pi` installed.*\n.*Prerequisites/)
+          .and(satisfy { |err| err.scan('executable not found').size == 1 })).to_stderr
+      expect(File).not_to exist('agent-council-reports')
+    end
+
+    it 'leaves a consolidator: false, which means none, out of the executable check' do
+      agent = { 'provider' => 'p', 'model' => 'm' }
+      File.write('p_prompt.md', 'hi')
+      File.write('config.yml', YAML.dump('agents' => [agent], 'consolidator' => false))
+      allow(described_class).to receive(:abort_unless_harnesses_installed).and_raise(SystemExit)
+      expect { described_class.main(['p_prompt.md', 'config.yml']) }.to raise_error(SystemExit)
+      expect(described_class).to have_received(:abort_unless_harnesses_installed).with([agent])
+    end
+
+    it 'checks the executable of every harness the config uses, naming each missing one' do
+      other = Module.new.tap { |m| m.const_set(:NAME, 'other-harness') }
+      stub_const('AgentCouncil::Harnesses::BY_NAME', { 'pi' => AgentCouncil::Harnesses::PiHarness,
+        'other' => other })
+      File.write('p_prompt.md', 'hi')
+      agent = { 'harness' => 'other', 'provider' => 'p', 'model' => 'm' }
+      consolidator = { 'provider' => 'p', 'model' => 'm' }
+      File.write('config.yml', YAML.dump('agents' => [agent], 'consolidator' => consolidator))
+      Dir.mkdir('empty-bin')
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with('PATH', '').and_return(File.expand_path('empty-bin'))
+      expect { described_class.main(['p_prompt.md', 'config.yml']) }
+        .to raise_error(SystemExit)
+        .and output(/other-harness executable not found.*\npi executable not found/).to_stderr
+    end
+
+    it 'aborts naming the agent whose entry lacks a provider or model' do
+      File.write('p_prompt.md', 'hi')
+      agents = [{ 'provider' => 'p', 'model' => 'm' }, { 'model' => 'm' }]
+      File.write('config.yml', YAML.dump('agents' => agents))
+      expect { described_class.main(['p_prompt.md', 'config.yml']) }
+        .to raise_error(SystemExit)
+        .and output(/Agent #2 in config\.yml needs string 'provider' and 'model' fields/).to_stderr
+      expect(File).not_to exist('agent-council-reports')
+    end
+
+    it 'aborts on an agent with an unknown harness, naming the agent' do
+      File.write('p_prompt.md', 'hi')
+      agent = { 'harness' => 'nope', 'provider' => 'p', 'model' => 'm' }
+      File.write('config.yml', YAML.dump('agents' => [agent]))
+      expect { described_class.main(['p_prompt.md', 'config.yml']) }
+        .to raise_error(SystemExit)
+        .and output(/Agent #1 in config\.yml names an unknown harness, "nope"/).to_stderr
+      expect(File).not_to exist('agent-council-reports')
+    end
+
+    it 'aborts on an unknown harness, listing the known ones' do
+      File.write('p_prompt.md', 'hi')
+      File.write('config.yml', YAML.dump('agents' => [{ 'provider' => 'p', 'model' => 'm' }],
+        'consolidator' => { 'harness' => 'nope', 'provider' => 'p', 'model' => 'm' }))
+      expect { described_class.main(['p_prompt.md', 'config.yml']) }
+        .to raise_error(SystemExit)
+        .and output(/Consolidator in config\.yml names an unknown harness, "nope" \(known: pi[,)]/).to_stderr
       expect(File).not_to exist('agent-council-reports')
     end
   end
@@ -714,6 +794,20 @@ RSpec.describe AgentCouncil do
       expect_abort(/Consolidator in .*config\.yml needs string 'provider' and 'model' fields/)
     end
 
+    it 'aborts when the consolidator names an unknown harness' do
+      write_run(config: { 'consolidator' => { 'harness' => 'nope', 'provider' => 'c', 'model' => 'm' } })
+      expect_abort(/Consolidator in .*config\.yml names an unknown harness, "nope"/)
+    end
+
+    it "checks only the consolidator's harness executable, since no analysts run" do
+      write_run(config: consolidator_config.merge('agents' => [{ 'harness' => 'nope', 'provider' => 'p',
+        'model' => 'm' }]))
+      allow(described_class).to receive(:abort_unless_harnesses_installed).and_raise(SystemExit)
+      expect { described_class.main(['--consolidate', run_dir]) }.to raise_error(SystemExit)
+      expect(described_class).to have_received(:abort_unless_harnesses_installed)
+        .with([consolidator_config['consolidator']])
+    end
+
     it 'aborts when the harness executable is not on PATH' do
       write_run
       Dir.mkdir('empty-bin')
@@ -834,18 +928,20 @@ RSpec.describe AgentCouncil do
   end
 
   describe '.report_filename' do
+    let(:zai) { { 'provider' => 'zai', 'model' => 'glm-5.3' } }
+
     it 'carries the full timestamp and query slug, then harness/provider/model' do
-      expect(described_class.report_filename('2026-09-03-19-23-57_code-base-state', 'opencode-go',
-        'kimi-k2.6'))
+      expect(described_class.report_filename('2026-09-03-19-23-57_code-base-state',
+        { 'provider' => 'opencode-go', 'model' => 'kimi-k2.6' }))
         .to eq('2026-09-03-19-23-57_code-base-state_pi_opencode-go_kimi-k2.6.md')
-      expect(described_class.report_filename('2026-09-03-19-23-57_prompt', 'zai', 'glm-5.3'))
+      expect(described_class.report_filename('2026-09-03-19-23-57_prompt', zai))
         .to eq('2026-09-03-19-23-57_prompt_pi_zai_glm-5.3.md')
     end
 
     it 'inserts a zero-padded agent index before the harness, disambiguating repeated provider/model pairs' do
-      expect(described_class.report_filename('2026-09-03-19-23-57_prompt', 'zai', 'glm-5.3', index: 1))
+      expect(described_class.report_filename('2026-09-03-19-23-57_prompt', zai, index: 1))
         .to eq('2026-09-03-19-23-57_prompt_01_pi_zai_glm-5.3.md')
-      expect(described_class.report_filename('2026-09-03-19-23-57_prompt', 'zai', 'glm-5.3', index: 2))
+      expect(described_class.report_filename('2026-09-03-19-23-57_prompt', zai, index: 2))
         .to eq('2026-09-03-19-23-57_prompt_02_pi_zai_glm-5.3.md')
     end
   end
@@ -1084,6 +1180,11 @@ RSpec.describe AgentCouncil do
         'ok' => true, 'report' => 'reviews/a.md', 'duration_seconds' => 61.3, 'usage' => { 'input' => 1 })
     end
 
+    it "records the entry's own harness" do
+      entry = described_class.run_entry(agent.merge('harness' => 'other'), true, 'a.md', 1, nil)
+      expect(entry['harness']).to eq('other')
+    end
+
     it "adds the meta file to a split consolidation's entry, and only then" do
       split = described_class.run_entry(agent, true, 'f.md', 1, nil, meta_report: 'm.md')
       expect(split).to include('report' => 'f.md', 'meta_report' => 'm.md')
@@ -1203,13 +1304,19 @@ RSpec.describe AgentCouncil do
 
   describe '.consolidated_filename' do
     it 'is distinct from agent report filenames and self-identifying' do
-      name = described_class.consolidated_filename('2026-09-03-19-23-57_review', 'zai', 'glm-5.3')
+      name = described_class.consolidated_filename('2026-09-03-19-23-57_review',
+        { 'provider' => 'zai', 'model' => 'glm-5.3' })
       expect(name).to eq('2026-09-03-19-23-57_review_consolidated_pi_zai_glm-5.3.md')
+      other = described_class.consolidated_filename('p', { 'harness' => 'other', 'provider' => 'zai',
+        'model' => 'glm-5.3' }, 'meta')
+      expect(other).to eq('p_consolidated_other_zai_glm-5.3_meta.md')
       # distinct from analyst filenames; the "_consolidated" infix marks its role
     end
   end
 
   describe '.byline_table' do
+    let(:gpt) { { 'provider' => 'openai', 'model' => 'gpt-x' } }
+
     it 'lists the main front matter fields, leaving sources to sources_table' do
       meta = {
         'role'      => 'consolidator',
@@ -1217,7 +1324,7 @@ RSpec.describe AgentCouncil do
         'timestamp' => '2026-09-03T19:23:57',
         'sources'   => ['openai / gpt-x', 'zai / glm-5.3'],
       }
-      expect(described_class.byline_table(meta, 'zai', 'glm-5.3')).to eq(
+      expect(described_class.byline_table(meta, { 'provider' => 'zai', 'model' => 'glm-5.3' })).to eq(
         "| Field     | Value |\n" \
         "| :-------- | :---------------------------- |\n" \
         "| role | consolidator |\n" \
@@ -1232,20 +1339,25 @@ RSpec.describe AgentCouncil do
     it 'adds duration and usage rows' do
       meta = { 'role' => 'consolidator', 'duration' => '00:02:10',
         'usage' => { 'input' => 10, 'output' => 5 } }
-      table = described_class.byline_table(meta, 'openai', 'gpt-x')
+      table = described_class.byline_table(meta, gpt)
       expect(table).to include('| duration | 00:02:10 |', '| usage | 10 in / 5 out |')
+    end
+
+    it "names the entry's harness" do
+      table = described_class.byline_table({ 'role' => 'analyst' }, gpt.merge('harness' => 'other'))
+      expect(table).to include('| harness | other |')
     end
 
     it 'adds an agent row when an agent_index is present' do
       meta = { 'role' => 'analyst', 'query' => 'review', 'timestamp' => '2026-09-03T19:23:57',
         'agent_index' => 2 }
-      table = described_class.byline_table(meta, 'openai', 'gpt-x')
+      table = described_class.byline_table(meta, gpt)
       expect(table).to include('| agent | #2 |')
     end
 
     it 'omits the agent row when there is no agent_index (consolidator)' do
       meta = { 'role' => 'consolidator', 'query' => 'review', 'timestamp' => '2026-09-03T19:23:57' }
-      table = described_class.byline_table(meta, 'openai', 'gpt-x')
+      table = described_class.byline_table(meta, gpt)
       expect(table).not_to include('| agent |')
     end
   end
@@ -1459,8 +1571,18 @@ RSpec.describe AgentCouncil do
     end
 
     def split(dir, head: self.head, info: [])
-      described_class.split_consolidated_report(dir, meta_name, 'p', 'zai', 'glm', head, ['#1 pi / a / b'],
-        info)
+      consolidator = { 'provider' => 'zai', 'model' => 'glm' }
+      labels = ['#1 pi / a / b']
+      described_class.split_consolidated_report(dir, meta_name, 'p', consolidator, head, labels, info)
+    end
+
+    it "raises the error itself, not one from its fallback, when the entry can't name a file" do
+      naming_error = Class.new(StandardError)
+      allow(described_class).to receive(:consolidated_filename).and_raise(naming_error)
+      Dir.mktmpdir do |dir|
+        expect { described_class.split_consolidated_report(dir, 'x.md', 'p', {}, nil, []) }
+          .to raise_error(naming_error)
+      end
     end
 
     it 'writes the findings file and rewrites the report in place as the meta file' do
@@ -1662,6 +1784,29 @@ RSpec.describe AgentCouncil do
     end
   end
 
+  describe '.agent_descriptor' do
+    it "names the entry's harness, provider, and model" do
+      expect(described_class.agent_descriptor({ 'provider' => 'p', 'model' => 'm' })).to eq('pi / p / m')
+      expect(described_class.agent_descriptor({ 'harness' => 'other', 'provider' => 'p', 'model' => 'm' }))
+        .to eq('other / p / m')
+    end
+  end
+
+  describe '.entry_error' do
+    it 'accepts an entry with a provider and model, and a known harness or none' do
+      expect(described_class.entry_error({ 'provider' => 'p', 'model' => 'm' })).to be_nil
+      expect(described_class.entry_error({ 'harness' => 'pi', 'provider' => 'p', 'model' => 'm' })).to be_nil
+    end
+
+    it 'rejects an entry without a string provider and model, or with an unknown harness' do
+      needs = "needs string 'provider' and 'model'"
+      expect(described_class.entry_error({ 'provider' => 'p' })).to include(needs)
+      expect(described_class.entry_error(nil)).to include(needs)
+      expect(described_class.entry_error({ 'harness' => false, 'provider' => 'p', 'model' => 'm' }))
+        .to include('unknown harness, false')
+    end
+  end
+
   describe '.missing_agents' do
     it 'lists configured agents without a report, labeled as reports are' do
       zai = { 'provider' => 'zai', 'model' => 'glm-5.3' }
@@ -1679,6 +1824,11 @@ RSpec.describe AgentCouncil do
 
     it 'is empty when the config copy lists no agents' do
       expect(described_class.missing_agents({}, [])).to eq([])
+    end
+
+    it 'lists an agent whose harness is unknown, since labeling it needs no harness' do
+      config = { 'agents' => [{ 'harness' => 'nope', 'provider' => 'zai', 'model' => 'glm-5.3' }] }
+      expect(described_class.missing_agents(config, []).map(&:first)).to eq(['#1 zai / glm-5.3'])
     end
   end
 end

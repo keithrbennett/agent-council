@@ -1,16 +1,15 @@
 # frozen_string_literal: true
 
 # AgentCouncil::Harnesses::PiHarness — all knowledge specific to the pi
-# coding-agent harness: how to invoke the pi CLI for one model run, the
-# tool allowlist, and read-only scaffolding delivered with it, and how to
-# read pi's JSONL event stream afterward.
+# coding-agent harness: how to invoke the pi CLI for one model run, with
+# its tool allowlist and the shared read-only scaffolding, and how to read
+# pi's JSONL event stream afterward.
 #
-# AgentCouncil is harness-agnostic and refers to this module only via
-# AgentCouncil::HARNESS. A second harness (claude, codex, ...) would be
-# another module under AgentCouncil::Harnesses shaped like this one —
-# this is deliberately a plain namespace, not an adapter framework.
+# AgentCouncil is harness-agnostic and finds this module through
+# AgentCouncil::Harnesses (lib/agent_council/harnesses.rb), by its NAME.
 
 require 'json'
+require_relative 'scaffold'
 
 module AgentCouncil
   module Harnesses
@@ -36,40 +35,8 @@ module AgentCouncil
           '--tools', TOOLS,
           '--provider', provider,
           '--model', model,
-          '--append-system-prompt', scaffold_text(scratch_dir)
+          '--append-system-prompt', Harnesses.scaffold_text(scratch_dir)
         ]
-      end
-
-      # Scaffolding appended to pi's system prompt. Identical for every agent
-      # except the scratch dir path.
-      module_function def scaffold_text(scratch_dir)
-        <<~TEXT
-          You are one of the independent agents agent-council runs on this
-          repository. This is a strictly read-only analysis task.
-
-          Rules:
-          - Do not modify, create, rename, or delete any project source or
-            configuration file. Do not change git state, install or remove
-            software, modify user or system configuration, or start persistent
-            services.
-          - Do not run test suites, builds, coverage tools, application servers,
-            or database tasks unless the user's prompt explicitly permits it:
-            other agents may be running concurrently and such commands can collide
-            through shared state (databases, ports, Docker, fixed temp paths).
-            Where the prompt permits them, direct their temporary output to the
-            scratch directory below, and still skip any that need shared
-            services (databases, servers, fixed ports, Docker). Otherwise, if
-            running such a command would materially improve your analysis,
-            describe what you would run and why instead of running it.
-          - You may run clearly read-only commands: reading, searching, and
-            listing files; inspecting git history and status; inspecting
-            dependency and configuration information.
-          - If you need scratch space for temporary artifacts, use this
-            disposable directory that is unique to your run: #{scratch_dir}
-          - Deliver your complete analysis as your final message text. Do not
-            write the report to a file; the orchestrator captures your final
-            message directly.
-        TEXT
       end
 
       # --- event stream reading ---

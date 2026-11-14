@@ -264,8 +264,9 @@ Edit the config to choose the ensemble. The config is the optional second
 argument; if omitted, `./agent-council.yml` in the current directory is used
 (parent directories are not searched), else `~/.agent-council.yml` in your
 home directory. It is an error if neither exists. Each entry becomes one
-pi run with that `--provider` and `--model` (see
-[How it works](#how-it-works-and-what-pi-is-told) for the full command), so no Ruby changes
+run of its harness (`pi` by default; see below) with that
+provider and model (see
+[How it works](#how-it-works-and-what-pi-is-told) for pi's full command), so no Ruby changes
 are needed to add, remove, or swap models. A small config (replace the
 providers and models with ones you have credentials for):
 
@@ -287,7 +288,10 @@ consolidating a single report adds cost without adding anything.
 The config must be a YAML mapping with a non-empty `agents` list. Each
 agent, and the consolidator, needs string `provider` and `model` values
 (quote any value YAML would read as something else, such as a number,
-a date, or `yes`); other keys are ignored.
+a date, or `yes`). An optional `harness` value names the harness it runs
+under; `pi`, the default, is currently the only one, and an unknown
+name is rejected at startup (with `--consolidate`, only the
+consolidator's, since no analysts run). Other keys are ignored.
 
 More samples are in [`examples/configs/`](examples/configs/), which is
 included in the installed gem. For scripts and agents,
@@ -318,8 +322,8 @@ cd /path/to/the/repo/you/want/analyzed
 agent-council /path/to/prompt.md
 ```
 
-There is no option to choose the directory analyzed: Pi analyzes its **own
-working directory**, which is the directory you run `agent-council` from. Run it from
+There is no option to choose the directory analyzed: each agent analyzes its
+**own working directory**, which is the directory you run `agent-council` from. Run it from
 the project you want analyzed; the prompt file can live anywhere, as can a
 config given as an argument.
 Reports land in `./agent-council-reports` under that working directory,
@@ -619,8 +623,10 @@ agent-council-reports/
   tree (a consolidated report has `consolidated` in place of
   `<agent-number>`, and, if the report was split, ends in `_findings` or `_meta` before `.md`); `<hh-mm-ss>` includes the run dir's suffix, if any,
   and `<provider>` and `<model>` are sanitized like the query slug below,
-  but keep their case. `<harness>` is currently always `pi`, the only
-  harness agent-council supports so far.
+  but keep their case. `<harness>` is the agent's (or consolidator's)
+  `harness` config value (see
+  [Discovering and configuring models](#discovering-and-configuring-models)),
+  currently always `pi`, the only harness agent-council supports so far.
   `<agent-number>` is the agent's 1-based position in the config's
   `agents` list (`01`, `02`, ...), so every report has a unique name even
   if the same provider/model is configured more than once. The query slug
@@ -700,8 +706,9 @@ agent-council-reports/
   header written to it, the report is left unsplit, under the unsuffixed
   name, and a warning says why.
 - The copied prompt, config, and report-format addendum keep an analyst
-  run's inputs recoverable after the fact. The pi and agent-council
-  versions, the scaffolding text appended to pi's system prompt, and the
+  run's inputs recoverable after the fact. The harness and
+  agent-council versions, the scaffolding text appended to the harness's
+  system prompt, and the
   consolidation template are not recorded.
 - The prompt and config copies keep their own file names (e.g.
   `single.yml`), so the prompt, the config, and `analyst_format.md` must
@@ -787,7 +794,7 @@ which default was picked up.
   `examples/prompts/review-latest-commit-prompt.md` does for tests and
   linters); where such a command isn't permitted but would help, the
   agent describes what it would run instead. The full text is
-  `scaffold_text` in `lib/agent_council/harnesses/pi_harness.rb`;
+  `scaffold_text` in `lib/agent_council/harnesses/scaffold.rb`;
   [`DESIGN.md`](DESIGN.md) §10 explains the rules.
 - Each agent gets its own disposable temp directory (exposed via `TMPDIR`
   and named in the scaffolding), deleted after the run. After Ctrl-C, a

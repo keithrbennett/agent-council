@@ -47,24 +47,20 @@ RSpec.describe AgentCouncil::Harnesses::PiHarness do
     it 'disables MCP, so no MCP servers start' do
       expect(argv).to include('--no-mcp')
     end
-  end
 
-  describe '.scaffold_text' do
-    subject(:scaffold) { described_class.scaffold_text('/tmp/scratch-xyz') }
-
-    it 'names the unique scratch dir' do
-      expect(scaffold).to include('/tmp/scratch-xyz')
+    # In a separate process, so nothing else of agent-council is loaded.
+    it 'works with only its own file required' do
+      lib = File.expand_path('../../lib', __dir__)
+      script = "require 'agent_council/harnesses/pi_harness'; " \
+               "print AgentCouncil::Harnesses::PiHarness.argv('p', 'm', '/x').last"
+      out, err, status = Open3.capture3(RbConfig.ruby, '-I', lib, '-e', script)
+      expect(status).to be_success, err
+      expect(out).to eq(AgentCouncil::Harnesses.scaffold_text('/x'))
     end
 
-    # Safety-critical invariants; deliberate rewording should update these.
-    it 'states the read-only rules' do
-      expect(scaffold).to match(/do not modify/i)
-      expect(scaffold).to match(/test suites/i) # no stateful commands...
-      expect(scaffold).to match(/unless the user's prompt explicitly permits/i) # ...unless the prompt allows
-    end
-
-    it 'requires the analysis as the final message, not a file' do
-      expect(scaffold).to match(/final message/i)
+    it 'appends the shared scaffolding to the system prompt' do
+      expect(argv[argv.index('--append-system-prompt') + 1])
+        .to eq(AgentCouncil::Harnesses.scaffold_text('/tmp/scratch-xyz'))
     end
   end
 

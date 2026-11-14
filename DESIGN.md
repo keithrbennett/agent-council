@@ -61,9 +61,9 @@ For example:
 
 ## 4. Architecture
 
-Pi is the only harness.
+Pi is the only harness so far, but the orchestration is harness-agnostic: it looks up each agent's harness module by its config entry's `harness` key (§5) in `AgentCouncil::Harnesses::BY_NAME` (`lib/agent_council/harnesses.rb`), so a second harness is another such module, added there (§18). Config entries, reports, and `run.json` entries that give no harness are pi's. Each module is a plain namespace with the same functions (`NAME`, `argv`, `usage`, `error_message`, `final_response`, `assistant_messages`); `NAME` is both the config value and the executable that `argv` runs, which the startup check looks for on `PATH`. The scaffolding text (§10) is shared.
 
-The Ruby program owns orchestration and invokes Pi once per configured provider/model combination.
+The Ruby program owns orchestration and invokes the harness once per configured agent.
 
 ```text
 Ruby CLI
@@ -101,6 +101,8 @@ consolidator:              # optional; synthesizes the agents' reports (§12)
   model: MODEL_ID_HERE
 ```
 
+Any entry may also give a `harness`; `pi`, the default, is the only one so far (§18), and an unknown one is rejected at startup (with `--consolidate`, only the consolidator's, since no analysts run).
+
 Exact provider and model identifiers must be verified against the installed Pi version.
 
 They belong in configuration because available models and names change frequently.
@@ -134,12 +136,12 @@ config copies, found through its reports' front matter (§12).
 
 ## 7. Parallel Execution
 
-Agents run concurrently, one Ruby thread per agent, each driving one pi process.
+Agents run concurrently, one Ruby thread per agent, each driving one harness process.
 
 `AgentCouncil::WorkerPool` (`lib/agent_council/worker_pool.rb`) also handles signals, keeping the main thread free to take them. The README's [Stopping a run](README.md#stopping-a-run) section describes what Ctrl-C and the other signals do; the reasons behind that behavior are:
 
 - **Each agent leads its own process group**, so the terminal's signals reach only agent-council, which then stops the agents itself, in an orderly way, and Ctrl-Z suspends agent-council without suspending the agents under it.
-- **Agents get SIGTERM and a shared grace period before being killed**, so pi can stop the commands it started; a second signal skips the wait for a user who doesn't want to.
+- **Agents get SIGTERM and a shared grace period before being killed**, so the harness can stop the commands it started (pi does); a second signal skips the wait for a user who doesn't want to.
 - **agent-council then dies by the signal** rather than exiting normally, so a shell (e.g. one running it in a loop) sees it was killed and stops too. SIGQUIT exits 131 instead, since a core dump is no use here.
 - **Extra SIGHUPs are ignored**, since a closing terminal can send them in pairs, and **signals agent-council was started ignoring stay ignored**, so `nohup` works.
 - **SIGQUIT isn't trapped under JRuby**, where the JVM reserves it for thread dumps.
@@ -163,7 +165,7 @@ Execution metadata stays outside the substantive prompt: the per-agent scratch p
 
 ## 9. Prompt Delivery
 
-The prompt is piped to pi on stdin, never interpolated into a command line, so it may be large and contain:
+The prompt is piped to the harness on stdin, never interpolated into a command line, so it may be large and contain:
 
 - Markdown;
 - source code;
@@ -172,7 +174,7 @@ The prompt is piped to pi on stdin, never interpolated into a command line, so i
 - Unicode;
 - long analytical instructions.
 
-pi is started with an argv array, not through a shell.
+The harness is started with an argv array, not through a shell.
 
 ---
 
@@ -180,7 +182,7 @@ pi is started with an argv array, not through a shell.
 
 Agents are analyzers, not modifiers.
 
-The scaffolding appended to pi's system prompt (`PiHarness.scaffold_text` in `lib/agent_council/harnesses/pi_harness.rb`) states the rules agents get, and the README's [How it works](README.md#how-it-works-and-what-pi-is-told) section summarizes them. They are instructions, not enforced restrictions: the `--tools` allowlist, which activates only the tools it lists, and `--no-mcp` (§11) are the only enforced restrictions, and `bash` remains a full shell running as the user (see the README's [Safety and privacy](README.md#safety-and-privacy)). A shell is kept because investigation (`git log`, dependency inspection, running a documented command) is much of what makes an analysis useful.
+The scaffolding appended to each agent's system prompt (`Harnesses.scaffold_text` in `lib/agent_council/harnesses/scaffold.rb`, shared by every harness) states the rules agents get, and the README's [How it works](README.md#how-it-works-and-what-pi-is-told) section summarizes them. They are instructions, not enforced restrictions: under pi, the `--tools` allowlist, which activates only the tools it lists, and `--no-mcp` (§11) are the only enforced restrictions, and `bash` remains a full shell running as the user (see the README's [Safety and privacy](README.md#safety-and-privacy)). A shell is kept because investigation (`git log`, dependency inspection, running a documented command) is much of what makes an analysis useful.
 
 The rules follow from agents running concurrently in the user's own working tree:
 
@@ -220,19 +222,20 @@ There is no configurable controlled-comparison mode.
 
 The models don't write their own report files.
 
-Pi returns the final response to the Ruby process, which writes that text (minus any leading top-level heading), under front matter and a metadata table, to a deterministic, self-describing filename (see below).
+The harness returns the final response to the Ruby process, which writes that text (minus any leading top-level heading), under front matter and a metadata table, to a deterministic, self-describing filename (see below).
 
 Each run gets its own directory, a day bucket, and an `hh-mm-ss` time, created atomically with a `-2`, `-3`, ... suffix if that name is already taken, and printed when the run starts, so an in-progress or interrupted run is easy to find. [The README's "What you get" section](README.md#what-you-get) specifies the layout, filenames, query slug, and front matter; the decisions behind them are:
 
-- **Inputs are copied into the run dir** (the prompt, config, and `analyst_format.md`, each under its own file name), so an analyst run's inputs are recoverable later. The orchestrator is versioned in git and deliberately not copied; the pi and agent-council versions, the scaffolding text, and the consolidation template are not recorded.
+- **Inputs are copied into the run dir** (the prompt, config, and `analyst_format.md`, each under its own file name), so an analyst run's inputs are recoverable later. The orchestrator is versioned in git and deliberately not copied; the harness and agent-council versions, the scaffolding text, and the consolidation template are not recorded.
 - **Only analysts' reports go in `reviews/`.** The consolidator's reports (normally a findings and a meta file) and the input copies sit at the run dir root.
 - **Filenames are self-describing.** They carry the full timestamp, query slug, agent index (`consolidated` for the consolidator), harness, provider, and model, so a report still says what it is when copied out of the tree. The agent index keeps names unique when a provider/model is configured more than once (e.g. to get several independent analyses from one model) and sits before the harness, so filenames sort in agent order once there is more than one harness. Provider and model are sanitized like the slug but keep their case.
 - **Metadata is YAML front matter written by the orchestrator**, never by the model: it gives tools structured provenance, stays readable in the terminal, and is how reports are identified, so nothing parses filenames (a consolidation's findings file, meant to be pasted elsewhere, has identifying lines in place of front matter instead). Timestamps are unquoted ISO 8601, so they parse directly as `Time` objects. Beyond the `provider` and `model` every report needs to be recognized, `--consolidate` needs the analysts' `prompt_file`, `config_file`, `run_stamp`, and `query`, and their `agent_index` to tell which configured agents have no report.
 - **Measurements go in `run.json`, not front matter.** Front matter identifies a document; a run's duration and token usage are data about the run, wanted for analysis across many runs, and most tools can't read front matter without tripping over the Markdown after it. So they go in one JSON file per run dir, readable by any language's standard library or `jq`; the byline table still shows a report's own duration and usage to its readers.
 
 The optional consolidator (a top-level `consolidator:` provider and model
-in the config, §5) runs after all agents finish, as one more pi run with
-the same tools and scaffolding. Its prompt is
+in the config, §5) runs after all agents finish, as one more run, under its
+own entry's harness, with the tools and scaffolding an analyst gets under
+that harness. Its prompt is
 `lib/agent_council/templates/consolidate_prompt.md` followed by the
 original prompt, every analyst report labeled with its source, and the
 agents without a report with their failure reasons (with `--consolidate`,
@@ -253,10 +256,9 @@ agent-council reads pi's JSONL event stream (`--mode json`) rather than scraping
 Parsing extracts only that; there is no generic Pi protocol library.
 
 The parser and the pi CLI invocation for runs live in `AgentCouncil::Harnesses::PiHarness`
-(`lib/agent_council/harnesses/pi_harness.rb`), the single home of harness-
-specific behavior for runs (the separate `pi-models` helper also talks to
-pi); `exe/agent-council` stays harness-agnostic so a second
-harness can be added as another such module under `AgentCouncil::Harnesses`.
+(`lib/agent_council/harnesses/pi_harness.rb`), the single home of pi-specific
+behavior for runs (the separate `pi-models` helper also talks to pi); see §4
+for how the orchestration finds it.
 
 ---
 
@@ -283,7 +285,7 @@ no run management is implemented.
 
 ## 15. Basic Failure Handling
 
-Failure handling is simple. If a Pi invocation fails, agent-council:
+Failure handling is simple. If a harness invocation fails, agent-council:
 
 - prints a useful error;
 - writes no report for it;
@@ -319,7 +321,9 @@ lib/
     platform.rb          # windows? and the native-Windows abort (WSL is required)
     pi_models.rb         # backs exe/pi-models
     worker_pool.rb       # worker threads, agent processes, and Ctrl-C handling
+    harnesses.rb         # harnesses by name (AgentCouncil::Harnesses)
     harnesses/
+      scaffold.rb        # the read-only scaffolding every harness appends
       pi_harness.rb      # pi-specific behavior (AgentCouncil::Harnesses::PiHarness)
     templates/           # runtime data files (resolved via __dir__, shipped in the gem)
       consolidate_prompt.md  # instructions template for the consolidator
@@ -368,9 +372,9 @@ agent-council is at an early stage (0.x), so it does only what its core job need
 
 ### Planned: Claude Code harness
 
-The first harness after Pi is Claude Code (the `claude` CLI), selected per agent so that one config can mix harnesses and the same model can be compared under each. Nothing here is built yet; when it is, this section's content moves into the sections above (§4, §5, §11, §13).
+The first harness after Pi is Claude Code (the `claude` CLI), selected per agent so that one config can mix harnesses and the same model can be compared under each. Selecting a harness per agent is built (§4, §5). The Claude Code harness itself is not built yet, and every entry still needs a `provider`. Once the harness is built, this section's content moves into the sections above (§4, §11, §13).
 
-**Configuration.** Each agent and the consolidator get an optional `harness:` key, `pi` by default, so existing configs are unchanged. An unknown name aborts at startup with the known names. For `claude`, `provider` may be omitted and is recorded as `anthropic`:
+**Configuration.** `claude` becomes a value of the `harness` key (§5), added to `Harnesses::BY_NAME` as `ClaudeCodeHarness`. For it, `provider` may be omitted and is recorded as `anthropic`, so a config can then read:
 
 ```yaml
 agents:
@@ -383,7 +387,7 @@ consolidator:
   model: claude-sonnet-5-5
 ```
 
-**Selection.** The single `HARNESS` constant becomes a name-to-module map (`'pi' => PiHarness, 'claude' => ClaudeCodeHarness`), and each agent's module is looked up from its config entry and used wherever `HARNESS` is today: invocation and parsing, filenames, front matter, `run.json`, the consolidator header, and the startup executable check (once per harness in use). Agent labels gain the harness, since labels key the consolidator's lookup of runs and the same provider/model under two harnesses would otherwise collide. Reports with no `harness` in their front matter are pi's, as now. The modules stay plain namespaces with the same functions (§13); the scaffolding text is harness-neutral and is shared rather than copied.
+**Labels.** The short labels (`#1 provider / model`) don't show the harness. They appear in progress lines, result tables, the consolidation prompt, and a consolidated report's `### Sources` table and `sources` front matter. The startup agent list and the findings file's legend (`#1 pi / provider / model`) do show it. Short labels don't need the harness to stay unique. The only ones used as lookup keys are the analysts', which match reports to their `run.json` entries and to the configured agents, and each carries its agent number. Whether short labels should show the harness, once a run can mix harnesses, is decided with this harness.
 
 **Invocation.** One `claude` process per agent, the prompt on stdin, started from an argv array (§9):
 
