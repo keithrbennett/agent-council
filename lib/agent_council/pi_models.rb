@@ -38,7 +38,7 @@ module AgentCouncil
     RPC_REQUEST_ID = 'list-models'
 
     module_function def fetch_models
-      Open3.popen3('pi', '--mode', 'rpc', '--no-session') do |stdin, stdout, stderr, wait_thr|
+      Open3.popen3('pi', '--mode', 'rpc', '--no-session', '--no-mcp') do |stdin, stdout, stderr, wait_thr|
         # pi's output is UTF-8, whatever the locale.
         [stdout, stderr].each { |io| io.set_encoding(Encoding::UTF_8) }
         # Drain stderr concurrently so a chatty pi can't block on a full pipe,

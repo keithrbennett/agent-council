@@ -43,6 +43,10 @@ RSpec.describe AgentCouncil::Harnesses::PiHarness do
       tools = argv[argv.index('--tools') + 1].split(',')
       expect(tools).to contain_exactly('read', 'grep', 'find', 'ls', 'bash')
     end
+
+    it 'disables MCP, so no MCP servers start' do
+      expect(argv).to include('--no-mcp')
+    end
   end
 
   describe '.scaffold_text' do

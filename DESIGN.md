@@ -180,7 +180,7 @@ pi is started with an argv array, not through a shell.
 
 Agents are analyzers, not modifiers.
 
-The scaffolding appended to pi's system prompt (`PiHarness.scaffold_text` in `lib/agent_council/harnesses/pi_harness.rb`) states the rules agents get, and the README's [How it works](README.md#how-it-works-and-what-pi-is-told) section summarizes them. They are instructions, not enforced restrictions: the `--tools` allowlist, which activates only the tools it lists, is the only enforcement, and `bash` remains a full shell running as the user (see the README's [Safety and privacy](README.md#safety-and-privacy)). A shell is kept because investigation (`git log`, dependency inspection, running a documented command) is much of what makes an analysis useful.
+The scaffolding appended to pi's system prompt (`PiHarness.scaffold_text` in `lib/agent_council/harnesses/pi_harness.rb`) states the rules agents get, and the README's [How it works](README.md#how-it-works-and-what-pi-is-told) section summarizes them. They are instructions, not enforced restrictions: the `--tools` allowlist, which activates only the tools it lists, and `--no-mcp` (§11) are the only enforced restrictions, and `bash` remains a full shell running as the user (see the README's [Safety and privacy](README.md#safety-and-privacy)). A shell is kept because investigation (`git log`, dependency inspection, running a documented command) is much of what makes an analysis useful.
 
 The rules follow from agents running concurrently in the user's own working tree:
 
@@ -208,6 +208,7 @@ Therefore Pi behaves as it normally would when analyzing a repository, except th
 
 - each model run is independent;
 - no conversation/session state leaks between runs (`--no-session`);
+- pi's built-in MCP support is off (`--no-mcp`), so configured MCP servers don't start, which keeps any from doing something merely by starting, and agents have no MCP tools; an extension providing its own MCP support isn't affected, and extensions load as usual;
 - the tool list is restricted and the scaffolding appended to the system prompt (§10);
 - the report-format addendum is appended to each analyst's prompt.
 
@@ -403,7 +404,7 @@ The flags were checked with Claude Code 2.1.325 and pi 1.5.2:
 - `--permission-mode default` makes the outcome the same for every user; without it the user's own `defaultMode` (e.g. `auto`, or `plan`, which would run nothing) applies.
 - `--strict-mcp-config` with no `--mcp-config` loads no MCP servers: `init` reports `mcp_servers: []` even for a user with servers configured.
 
-**No MCP, in either harness.** Agents get no MCP servers, so the harnesses offer the same tools, and no agent can reach a server that writes (posting to chat, commenting on an issue), which a council would do once per agent. Pi already can't call MCP tools under agent-council's `--tools` allowlist (pi 1.5.2 still offers them only through its `codemode` tool, which the allowlist omits), but it still starts the user's servers; it will be passed `--no-mcp` too, which in a test kept a project's server from starting, so no harness starts them. The README's Safety and privacy section changes with it. There is no setting to turn MCP on. If one is wanted later, it goes in the config, not on the command line, and names the servers to allow rather than switching all of them on, since enabling means per-harness work: pi's allowlist would have to name the MCP tools, and Claude Code would need them in `--allowedTools`.
+**No MCP, in either harness.** Agents get no MCP servers, so the harnesses offer the same tools, and no agent can reach a server that writes (posting to chat, commenting on an issue), which a council would do once per agent. Pi is passed `--no-mcp` (§11), which turns off its built-in MCP support (an extension providing its own is unaffected) and in a test kept a project's server from starting; before that, its `--tools` allowlist already kept agents from calling MCP tools, but pi still started the user's servers. There is no setting to turn MCP on. If one is wanted later, it goes in the config, not on the command line, and names the servers to allow rather than switching all of them on, since enabling means per-harness work: pi's allowlist would have to name the MCP tools, and Claude Code would need them in `--allowedTools`.
 
 **Context.** Claude Code behaves as in an interactive session started in the analyzed repository, as Pi does (§11): it loads `CLAUDE.md` (and whatever it imports, such as `@AGENTS.md`), user and project settings, hooks, and plugins. `--bare` is not used: it skips `CLAUDE.md` and permits only API-key authentication. The README's Safety section will say that the user's hooks and plugins run for every Claude Code agent.
 

@@ -32,6 +32,7 @@ module AgentCouncil
           '-p',               # non-interactive: process prompt and exit
           '--mode', 'json',   # JSONL event stream on stdout
           '--no-session',     # ephemeral: no session state between runs
+          '--no-mcp',         # built-in MCP off: configured servers don't start
           '--tools', TOOLS,
           '--provider', provider,
           '--model', model,

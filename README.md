@@ -199,7 +199,8 @@ consolidator, see
   tool itself; CI tests 3.3, 3.4, 4.0, JRuby 10.0 and the latest
   JRuby)
 - The [`pi` CLI](https://github.com/earendil-works/pi) installed
-  (`pi --version`; tested with pi 1.3.0 and 1.4.0)
+  (`pi --version`): 1.0.4 or later, for `--no-mcp`; tested with pi
+  1.3.0, 1.4.0, and 1.5.2
 - Credentials for at least one provider (several give more diverse
   viewpoints), configured through pi itself (see
   [pi's documentation][pi-docs])
@@ -764,15 +765,18 @@ which default was picked up.
   consolidator gets its own prompt; see
   [Discovering and configuring models](#discovering-and-configuring-models).)
 - Each agent runs as
-  `pi -p --mode json --no-session --tools read,grep,find,ls,bash
+  `pi -p --mode json --no-session --no-mcp --tools read,grep,find,ls,bash
    --provider P --model M --append-system-prompt <scaffolding>`.
 - `--no-session` keeps runs independent: no conversation state leaks
   between ensemble members.
+- `--no-mcp` turns off pi's built-in MCP support, so the MCP servers
+  configured for pi don't start and agents have no MCP tools. (An
+  extension that provides its own MCP support isn't affected.)
 - `--tools` is an allowlist for pi's built-in, extension, and custom
   tools: `bash` remains for investigation (`git log`, dependency
   inspection, ...), while file-editing tools and unlisted extension and
-  custom tools are unavailable, as are MCP tools. The allowlist is the
-  only enforced restriction (see [Safety and privacy](#safety-and-privacy)). A fixed
+  custom tools are unavailable. The allowlist and `--no-mcp` are the
+  only enforced restrictions (see [Safety and privacy](#safety-and-privacy)). A fixed
   scaffolding text appended to the system prompt (identical for all
   agents, the consolidator included, except the scratch path) tells agents
   not to modify project files, git state, software, or configuration, or
@@ -811,12 +815,9 @@ agent-council does not sandbox the agents. Before running it, know that:
   built-in tools, only `edit` and `write` (and the Windows-only
   `powershell`) are withheld. The read-only rules described above are
   instructions in the system prompt, which a model can ignore or misapply.
-- **MCP servers still start.** agent-council doesn't pass `--no-mcp`,
-  so pi starts or connects the MCP servers you have configured for every
-  agent, as you. Their tools can't be called (tested with pi 1.4.0):
-  the `--tools` allowlist names none of them, nor pi's `codemode` and
-  `tool_search` tools, which reach them indirectly. A server that does
-  something merely by starting still does it.
+- **Your pi extensions load.** `--no-mcp` turns off only pi's built-in
+  MCP support. Extensions you've installed load for every agent, as you,
+  and one that provides its own MCP support can still start servers.
 - **The analyzed repository can steer the agents.** Agents read the
   repository's files, and pi loads its context files (such as
   `AGENTS.md`) and, if the project is trusted, its `.pi` resources, so

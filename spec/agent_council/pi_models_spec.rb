@@ -144,6 +144,14 @@ RSpec.describe AgentCouncil::PiModels do
       end
     end
 
+    it 'runs pi with MCP disabled, so no MCP servers start' do
+      script = "case \" $* \" in *' --no-mcp '*) echo #{Shellwords.escape(response_json)} ;; " \
+               "*) echo 'missing --no-mcp' >&2; exit 4 ;; esac"
+      with_fake_pi(script) do
+        expect(described_class.fetch_models.map(&:id)).to eq(['claude-sonnet'])
+      end
+    end
+
     it 'reads pi output as UTF-8 under a non-UTF-8 locale' do
       json = response_json.sub('Claude Sonnet', 'Clàude ✓')
       with_fake_pi("echo #{Shellwords.escape(json)}") do

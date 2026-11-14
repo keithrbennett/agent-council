@@ -47,10 +47,9 @@ Before you begin the analysis:
 - Get every coverage number from cov-loupe. Do not read `coverage.json`
   directly, and do not estimate coverage by reading tests. Aggregating
   cov-loupe's per-line output into area totals is expected (see Step 4).
-- Prefer the cov-loupe MCP server. If it is unavailable, use the CLI
-  (`cov-loupe`, or `bundle exec cov-loupe` if it is in the Gemfile; run
-  `cov-loupe --help` for usage), adding `-m cli -fJ` for JSON output. Say in
-  the report which one you used.
+- Use the cov-loupe CLI (`cov-loupe`, or `bundle exec cov-loupe` if it is in
+  the Gemfile; run `cov-loupe --help` for usage), adding `-m cli -fJ` for JSON
+  output.
 - Use source and test files only to define the logical areas and to judge the
   importance of uncovered code.
 - Do not run the test suite, and do not modify source files, test files, or
@@ -78,10 +77,9 @@ error, not a report.
    UTC) from the file system (e.g. `ls -l` or `stat`); this metadata is not
    coverage data, so reading it is allowed.
 2. Run the project totals with the tracked globs from Step 2
-   (`project_coverage_totals` / `cov-loupe -m cli -fJ -g '<globs>' totals`)
-   and the file list with the same globs (`project_coverage` /
-   `cov-loupe -m cli -fJ -g '<globs>' list`). `timestamp_status` must be `ok`,
-   and `newer_files`, `deleted_files`, `length_mismatch_files`,
+   (`cov-loupe -m cli -fJ -g '<globs>' totals`) and the file list with the
+   same globs (`cov-loupe -m cli -fJ -g '<globs>' list`). `timestamp_status`
+   must be `ok`, and `newer_files`, `deleted_files`, `length_mismatch_files`,
    `unreadable_files`, and `skipped_files` must all be empty. These show
    whether source files changed after the run.
 3. No test, fixture, or configuration file may be newer than the coverage
@@ -104,7 +102,7 @@ staleness failure; it is a finding for Step 2.
 1. Get overall totals with no globs, then with tracked globs matching the
    code SimpleCov is meant to measure (from its `track_files` and filter
    settings; typically `lib/**/*.rb`, or `app/**/*.rb,lib/**/*.rb` for Rails).
-   Passing `tracked_globs` makes cov-loupe report tracked files that have
+   Passing tracked globs (`-g`) makes cov-loupe report tracked files that have
    **no** coverage data at all (`missing_tracked_files`, `without_coverage`);
    these are files never loaded by the suite and are often the biggest real
    gap.
@@ -163,16 +161,15 @@ and more tokens than a file-level rollup; that is the point.
 ## Step 4: Compute coverage per area
 
 1. For each file touched by an area, get per-line data with
-   `file_coverage_detailed` / `cov-loupe -m cli -fJ detailed <path>`. Each row
-   gives a line number, its hit count, and whether it is covered; lines that
-   are not coverable (comments, blank lines, `end`) do not appear.
+   `cov-loupe -m cli -fJ detailed <path>`. Each row gives a line number, its
+   hit count, and whether it is covered; lines that are not coverable
+   (comments, blank lines, `end`) do not appear.
 2. For each area, sum the covered and coverable lines that fall in its line
    ranges, and compute the percentage. Also record the number of code units
    in the area and its weakest units (e.g. the least-covered methods).
 3. Get a broader area's numbers by summing its children's line counts, never
    by averaging child percentages.
 4. For an area made of whole files, cross-check your sums against
-   `project_coverage_totals` with `tracked_globs` /
    `cov-loupe -m cli -fJ -g '<globs>' totals`; they must match exactly.
 5. Confirm that the line totals for the partition level from Step 3 add up to
    the project's covered and total lines for the same overall globs. If they
@@ -194,8 +191,8 @@ report.
 
 For each selected file or area:
 
-1. Get the uncovered lines (`file_uncovered_lines` /
-   `cov-loupe -m cli -fJ uncovered <path>`); use `file_coverage_detailed` or
+1. Get the uncovered lines (`cov-loupe -m cli -fJ uncovered <path>`); use
+   `cov-loupe -m cli -fJ detailed <path>` or
    `cov-loupe -m cli -s uncovered -n 2 uncovered <path>` to see the source in
    context.
 2. Characterize each cluster of uncovered lines: error/rescue path, edge-case
@@ -249,8 +246,7 @@ The report should have the following structure:
 ---
 
 ### Executive Summary
-- Commit cited, cov-loupe interface used (MCP or CLI), and the results of the
-  Step 1 checks.
+- Commit cited and the results of the Step 1 checks.
 - The coverage file's path (relative to the project root), size, and
   modification time (UTC), so readers can tell which test run the report
   describes.
@@ -326,7 +322,7 @@ table, give each task a ready-to-use prompt the user can give an AI assistant
 to implement it, keyed by its number.
 
 ### Appendix: Commands Run
-Every cov-loupe call (MCP tool name and arguments, or CLI command) and
+Every cov-loupe command and
 freshness check used to produce the numbers, plus any aggregation script, so the
 report can be reproduced.
 

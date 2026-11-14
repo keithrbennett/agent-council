@@ -76,7 +76,8 @@ For other install methods and details, see the
 ## 3. Install Pi and configure a provider
 
 agent-council drives AI models through the
-[Pi](https://github.com/earendil-works/pi) coding agent. Install Pi by
+[Pi](https://github.com/earendil-works/pi) coding agent, version 1.0.4 or
+later. Install Pi by
 following its [installation instructions](https://github.com/earendil-works/pi),
 and configure it with credentials for **at least one AI model provider**
 (see [Pi's documentation](https://pi.dev/docs/latest)). Under WSL, do both

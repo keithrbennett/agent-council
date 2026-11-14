@@ -17,6 +17,14 @@
   like the other samples, they deliver it as the final message, which
   agent-council saves. The state-of-the-codebase prompt no longer
   compares with earlier reports.
+- pi is now run with `--no-mcp`, both for agents and by `pi-models`, so
+  the MCP servers configured for pi's built-in MCP support no longer
+  start. Their tools were already unavailable to agents; a server that
+  did something merely by starting no longer does it. An extension that
+  provides its own MCP support isn't affected. This requires pi 1.0.4 or
+  later.
+- The test-coverage-analysis sample prompt uses only the cov-loupe CLI,
+  since agents have no MCP tools.
 
 ## 0.1.0 (2026-11-09)
 
