@@ -365,6 +365,50 @@ New gems are added only if they solve a meaningful problem that would otherwise 
 
 agent-council is at an early stage (0.x), so it does only what its core job needs. Features we hope to add include support for more harnesses than Pi (such as Claude Code and Codex). A missing feature is usually just not built yet.
 
+### Planned: Claude Code harness
+
+The first harness after Pi is Claude Code (the `claude` CLI), selected per agent so that one config can mix harnesses and the same model can be compared under each. Nothing here is built yet; when it is, this section's content moves into the sections above (§4, §5, §11, §13).
+
+**Configuration.** Each agent and the consolidator get an optional `harness:` key, `pi` by default, so existing configs are unchanged. An unknown name aborts at startup with the known names. For `claude`, `provider` may be omitted and is recorded as `anthropic`:
+
+```yaml
+agents:
+  - provider: openai
+    model: gpt-6.1-sol
+  - harness: claude
+    model: claude-opus-5-5
+consolidator:
+  harness: claude
+  model: claude-sonnet-5-5
+```
+
+**Selection.** The single `HARNESS` constant becomes a name-to-module map (`'pi' => PiHarness, 'claude' => ClaudeCodeHarness`), and each agent's module is looked up from its config entry and used wherever `HARNESS` is today: invocation and parsing, filenames, front matter, `run.json`, the consolidator header, and the startup executable check (once per harness in use). Agent labels gain the harness, since labels key the consolidator's lookup of runs and the same provider/model under two harnesses would otherwise collide. Reports with no `harness` in their front matter are pi's, as now. The modules stay plain namespaces with the same functions (§13); the scaffolding text is harness-neutral and is shared rather than copied.
+
+**Invocation.** One `claude` process per agent, the prompt on stdin, started from an argv array (§9):
+
+```text
+claude -p --output-format stream-json --verbose
+       --no-session-persistence
+       --tools Read,Grep,Glob,Bash --allowedTools Read,Grep,Glob,Bash
+       --strict-mcp-config
+       --model MODEL
+       --append-system-prompt SCAFFOLDING
+```
+
+`--tools` limits the built-in tools as pi's allowlist does, with Edit and Write withheld; `--allowedTools` lets them run without permission prompts, which `-p` mode can't answer. Whether those two flags alone are enough in headless mode is to be checked before relying on them. `--strict-mcp-config` with no `--mcp-config` loads no MCP servers, matching pi agents, which can't call MCP tools (README, Safety and privacy).
+
+**Context.** Claude Code behaves as in an interactive session started in the analyzed repository, as Pi does (§11): it loads `CLAUDE.md` (and whatever it imports, such as `@AGENTS.md`), user and project settings, hooks, and plugins. `--bare` is not used: it skips `CLAUDE.md` and permits only API-key authentication. The README's Safety section will say that the user's hooks and plugins run for every Claude Code agent.
+
+**Billing.** agent-council leaves authentication and billing entirely to Claude Code: no setting, no environment changes. An agent bills however `claude` would at the user's terminal: a subscription login, or an API key if one is configured. One caveat for the README: interactive Claude Code asks before using an `ANTHROPIC_API_KEY` found in the environment, but `-p` mode doesn't ask, so a key exported for another tool may bill council runs to the API. Subscription runs also share the user's usage limits with their interactive work, and a limit hit mid-run is an ordinary agent failure. The reported cost is recorded as-is; like other subscription providers' figures it may be notional. Recording the stream's `apiKeySource` (`none` for a login) in `run.json`, to tell billing sources apart, is deferred.
+
+**Output parsing.** The stream's final `result` event carries everything needed, so parsing is simpler than pi's:
+
+- the report is its `result` text;
+- the run failed if the process exits nonzero, there is no `result` event, `is_error` is true, `subtype` is not `success` (e.g. `error_max_turns`), the output was cut off (`stop_reason` `max_tokens`), or the text is blank;
+- usage maps `input_tokens`, `output_tokens`, `cache_read_input_tokens`, and `cache_creation_input_tokens` to `input`, `output`, `cache_read`, and `cache_write` (as with pi, `input` excludes cache reads and writes), and `total_cost_usd` to `cost`.
+
+Exact failure shapes (exit status and fields for a usage-limit or authentication failure, whether `usage` is cumulative over turns) are to be confirmed from real runs, and those runs recorded as the spec fixtures.
+
 `REVIEW_NOTES.md` separately tracks review findings that were considered and don't need to be re-raised: accepted risks and non-issues.
 
 ---
