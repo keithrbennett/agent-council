@@ -390,24 +390,33 @@ consolidator:
 claude -p --output-format stream-json --verbose
        --no-session-persistence
        --tools Read,Grep,Glob,Bash --allowedTools Read,Grep,Glob,Bash
+       --permission-mode default
        --strict-mcp-config
        --model MODEL
        --append-system-prompt SCAFFOLDING
 ```
 
-`--tools` limits the built-in tools as pi's allowlist does, with Edit and Write withheld; `--allowedTools` lets them run without permission prompts, which `-p` mode can't answer. Whether those two flags alone are enough in headless mode is to be checked before relying on them. `--strict-mcp-config` with no `--mcp-config` loads no MCP servers, matching pi agents, which can't call MCP tools (README, Safety and privacy).
+The flags were checked with Claude Code 2.1.325 and pi 1.5.2:
+
+- `--tools` limits the built-in tools as pi's allowlist does: Edit and Write are absent, not merely refused.
+- `--allowedTools` is required. Without it, Bash commands Claude Code doesn't consider read-only (`git log` and `ls` are; `ruby -e ...` isn't) are refused, since `-p` mode can't ask, and the run still ends as a success, with the refusal recorded only in the `result` event's `permission_denials`. A nonempty `permission_denials` is reported as a warning, not a failure.
+- `--permission-mode default` makes the outcome the same for every user; without it the user's own `defaultMode` (e.g. `auto`, or `plan`, which would run nothing) applies.
+- `--strict-mcp-config` with no `--mcp-config` loads no MCP servers: `init` reports `mcp_servers: []` even for a user with servers configured.
+
+**No MCP, in either harness.** Agents get no MCP servers, so the harnesses offer the same tools, and no agent can reach a server that writes (posting to chat, commenting on an issue), which a council would do once per agent. Pi already can't call MCP tools under agent-council's `--tools` allowlist (pi 1.5.2 still offers them only through its `codemode` tool, which the allowlist omits), but it still starts the user's servers; it will be passed `--no-mcp` too, which in a test kept a project's server from starting, so no harness starts them. The README's Safety and privacy section changes with it. There is no setting to turn MCP on. If one is wanted later, it goes in the config, not on the command line, and names the servers to allow rather than switching all of them on, since enabling means per-harness work: pi's allowlist would have to name the MCP tools, and Claude Code would need them in `--allowedTools`.
 
 **Context.** Claude Code behaves as in an interactive session started in the analyzed repository, as Pi does (§11): it loads `CLAUDE.md` (and whatever it imports, such as `@AGENTS.md`), user and project settings, hooks, and plugins. `--bare` is not used: it skips `CLAUDE.md` and permits only API-key authentication. The README's Safety section will say that the user's hooks and plugins run for every Claude Code agent.
 
-**Billing.** agent-council leaves authentication and billing entirely to Claude Code: no setting, no environment changes. An agent bills however `claude` would at the user's terminal: a subscription login, or an API key if one is configured. One caveat for the README: interactive Claude Code asks before using an `ANTHROPIC_API_KEY` found in the environment, but `-p` mode doesn't ask, so a key exported for another tool may bill council runs to the API. Subscription runs also share the user's usage limits with their interactive work, and a limit hit mid-run is an ordinary agent failure. The reported cost is recorded as-is; like other subscription providers' figures it may be notional. Recording the stream's `apiKeySource` (`none` for a login) in `run.json`, to tell billing sources apart, is deferred.
+**Billing.** agent-council leaves authentication and billing entirely to Claude Code: no setting, no environment changes. An agent bills however `claude` would at the user's terminal: a subscription login, or an API key if one is configured. One caveat for the README: interactive Claude Code asks before using an `ANTHROPIC_API_KEY` found in the environment, but `-p` mode doesn't ask, so a key exported for another tool may bill council runs to the API. Subscription runs also share the user's usage limits with their interactive work, and a limit hit mid-run is an ordinary agent failure. The reported cost is recorded as-is; like other subscription providers' figures it is notional (the stream gives its `costBasis` as `list`). Telling billing sources apart in `run.json` is deferred; the sources for it are the `init` event's `apiKeySource` (`none` for a login), `claude auth status --json` (`subscriptionType`, e.g. `pro`), and the stream's `rate_limit_event`s, which give the plan's utilization of its 5-hour and weekly windows.
 
 **Output parsing.** The stream's final `result` event carries everything needed, so parsing is simpler than pi's:
 
 - the report is its `result` text;
-- the run failed if the process exits nonzero, there is no `result` event, `is_error` is true, `subtype` is not `success` (e.g. `error_max_turns`), the output was cut off (`stop_reason` `max_tokens`), or the text is blank;
-- usage maps `input_tokens`, `output_tokens`, `cache_read_input_tokens`, and `cache_creation_input_tokens` to `input`, `output`, `cache_read`, and `cache_write` (as with pi, `input` excludes cache reads and writes), and `total_cost_usd` to `cost`.
+- the run failed if there is no `result` event, `is_error` is true, or the text is blank. Every failure observed (not logged in, an unknown model, output over the token limit, the turn limit) exited 1 with `is_error` true, but `subtype` was `success` for all but the turn limit (`error_max_turns`), and a cut-off output reported no `max_tokens` stop reason, so neither is checked;
+- the failure's reason is the `result` event's `errors`, if any (e.g. "Reached maximum number of turns (1)", with an empty `result`), otherwise its `result` text (e.g. "Not logged in · Please run /login"). Stderr was empty in all but one case, so unlike pi's, a nonzero exit is explained from the stream, with stderr only as a fallback;
+- usage is read from the `result` event alone, which totals the whole run; the per-message `assistant` events carry partial snapshots that undercount output. It maps `input_tokens`, `output_tokens`, `cache_read_input_tokens`, and `cache_creation_input_tokens` to `input`, `output`, `cache_read`, and `cache_write` (as with pi, `input` excludes cache reads and writes), and `total_cost_usd` to `cost`.
 
-Exact failure shapes (exit status and fields for a usage-limit or authentication failure, whether `usage` is cumulative over turns) are to be confirmed from real runs, and those runs recorded as the spec fixtures.
+Not yet observed: a run that hits a usage limit, and one billed to an API key. The recorded runs, with local paths and session IDs removed, become the spec fixtures.
 
 `REVIEW_NOTES.md` separately tracks review findings that were considered and don't need to be re-raised: accepted risks and non-issues.
 
