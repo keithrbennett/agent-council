@@ -118,9 +118,9 @@ module AgentCouncil
   # self-describing when copied out of the reports tree. index (an agent's
   # 1-based position in the config's agent list) disambiguates repeated
   # provider/model entries — e.g. the same model configured twice for two
-  # independent analyses — without depending on it being unique. It sits before the harness so that once more than one harness
-  # exists, filenames still sort in config/agent order first, rather than
-  # grouping by harness.
+  # independent analyses — without depending on it being unique. It sits
+  # before the harness so that, with more than one harness, filenames sort
+  # in config/agent order first, rather than grouping by harness.
   # agent: its config entry.
   module_function def report_filename(file_prefix, agent, index: nil)
     parts = [file_prefix]
@@ -130,27 +130,32 @@ module AgentCouncil
     "#{parts.join('_')}.md"
   end
 
-  # Returns [label, ok, detail, usage]; never raises. usage is the run's
-  # token usage (see Harnesses), or nil; failed runs report it too, since
-  # their tokens were still spent.
+  # Returns [label, ok, detail, usage, warnings]; never raises. detail is
+  # the report's filename on success, the error otherwise. usage is the
+  # run's token usage (see Harnesses), or nil; failed runs report it too,
+  # since their tokens were still spent. warnings: the harness's warnings
+  # about the run (see run_warnings), failed or not, since what the harness
+  # kept the agent from doing may be why it failed; empty if the harness
+  # never ran. Returned, not printed, since this runs in a worker thread.
   # index: the agent's 1-based position in the config's agent list, used to
   # disambiguate repeated provider/model entries in the filename and label;
   # filename: overrides the output name; meta: becomes YAML front matter,
   # which identifies the report; what was measured about its run (duration
   # and usage) goes in run.json instead (see write_run_file);
   # header: markdown prepended to the report body (or a callable receiving
-  # the run's fields, 'duration' (HH:MM:SS) and 'usage', and returning
-  # it). If the response begins
+  # the run's fields, 'duration' (HH:MM:SS), 'usage', and any 'warnings',
+  # and returning it). If the response begins
   # with an H1 of its own, it is dropped: the header leads the body (and
   # carries the title, in consolidated reports).
   # pool: the WorkerPool to spawn the agent through, so Ctrl-C can stop it;
   # without one it's spawned untracked.
   module_function def run_agent(agent, prompt, run_dir, file_prefix, index: nil, filename: nil, meta: {},
     header: nil, pool: nil)
+    agent = Harnesses.with_defaults(agent) # already done for config entries; cheap to repeat
     provider = agent['provider'] if agent.is_a?(Hash)
     model = agent['model'] if agent.is_a?(Hash)
     label = agent_label(provider, model, index)
-    return [label, false, "config entry needs 'provider' and 'model'"] if provider.nil? || model.nil?
+    return [label, false, "config entry needs 'provider' and 'model'", nil, []] if provider.nil? || model.nil?
 
     # Removed in the ensure below rather than via Dir.mktmpdir's block form,
     # with errors ignored: a child that is still exiting (e.g. one just
@@ -165,18 +170,25 @@ module AgentCouncil
     # Harness output is UTF-8. WorkerPool#capture3 already returns it as such,
     # but Open3.capture3 (used without a pool) returns the locale's encoding.
     stdout, stderr = [stdout, stderr].map { |output| String.new(output, encoding: ENCODING) }
+    # Invalid bytes become U+FFFD, so they can't make the harness's parsing
+    # raise: for stderr, a failure would go unexplained; for stdout, a
+    # failure's reason or a run's warnings would be lost.
+    stdout, stderr = [stdout, stderr].map(&:scrub)
     duration = format_duration(elapsed)
     usage = harness.usage(stdout)
+    # Read before the report is written, so its byline can show them (and
+    # so the consolidator, which reads the report, learns of them).
+    warnings = run_warnings(harness, stdout)
 
     unless status.success?
-      detail = stderr.lines.map(&:strip).reject(&:empty?).first || 'no error output'
-      return [label, false, "#{harness::NAME} exited #{status.exitstatus}: #{detail}", usage]
+      detail = failure_reason(harness.exit_detail(stdout, stderr))
+      return [label, false, "#{harness::NAME} exited #{status.exitstatus}: #{detail}", usage, warnings]
     end
 
     error = harness.error_message(stdout)
     if error
-      summary = error.gsub(/\s+/, ' ').slice(0, 300)
-      return [label, false, "#{harness::NAME} exited 0 but the run failed: #{summary}", usage]
+      summary = failure_reason(error)
+      return [label, false, "#{harness::NAME} exited 0 but the run failed: #{summary}", usage, warnings]
     end
 
     text = harness.final_response(stdout)
@@ -187,11 +199,12 @@ module AgentCouncil
         else
           "no assistant message in #{harness::NAME} event stream"
         end
-      return [label, false, "#{harness::NAME} exited 0 but #{detail}", usage]
+      return [label, false, "#{harness::NAME} exited 0 but #{detail}", usage, warnings]
     end
 
     filename ||= report_filename(file_prefix, agent, index: index)
-    run_fields = { 'duration' => duration, 'usage' => usage }.compact
+    run_fields = { 'duration' => duration, 'usage' => usage, 'warnings' => warnings.empty? ? nil : warnings }
+      .compact
     if header
       header = header.call(run_fields) if header.respond_to?(:call)
       text = text.sub(/\A\s*#(?!#).+\n+/, '')
@@ -203,11 +216,60 @@ module AgentCouncil
     # Exclusive create ('x'): never replaces a report, e.g. one written by
     # a concurrent --consolidate with the same model; that is a failure.
     File.write(File.join(run_dir, filename), content, mode: 'wx')
-    [label, true, filename, usage]
+    [label, true, filename, usage, warnings]
   rescue => e
-    [label, false, "#{e.class}: #{e.message}", usage]
+    [label, false, failure_reason("#{e.class}: #{e.message}"), usage, Array(warnings)]
   ensure
     FileUtils.rm_rf(scratch_dir) if scratch_dir
+  end
+
+  # The harness's warnings about a run: what the harness kept the agent
+  # from doing (see ClaudeCodeHarness.warnings), which a report may lack,
+  # or which may be why the run failed. Advisory only: failing to read them
+  # must not fail a run whose report is saved, so that becomes a warning
+  # too.
+  # Each is a plain_line, so wherever it goes (console, report, run.json,
+  # and so anything that prints run.json's values) it can't carry a
+  # terminal escape from a command the model wrote.
+  module_function def run_warnings(harness, stdout)
+    # An Array, by the harness contract; nil tolerated.
+    Array(harness.warnings(stdout)).map { |warning| plain_line(warning) }
+  rescue => e
+    [plain_line("could not read the run's warnings (#{e.class}: #{e.message})")]
+  end
+
+  # A harness's reason for a failure, as run_agent reports it: a
+  # plain_line, since it can quote the model or the CLI, cut to 300
+  # characters plus "..." so it doesn't swamp the progress line, the Errors
+  # list, or the consolidation prompt; 'no error output' if nothing is left.
+  module_function def failure_reason(text)
+    reason = plain_line(text)
+    return 'no error output' if reason.empty?
+
+    reason.length > 300 ? "#{reason[0, 300]}..." : reason
+  end
+
+  # Lines showing a run's warnings under its progress line or result table.
+  module_function def warning_lines(warnings)
+    Array(warnings).map { |warning| "      Warning: #{plain_line(warning)}" }
+  end
+
+  # Text on one line with no control characters: every run of whitespace
+  # or control characters (newlines, carriage returns, the ESC that starts
+  # a terminal escape sequence) becomes one space; the rest of an escape
+  # sequence, such as "[2J", stays as harmless text. Warnings can quote a
+  # model's refused command, so this keeps one from moving the cursor or
+  # clearing the screen when printed, or from breaking the line it appears
+  # on in a report. Text in any encoding is read as UTF-8 (a SystemCallError's
+  # message can be binary). Invisible format characters (Unicode category Cf, such
+  # as bidirectional overrides and zero-width spaces) are removed, so text
+  # can't display reordered or hide characters. Invalid bytes become U+FFFD,
+  # since this also runs in rescue clauses and must not raise.
+  module_function def plain_line(text)
+    # Alternation, not one bracket class: the two overlap, which ruby -w
+    # warns of.
+    String.new(text.to_s, encoding: ENCODING).scrub.gsub(/\p{Cf}/, '')
+      .gsub(/(?:[[:space:]]|[[:cntrl:]])+/, ' ').strip
   end
 
   # Creates a new run dir in day_dir and returns its name: base, or base-2,
@@ -294,14 +356,17 @@ module AgentCouncil
 
   # The consolidator's substantive prompt: the instructions template, the
   # original prompt every analyst answered, all reports with their source
-  # labels, and the agents without a report, as [label, reason] pairs; the
-  # consolidator can't otherwise know about those.
+  # labels, and the agents without a report, as [label, reason, harness]
+  # triples; the consolidator can't otherwise know about those.
   module_function def consolidation_prompt(original_prompt, reports, failures = [])
     template = File.read(CONSOLIDATE_PROMPT_PATH, encoding: ENCODING)
     body = reports.map do |label, text, fields|
       "## Report from #{label}\n\nHarness: #{Harnesses.name_of(fields)}\n\n#{text}"
     end.join("\n\n---\n\n")
-    failed = failures.empty? ? 'None.' : failures.map { |label, reason| "- #{label}: #{reason}" }.join("\n")
+    failed = failures.map do |label, reason, harness|
+      "- #{label}#{" (harness: #{plain_line(harness)})" if harness}: #{plain_line(reason)}"
+    end
+    failed = failures.empty? ? 'None.' : failed.join("\n")
     <<~MARKDOWN
       #{template}
 
@@ -480,13 +545,21 @@ module AgentCouncil
       'consolidated_at' => meta['consolidated_at'],
       'duration'        => meta['duration'],
       'usage'           => format_usage(meta['usage']),
+      'warnings'        => (Array(meta['warnings']).join('; ') unless Array(meta['warnings']).empty?),
     }.compact
-    rows = fields.map { |field, value| "| #{field} | #{value} |" }
+    rows = fields.map { |field, value| "| #{field} | #{table_cell(value)} |" }
     <<~TABLE
       | Field     | Value |
       | :-------- | :---------------------------- |
       #{rows.join("\n")}
     TABLE
+  end
+
+  # A value as one Markdown table cell: a plain_line, with its pipes and
+  # backslashes escaped, so text such as a refused `a | b` or `grep '\|'`
+  # command can't add columns or rows.
+  module_function def table_cell(value)
+    plain_line(value).gsub(/[\\|]/) { |char| "\\#{char}" }
   end
 
   # Markdown table of a consolidated report's sources, one row per label in
@@ -509,23 +582,27 @@ module AgentCouncil
   end
 
   # Runs the configured consolidator model over a run's reports and writes
-  # its report into the same run dir. Returns as run_agent, except that
+  # its report into the same run dir. Returns [label, ok, detail, usage,
+  # meta_name, warnings], as run_agent does with meta_name inserted:
   # detail is the findings file's name when the report was split (see
-  # split_consolidated_report) and the meta file's name follows usage;
-  # never raises.
+  # split_consolidated_report), and meta_name the meta file's (nil when
+  # unsplit or failed); never raises.
   # analyst_runs: the run's run.json analyst entries, for the sources
   # table's durations and usage. failures: as for consolidation_prompt.
   # pool: as for run_agent.
   module_function def run_consolidation(consolidator, original_prompt, run_dir, file_prefix,
     meta: {}, prompt_path: nil, failures: [], analyst_runs: [], pool: nil)
+    consolidator = Harnesses.with_defaults(consolidator) # as in run_agent
     provider = consolidator['provider'] if consolidator.is_a?(Hash)
     model = consolidator['model'] if consolidator.is_a?(Hash)
-    return ['consolidator', false, "config entry needs 'provider' and 'model'"] if provider.nil? || model.nil?
+    if provider.nil? || model.nil?
+      return ['consolidator', false, "config entry needs 'provider' and 'model'", nil, nil, []]
+    end
 
     reports = collect_reports(File.join(run_dir, REVIEWS_DIR_NAME))
     if reports.empty?
       return [agent_label(provider, model), false,
-        "no reports found in #{relative_path(File.join(run_dir, REVIEWS_DIR_NAME))}"]
+        "no reports found in #{relative_path(File.join(run_dir, REVIEWS_DIR_NAME))}", nil, nil, []]
     end
 
     prompt = consolidation_prompt(original_prompt, reports, failures)
@@ -542,21 +619,23 @@ module AgentCouncil
         "#{byline_table(meta.merge(run_fields), consolidator)}\n" \
         "#{sources_table(meta['sources'], source_runs)}"
     end
-    label, ok, detail, usage = run_agent(consolidator, prompt, run_dir, file_prefix,
+    label, ok, detail, usage, warnings = run_agent(consolidator, prompt, run_dir, file_prefix,
       filename: consolidated_filename(file_prefix, consolidator, 'meta'),
       header:   header,
       meta:     meta,
       pool:     pool)
+    warnings = Array(warnings)
     if ok
       labels = reports.map { |_, _, fields| full_label(fields) }
       info = ["Run: #{file_prefix}", prompt_path && "Prompt: #{File.basename(prompt_path)}",
-        "Consolidated by: #{agent_descriptor(consolidator)}, #{meta['consolidated_at']}"].compact
+        "Consolidated by: #{agent_descriptor(consolidator)}, #{meta['consolidated_at']}",
+        ("Consolidator warnings: #{plain_line(warnings.join('; '))}" unless warnings.empty?)].compact
       detail, meta_name = split_consolidated_report(run_dir, detail, file_prefix, consolidator, head, labels,
         info)
     end
-    [label, ok, detail, usage, meta_name]
+    [label, ok, detail, usage, meta_name, warnings]
   rescue => e
-    [agent_label(provider, model), false, "#{e.class}: #{e.message}"]
+    [agent_label(provider, model), false, failure_reason("#{e.class}: #{e.message}"), nil, nil, []]
   end
 
   module_function def relative_path(path)
@@ -640,12 +719,15 @@ module AgentCouncil
   # analysts) on success, its error on failure. The harness is per entry,
   # not per run, so a run can mix harnesses. meta_report: for a
   # consolidation whose report was split (its detail is the findings file's
-  # name), the other file, which carries the front matter.
-  module_function def run_entry(agent, ok, detail, elapsed, usage, index: nil, dir: nil, meta_report: nil)
+  # name), the other file, which carries the front matter. warnings: the
+  # run's warnings (see run_agent), recorded only if there are any.
+  module_function def run_entry(agent, ok, detail, elapsed, usage, index: nil, dir: nil, meta_report: nil,
+    warnings: nil)
     entry = { 'agent_index' => index, 'harness' => Harnesses.name_of(agent), 'provider' => agent['provider'],
       'model' => agent['model'], 'ok' => ok }.compact
     entry[ok ? 'report' : 'error'] = ok && dir ? File.join(dir, detail) : detail
     entry['meta_report'] = (dir ? File.join(dir, meta_report) : meta_report) if ok && meta_report
+    entry['warnings'] = warnings if warnings.is_a?(Array) && !warnings.empty?
     entry.merge('duration_seconds' => elapsed.round(1), 'usage' => usage)
   end
 
@@ -689,9 +771,10 @@ module AgentCouncil
   RIGHT_ALIGNED_COLUMNS = (3..6)
 
   # Indented result table lines for [label, ok, detail, elapsed, usage]
-  # results: a heading row, then one row per result, with ✓ or ✗ and its
-  # usage (as for usage_cells), then the failures' errors, if any, listed
-  # below the table so long messages don't widen it. Report filenames
+  # results (any further elements, such as warnings, are ignored): a
+  # heading row, then one row per result, with ✓ or ✗ and its usage (as
+  # for usage_cells), then the failures' errors, if any, listed below the
+  # table so long messages don't widen it. Report filenames
   # aren't shown: an analyst's is found by its agent number, and the
   # consolidated report is at the run dir's top level.
   module_function def format_result_table(results)
@@ -751,15 +834,27 @@ module AgentCouncil
   end
 
   # Why a config entry can't be run, as a phrase following the entry's
-  # name, or nil if it can: it must be labelable, and its 'harness', if
-  # any, must be a known one.
+  # name, or nil if it can: its 'harness', if any, must be a known one, and
+  # it must be labelable once its harness's default provider, if any, is
+  # filled in (see Harnesses.with_defaults).
   module_function def entry_error(entry)
-    return "needs string 'provider' and 'model' fields" unless labelable_entry?(entry)
+    harness = entry['harness'] if entry.is_a?(Hash)
+    unless harness.nil? || Harnesses::BY_NAME.key?(harness)
+      return "names an unknown harness, #{harness.inspect} (known: #{Harnesses::BY_NAME.keys.join(', ')})"
+    end
+    return if labelable_entry?(Harnesses.with_defaults(entry))
 
-    harness = entry['harness']
-    return if harness.nil? || Harnesses::BY_NAME.key?(harness)
+    # harness is now nil or known, so this finds its module.
+    harness_module = Harnesses::BY_NAME[Harnesses.name_of(entry)] if entry.is_a?(Hash)
+    return "needs string 'provider' and 'model' fields" unless harness_module&.const_get(:DEFAULT_PROVIDER)
 
-    "names an unknown harness, #{harness.inspect} (known: #{Harnesses::BY_NAME.keys.join(', ')})"
+    # Its harness has a default provider, so the provider may be left out;
+    # one it gives must still be a string. Both problems, if both.
+    provider = entry['provider']
+    problems = []
+    problems << "needs a string 'model' field" unless entry['model'].is_a?(String)
+    problems << "gives a 'provider' that is not a string" unless provider.nil? || provider.is_a?(String)
+    problems.join(', and ')
   end
 
   # True if `name` (a bare command name) is an executable file in a PATH
@@ -974,11 +1069,13 @@ module AgentCouncil
       error = entry_error(agent)
       abort "Agent ##{i + 1} in #{config_path} #{error}" if error
     end
+    agents = agents.map { |agent| Harnesses.with_defaults(agent) }
 
     consolidator = config['consolidator']
     if consolidator
       error = entry_error(consolidator)
       abort "Consolidator in #{config_path} #{error}" if error
+      consolidator = Harnesses.with_defaults(consolidator)
       unless File.file?(CONSOLIDATE_PROMPT_PATH)
         abort "Consolidator configured but template missing: #{CONSOLIDATE_PROMPT_PATH}"
       end
@@ -1039,35 +1136,41 @@ module AgentCouncil
       index = i + 1
       pool.start do
         meta = report_meta.merge('agent_index' => index)
-        (label, ok, detail, usage), elapsed = timed do
+        (label, ok, detail, usage, warnings), elapsed = timed do
           run_agent(agent, analyst_prompt, reviews_dir, file_prefix,
             index:  index,
             meta:   meta,
             header: ->(run_fields) { byline_table(meta.merge(run_fields), agent) },
             pool:   pool)
         end
-        [label, ok, detail, elapsed, usage]
+        [label, ok, detail, elapsed, usage, warnings]
       end
     end
-    results = pool.collect do |label, ok, detail, elapsed|
+    # Printed here, in the main thread, as everything is (see WorkerPool).
+    results = pool.collect do |label, ok, detail, elapsed, _usage, warnings|
       duration = format_duration(elapsed)
       puts(ok ? "  ✓ #{duration}  #{label}" : "  ✗ #{duration}  #{label}\n      #{detail}")
+      puts warning_lines(warnings)
     end
 
     failed = results.count { |_, ok, _| !ok }
     puts "\nReviews (in #{relative_path(reviews_dir)}):"
     puts format_result_table(results)
     puts "\n--- Reviews complete (#{results.size - failed}/#{results.size} succeeded" \
-      "#{usage_summary(results.map(&:last))}) ---"
+      "#{usage_summary(results.map { |_, _, _, _, usage| usage })}) ---"
     # Written now, so it's there even if the consolidation is interrupted.
-    analyst_runs = agents.zip(results).each_with_index.map do |(agent, (_, ok, detail, elapsed, usage)), i|
-      run_entry(agent, ok, detail, elapsed, usage, index: i + 1, dir: REVIEWS_DIR_NAME)
+    analyst_runs = agents.zip(results).each_with_index.map do |(agent, result), i|
+      _, ok, detail, elapsed, usage, warnings = result
+      run_entry(agent, ok, detail, elapsed, usage, index: i + 1, dir: REVIEWS_DIR_NAME, warnings: warnings)
     end
     write_run_file(run_dir, analyst_runs, [])
 
     if consolidator
       puts "\nConsolidation Report (in #{relative_path(run_dir)}):"
-      failures = results.reject { |_, ok, _| ok }.map { |label, _, detail, _| [label, detail] }
+      failures = agents.zip(results).reject { |_, (_, ok)| ok }.map do |agent, result|
+        label, _, detail, _, _, warnings = result
+        [label, failure_with_warnings(detail, warnings), Harnesses.name_of(agent)]
+      end
       pool.start do
         timed do
           run_consolidation(consolidator, prompt, run_dir, file_prefix,
@@ -1075,9 +1178,10 @@ module AgentCouncil
             pool: pool)
         end
       end
-      (label, ok, detail, usage, meta_name), elapsed = pool.collect.first
+      (label, ok, detail, usage, meta_name, warnings), elapsed = pool.collect.first
       puts format_result_table([[label, ok, detail, elapsed, usage]])
-      entry = run_entry(consolidator, ok, detail, elapsed, usage, meta_report: meta_name)
+      puts warning_lines(warnings)
+      entry = run_entry(consolidator, ok, detail, elapsed, usage, meta_report: meta_name, warnings: warnings)
       write_run_file(run_dir, analyst_runs, [entry])
       puts_consolidation_status(ok)
     end
@@ -1126,6 +1230,7 @@ module AgentCouncil
     abort "No consolidator in #{config_path}; add one to consolidate" unless consolidator
     error = entry_error(consolidator)
     abort "Consolidator in #{config_path} #{error}" if error
+    consolidator = Harnesses.with_defaults(consolidator)
     unless File.file?(CONSOLIDATE_PROMPT_PATH)
       abort "Consolidation template missing: #{CONSOLIDATE_PROMPT_PATH}"
     end
@@ -1161,8 +1266,8 @@ module AgentCouncil
     puts "\nConsolidator Agent:\n  #{agent_descriptor(consolidator)}"
     puts "\nConsolidation Report (in #{relative_path(run_dir)}, " \
       "from #{reports.size} review#{'s' unless reports.size == 1}):"
-    failures = missing_agents(config, reports)
     analysts, consolidations = read_run_file(run_dir)
+    failures = missing_agents(config, reports, analysts)
     pool = WorkerPool.new(grace: INTERRUPT_GRACE_SECONDS)
     pool.trap_signals
     pool.start do
@@ -1172,13 +1277,14 @@ module AgentCouncil
           analyst_runs: analysts || [], pool: pool)
       end
     end
-    (label, ok, detail, usage, meta_name), elapsed = pool.collect.first
+    (label, ok, detail, usage, meta_name, warnings), elapsed = pool.collect.first
     puts format_result_table([[label, ok, detail, elapsed, usage]])
+    puts warning_lines(warnings)
     # Added to the run's run.json. Without one (deleted, or unreadable),
     # none is written: a total covering only this consolidation would
     # pass for the run's.
     if analysts
-      entry = run_entry(consolidator, ok, detail, elapsed, usage, meta_report: meta_name)
+      entry = run_entry(consolidator, ok, detail, elapsed, usage, meta_report: meta_name, warnings: warnings)
       write_run_file(run_dir, analysts, consolidations + [entry])
     else
       warn "No readable #{RUN_FILENAME} in #{relative_path(run_dir)}; not recording this consolidation's run"
@@ -1199,24 +1305,50 @@ module AgentCouncil
       File.basename(name) == name
   end
 
-  # What --consolidate tells the consolidator about an agent without a report.
+  # A failed run's reason as the consolidator is told it: its error, then
+  # any warnings about the run, since they may be why it failed.
+  module_function def failure_with_warnings(detail, warnings)
+    [detail, *Array(warnings).map { |warning| "warning: #{warning}" }].join('; ')
+  end
+
+  # What --consolidate tells the consolidator about an agent without a
+  # report when run.json doesn't record that its run failed.
   MISSING_REPORT_REASON =
     'reason not recorded (it may have failed, been interrupted, or had its report removed)'
 
   # For --consolidate: the config copy's agents that have no report, as
-  # [label, reason] pairs. Why wasn't recorded, and needn't be a failure:
-  # the run may have been interrupted, or a report removed. An agent the
-  # config copy gives an unknown harness is still listed: it needs no
-  # harness to be labeled, and the config may come from a newer version.
-  module_function def missing_agents(config, reports)
+  # [label, reason, harness] triples, as a run tells its consolidator. The
+  # reason is the error and warnings run.json records for the agent's
+  # failed run (analyst_runs: its analyst entries); else it isn't known,
+  # and needn't be a failure: the run may have been interrupted, or a
+  # report removed. An agent the config copy gives an unknown harness is
+  # still listed: it needs no harness to be labeled, and the config may
+  # come from a newer version.
+  module_function def missing_agents(config, reports, analyst_runs = [])
     agents = config['agents'].is_a?(Array) ? config['agents'] : []
     present = reports.map(&:first)
     agents.each_with_index.filter_map do |agent, i|
+      agent = Harnesses.with_defaults(agent)
       next unless labelable_entry?(agent)
 
       label = agent_label(agent['provider'], agent['model'], i + 1)
-      [label, MISSING_REPORT_REASON] unless present.include?(label)
+      next if present.include?(label)
+
+      [label, recorded_failure(agent, i + 1, analyst_runs) || MISSING_REPORT_REASON, Harnesses.name_of(agent)]
     end
+  end
+
+  # The reason run.json records for a failed run of agent (the config
+  # entry at 1-based index), with its warnings, or nil if none is recorded.
+  module_function def recorded_failure(agent, index, analyst_runs)
+    run = Array(analyst_runs).find do |entry|
+      entry.is_a?(Hash) && entry['agent_index'] == index && entry['ok'] == false &&
+        entry.values_at('provider', 'model') == agent.values_at('provider', 'model') &&
+        Harnesses.name_of(entry) == Harnesses.name_of(agent)
+    end
+    return nil unless run && run['error'].is_a?(String)
+
+    failure_with_warnings(run['error'], Array(run['warnings']).grep(String))
   end
 
   # Checked up front, before any run dir is created or model called: the

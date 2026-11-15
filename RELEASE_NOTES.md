@@ -10,8 +10,8 @@
   recommendation, run `examples/prompts/recommend-model-ensemble-prompt.md`.
 - `USE_CASES.md`, a catalog of what agent-council can be used for, is
   added, and the README gains a "What makes a good fit" section.
-- Costs are now described as estimates from pi's price table, not what
-  you're billed.
+- Costs are now described as estimates (for pi agents, from pi's price
+  table), not what you're billed.
 - The state-of-the-codebase and test-coverage-analysis sample prompts
   no longer tell agents to write their report to a file in the project;
   like the other samples, they deliver it as the final message, which
@@ -25,10 +25,22 @@
   later.
 - The test-coverage-analysis sample prompt uses only the cov-loupe CLI,
   since agents have no MCP tools.
-- Agents and the consolidator accept an optional `harness` config value,
-  in preparation for harnesses other than pi; `pi`, the default, is the
-  only one so far, and an unknown name is rejected at startup (with
-  `--consolidate`, only the consolidator's, since no analysts run). A config
+- Agents and the consolidator can run under Claude Code, alongside pi
+  agents in the same config: an optional `harness` config value names
+  the harness, `pi` (the default) or `claude`, and an unknown name is
+  rejected at startup (with `--consolidate`, only the consolidator's,
+  since no analysts run). A Claude Code entry may omit `provider`, which
+  is then recorded as `anthropic`. Runs bill however `claude` does at
+  your terminal, to a subscription login or an API key; agent-council
+  sets nothing for billing. Of Claude Code's built-in tools, agents get
+  only `Read`, `Grep`, `Glob`, and `Bash`; they get no MCP servers, and
+  they load `CLAUDE.md`, settings, hooks, plugins, and auto memory as an
+  interactive session would, including the analyzed repository's own
+  hooks. A tool call Claude Code refuses (e.g. under a `permissions.deny`
+  rule) is reported as a warning, also shown in the report's metadata
+  table (where the consolidator sees it) and recorded in `run.json`; the
+  report is kept, and a run that fails anyway still gets the warning.
+  Only configs that use Claude Code need the `claude` CLI. A config
   error in an agent's entry now names the agent (e.g. "Agent #2 in
   ...").
 

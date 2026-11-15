@@ -1,0 +1,24 @@
+# Sample mixed-harness ensemble: a Claude Code analyst alongside pi analysts,
+# with a Claude Code consolidator. Claude Code entries run under your own
+# `claude` setup and bill however it does (see "Choosing a harness" in the
+# README); pi entries need credentials for their providers (see
+# `pi --list-models`). Replace any provider or model you don't have.
+agents:
+  - harness: claude
+    provider: anthropic
+    model: claude-opus-5-5
+  - harness: pi
+    provider: deepseek
+    model: deepseek-flash
+  - harness: pi
+    provider: openrouter
+    model: z-ai/glm-5.3-flash
+  # The same model under the other harness, to compare harnesses:
+  - harness: pi
+    provider: anthropic
+    model: claude-opus-5-5
+
+consolidator:
+  harness: claude
+  provider: anthropic
+  model: claude-sonnet-5-5

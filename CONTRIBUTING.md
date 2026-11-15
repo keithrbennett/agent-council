@@ -40,7 +40,7 @@ Before opening an issue:
 - Check whether an existing issue already addresses the subject.
 - Include clear reproduction steps when reporting a problem.
 - Describe the expected and actual behavior.
-- Include your agent-council version (`agent-council -v`), pi version (`pi --version`), Ruby version (`ruby -v`), and operating system (and whether you are running under WSL).
+- Include your agent-council version (`agent-council -v`), pi or Claude Code version (`pi --version`, `claude --version`), Ruby version (`ruby -v`), and operating system (and whether you are running under WSL).
 - Name the providers and models involved, if the problem concerns particular ones.
 - Include relevant agent-council output, while removing API keys and other sensitive information.
 
@@ -85,7 +85,7 @@ Pull requests should:
 - Pass the tests and RuboCop checks.
 - Update documentation and examples when behavior changes.
 - Explain how the change was tested and validated.
-- Clearly distinguish testing with stubs from testing with real pi runs.
+- Clearly distinguish testing with stubs from testing with real harness runs.
 
 ---
 
@@ -98,7 +98,7 @@ bundle exec rspec
 bundle exec rubocop
 ```
 
-The tests make no model calls. For changes affecting how pi is invoked or how its output is handled, also run agent-council for real, for example with the smoke-test prompt:
+The tests make no model calls. For changes affecting how a harness is invoked or how its output is handled, also run agent-council for real, for example with the smoke-test prompt:
 
 ```bash
 ./exe/agent-council \
@@ -110,8 +110,8 @@ The tests make no model calls. For changes affecting how pi is invoked or how it
 
 In the pull request, identify:
 
-- The pi version and Ruby implementations and versions tested (CI covers several Ruby and JRuby versions).
-- Whether testing included real pi runs, and with which providers.
+- The harness versions (pi, Claude Code) and Ruby implementations and versions tested (CI covers several Ruby and JRuby versions).
+- Whether testing included real harness runs, and with which harnesses and providers.
 - Any relevant behavior that could not be tested.
 
 ---

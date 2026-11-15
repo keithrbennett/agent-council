@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
 # Focused tests for the harness-agnostic logic in lib/agent_council.rb
-# (no model calls). Pi-specific behavior is tested in
-# spec/agent_council/pi_harness_spec.rb. Run with: rspec
+# (no model calls), plus how run_agent handles each harness's output.
+# Harness-specific parsing is tested in spec/agent_council/pi_harness_spec.rb
+# and spec/agent_council/claude_code_harness_spec.rb. Run with: rspec
 
 require 'spec_helper'
 require 'json'
@@ -197,6 +198,126 @@ RSpec.describe AgentCouncil do
       end
     end
 
+    describe 'under Claude Code' do
+      let(:claude_agent) do
+        { 'harness' => 'claude', 'provider' => 'anthropic', 'model' => 'claude-haiku-5-5' }
+      end
+
+      def claude_fixture(name)
+        File.read(File.expand_path("fixtures/claude_code/#{name}.jsonl", __dir__), encoding: 'UTF-8')
+      end
+
+      it 'explains a failure that exited nonzero from its stream, not its stderr' do
+        stub_capture3(claude_fixture('not_logged_in'), instance_double(Process::Status, success?: false,
+          exitstatus: 1))
+        _label, ok, detail = described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', index: 1)
+        expect(ok).to be(false)
+        expect(detail).to eq('claude exited 1: Not logged in · Please run /login')
+      end
+
+      it 'keeps terminal escapes out of a failure, whether or not it exited 0' do
+        stream = "#{JSON.generate('type' => 'result', 'is_error' => true, 'result' => "bad\e[2J\rmodel")}\n"
+        stub_capture3(stream, instance_double(Process::Status, success?: false, exitstatus: 1))
+        _label, _ok, detail = described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', index: 1)
+        expect(detail).to eq('claude exited 1: bad [2J model')
+
+        stub_capture3(stream, instance_double(Process::Status, success?: true))
+        _label, _ok, detail = described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', index: 1)
+        expect(detail).to eq('claude exited 0 but the run failed: bad [2J model')
+      end
+
+      it 'still reads warnings when the stream has an invalid byte' do
+        denial = { 'tool_name' => 'Bash', 'tool_input' => { 'command' => 'echo BAD' } }
+        stream = "#{JSON.generate('type' => 'result', 'is_error' => false, 'result' => 'report',
+          'permission_denials' => [denial])}\n".sub('BAD', "\xFF").b
+        stub_capture3(stream, instance_double(Process::Status, success?: true))
+        *, warnings = described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', index: 1)
+        expect(warnings).to eq(["Claude Code refused 1 tool call: Bash (echo \uFFFD)"])
+      end
+
+      # Returned as recorded in run.json, so no reader of it gets the escape.
+      it "returns warnings with no terminal escapes from a refused call's command" do
+        denial = { 'tool_name' => 'Bash', 'tool_input' => { 'command' => "echo \e[2Jx" } }
+        stream = "#{JSON.generate('type' => 'result', 'is_error' => false, 'result' => 'report',
+          'permission_denials' => [denial])}\n"
+        stub_capture3(stream, instance_double(Process::Status, success?: true))
+        *, warnings = described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', index: 1)
+        expect(warnings).to eq(['Claude Code refused 1 tool call: Bash (echo [2Jx)'])
+      end
+
+      # Returned, not printed: run_agent runs in a worker thread.
+      it 'keeps the report of a run with refused tool calls, returning a warning of them' do
+        stub_capture3(claude_fixture('denied'), instance_double(Process::Status, success?: true))
+        _label, ok, filename, _usage, warnings = nil
+        expect do
+          _label, ok, filename, _usage, warnings =
+            described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', index: 1)
+        end.to output('').to_stdout.and output('').to_stderr
+        expect(ok).to be(true)
+        expect(filename).to eq('prefix_01_claude_anthropic_claude-haiku-5-5.md')
+        expect(warnings).to eq(['Claude Code refused 1 tool call: Bash (cat README.md)'])
+      end
+
+      # So report readers, and the consolidator, which reads the reports, see them.
+      it "passes the warnings to the header, for the report's byline" do
+        stub_capture3(claude_fixture('denied'), instance_double(Process::Status, success?: true))
+        header = ->(fields) { described_class.byline_table(fields, claude_agent) }
+        _label, ok, filename =
+          described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', header: header)
+        expect(ok).to be(true)
+        expect(File.read(File.join(run_dir, filename)))
+          .to include('| warnings | Claude Code refused 1 tool call: Bash (cat README.md) |')
+      end
+
+      it 'fills in the default provider of an entry given straight to it' do
+        stub_capture3(claude_fixture('success'), instance_double(Process::Status, success?: true))
+        entry = { 'harness' => 'claude', 'model' => 'claude-haiku-5-5' }
+        label, ok, filename = described_class.run_agent(entry, 'prompt', run_dir, 'prefix', index: 1)
+        expect(ok).to be(true), filename
+        expect(label).to eq('#1 anthropic / claude-haiku-5-5')
+        expect(filename).to eq('prefix_01_claude_anthropic_claude-haiku-5-5.md')
+      end
+
+      it 'treats a harness returning nil for its warnings as having none' do
+        stub_capture3(claude_fixture('success'), instance_double(Process::Status, success?: true))
+        allow(AgentCouncil::Harnesses::ClaudeCodeHarness).to receive(:warnings).and_return(nil)
+        _label, ok, _filename, _usage, warnings =
+          described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', index: 1)
+        expect(ok).to be(true)
+        expect(warnings).to eq([])
+      end
+
+      it "returns a failed run's warnings, since they may be why it failed" do
+        denial = { 'tool_name' => 'Bash', 'tool_input' => { 'command' => 'git diff' } }
+        stream = "#{JSON.generate('type' => 'result', 'is_error' => true,
+          'errors' => ['Reached maximum number of turns (3)'], 'permission_denials' => [denial] * 3)}\n"
+        stub_capture3(stream, instance_double(Process::Status, success?: false, exitstatus: 1))
+        _label, ok, detail, _usage, warnings =
+          described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', index: 1)
+        expect(ok).to be(false)
+        expect(detail).to eq('claude exited 1: Reached maximum number of turns (3)')
+        expect(warnings).to eq(['Claude Code refused 3 tool calls: Bash (git diff)'])
+      end
+
+      it 'returns no warnings for a failed run with nothing refused' do
+        stub_capture3(claude_fixture('not_logged_in'), instance_double(Process::Status, success?: false,
+          exitstatus: 1))
+        result = described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', index: 1)
+        expect(result.size).to eq(5)
+        expect(result.last).to eq([])
+      end
+
+      it 'keeps a saved run a success when its warnings cannot be read' do
+        stub_capture3(claude_fixture('success'), instance_double(Process::Status, success?: true))
+        allow(AgentCouncil::Harnesses::ClaudeCodeHarness).to receive(:warnings)
+          .and_raise(TypeError, "bad\e[2J\nx")
+        _label, ok, _filename, _usage, warnings =
+          described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', index: 1)
+        expect(ok).to be(true)
+        expect(warnings).to eq(["could not read the run's warnings (TypeError: bad [2J x)"])
+      end
+    end
+
     it "runs and reads the output of the agent's own harness, naming it in the filename and front matter" do
       other = Module.new do
         const_set(:NAME, 'other')
@@ -204,6 +325,8 @@ RSpec.describe AgentCouncil do
         module_function def usage(_stdout) = { 'input' => 1, 'output' => 2 }
         module_function def error_message(_stdout) = nil
         module_function def final_response(stdout) = "answer from #{stdout.strip}"
+        module_function def warnings(_stdout) = []
+        module_function def exit_detail(_stdout, stderr) = stderr
       end
       stub_const('AgentCouncil::Harnesses::BY_NAME', { 'pi' => AgentCouncil::Harnesses::PiHarness,
         'other' => other })
@@ -280,6 +403,37 @@ RSpec.describe AgentCouncil do
 
       expect(ok).to be(false)
       expect(usage).to eq({ 'input' => 5, 'output' => 6 })
+    end
+
+    it "cuts a failure's reason to 300 characters, and gives one when cleanup leaves none" do
+      status = instance_double(Process::Status, success?: false, exitstatus: 1)
+      detail_for = ->(stderr) {
+        allow(Open3).to receive(:capture3).and_return(['', stderr, status])
+        described_class.run_agent(agent, 'prompt', run_dir, 'prefix')[2]
+      }
+      expect(detail_for.call("#{'e' * 500}\n")).to eq("pi exited 1: #{'e' * 300}...")
+      expect(detail_for.call("\e\a\n")).to eq('pi exited 1: no error output')
+    end
+
+    it 'explains a failure whose stderr has an invalid byte' do
+      allow(Open3).to receive(:capture3)
+        .and_return(['', "boom \xFF\n".b, instance_double(Process::Status, success?: false, exitstatus: 1)])
+      _label, ok, detail = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
+      expect(ok).to be(false)
+      expect(detail).to eq("pi exited 1: boom \uFFFD")
+    end
+
+    it 'reports an exception as a failure on one line, with no terminal escapes' do
+      allow(Open3).to receive(:capture3).and_raise(IOError, "broke\e[2J\nhere")
+      _label, ok, detail = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
+      expect(ok).to be(false)
+      expect(detail).to eq('IOError: broke [2J here')
+    end
+
+    it "cuts an exception's reason to 300 characters" do
+      allow(Open3).to receive(:capture3).and_raise(IOError, 'x' * 1000)
+      detail = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')[2]
+      expect(detail).to eq("IOError: #{'x' * 291}...")
     end
 
     it 'deletes the scratch dir after a failed run' do
@@ -453,7 +607,7 @@ RSpec.describe AgentCouncil do
       File.write('config.yml', YAML.dump('agents' => [{ 'provider' => 'p', 'model' => 'm' }]))
       ENV[described_class::ENV_OPTS_VAR] = '--output-dir from-env'
       allow(described_class).to receive(:abort_unless_harnesses_installed)
-      allow(described_class).to receive(:run_agent).and_return(['#1 p / m', true, 'report.md'])
+      allow(described_class).to receive(:run_agent).and_return(['#1 p / m', true, 'report.md', nil, []])
       allow(described_class).to receive(:puts_consolidation_status)
 
       expect { described_class.main(['p_prompt.md', 'config.yml']) }
@@ -468,7 +622,7 @@ RSpec.describe AgentCouncil do
       File.write('config.yml', YAML.dump('agents' => [{ 'provider' => 'p', 'model' => 'm' }]))
       ENV[described_class::ENV_OPTS_VAR] = '--output-dir from-env'
       allow(described_class).to receive(:abort_unless_harnesses_installed)
-      allow(described_class).to receive(:run_agent).and_return(['#1 p / m', true, 'report.md'])
+      allow(described_class).to receive(:run_agent).and_return(['#1 p / m', true, 'report.md', nil, []])
       allow(described_class).to receive(:puts_consolidation_status)
 
       expect { described_class.main(['--output-dir', 'from-cli', 'p_prompt.md', 'config.yml']) }
@@ -808,6 +962,14 @@ RSpec.describe AgentCouncil do
         .with([consolidator_config['consolidator']])
     end
 
+    it "completes a consolidator without a provider from its harness's default" do
+      write_run(config: { 'consolidator' => { 'harness' => 'claude', 'model' => 'cm' } })
+      allow(described_class).to receive(:abort_unless_harnesses_installed).and_raise(SystemExit)
+      expect { described_class.main(['--consolidate', run_dir]) }.to raise_error(SystemExit)
+      expect(described_class).to have_received(:abort_unless_harnesses_installed)
+        .with([{ 'harness' => 'claude', 'model' => 'cm', 'provider' => 'anthropic' }])
+    end
+
     it 'aborts when the harness executable is not on PATH' do
       write_run
       Dir.mkdir('empty-bin')
@@ -929,6 +1091,16 @@ RSpec.describe AgentCouncil do
 
   describe '.report_filename' do
     let(:zai) { { 'provider' => 'zai', 'model' => 'glm-5.3' } }
+
+    # The point of mixing harnesses: one model under each.
+    it 'tells apart the same provider and model under each harness, by agent number and harness' do
+      pi = { 'provider' => 'anthropic', 'model' => 'claude-opus-5-5' }
+      claude = AgentCouncil::Harnesses.with_defaults(pi.except('provider').merge('harness' => 'claude'))
+      names = [[pi, 1], [claude, 2]].map { |entry, i| described_class.report_filename('p', entry, index: i) }
+      expect(names).to eq(%w[p_01_pi_anthropic_claude-opus-5-5.md p_02_claude_anthropic_claude-opus-5-5.md])
+      labels = [1, 2].map { |index| described_class.agent_label('anthropic', 'claude-opus-5-5', index) }
+      expect(labels).to eq(['#1 anthropic / claude-opus-5-5', '#2 anthropic / claude-opus-5-5'])
+    end
 
     it 'carries the full timestamp and query slug, then harness/provider/model' do
       expect(described_class.report_filename('2026-09-03-19-23-57_code-base-state',
@@ -1173,6 +1345,13 @@ RSpec.describe AgentCouncil do
   describe '.run_entry' do
     let(:agent) { { 'provider' => 'p', 'model' => 'm' } }
 
+    it "records a run's warnings, only when there are some" do
+      entry = ->(**opts) { described_class.run_entry(agent, true, 'r.md', 1.0, nil, **opts) }
+      expect(entry.call(warnings: ['refused'])['warnings']).to eq(['refused'])
+      expect(entry.call(warnings: [])).not_to have_key('warnings')
+      expect(entry.call).not_to have_key('warnings')
+    end
+
     it "names a successful run's report under dir, with its duration in seconds" do
       entry = described_class.run_entry(agent, true, 'a.md', 61.26, { 'input' => 1 },
         index: 2, dir: 'reviews')
@@ -1314,8 +1493,49 @@ RSpec.describe AgentCouncil do
     end
   end
 
+  describe '.plain_line' do
+    it 'turns each run of whitespace or control characters into one space' do
+      expect(described_class.plain_line("a\r\nb\e[2J c\u009b\td \n")).to eq('a b [2J c d')
+    end
+
+    it 'removes invisible format characters such as bidirectional overrides' do
+      expect(described_class.plain_line("rm \u202Egnp.exe\u200B x")).to eq('rm gnp.exe x')
+    end
+
+    it 'replaces invalid bytes rather than raising' do
+      expect(described_class.plain_line("bad\xFF byte".dup.force_encoding('UTF-8'))).to eq("bad\uFFFD byte")
+    end
+
+    it 'reads binary text, such as a SystemCallError message, as UTF-8' do
+      expect(described_class.plain_line("caf\xC3\xA9 \xFF".b)).to eq("caf\u00E9 \uFFFD")
+    end
+
+    it 'puts each warning on its own console line, with no terminal escapes' do
+      expect(described_class.warning_lines(["Bash (printf '\e]0;x\a')\nmore"]))
+        .to eq(["      Warning: Bash (printf ' ]0;x ') more"])
+    end
+  end
+
   describe '.byline_table' do
     let(:gpt) { { 'provider' => 'openai', 'model' => 'gpt-x' } }
+
+    it 'escapes backslashes too, so an escaped pipe in a command stays in the cell' do
+      meta = { 'warnings' => ['Bash (grep "a\\|b" f)'] }
+      expect(described_class.byline_table(meta, gpt)).to include('| warnings | Bash (grep "a\\\\\\|b" f) |')
+    end
+
+    it 'keeps carriage returns and terminal escapes out of a cell' do
+      meta = { 'warnings' => ["Bash (echo a\rb\e[2J)"] }
+      expect(described_class.byline_table(meta, gpt)).to include("| warnings | Bash (echo a b [2J) |\n")
+    end
+
+    it 'keeps a warning with pipes or newlines to one cell of one row' do
+      meta = { 'warnings' => ['Claude Code refused 1 tool call: Bash (git log | head -5)', "two\nlines"] }
+      rows = described_class.byline_table(meta, gpt).lines
+      expect(rows)
+        .to include("| warnings | Claude Code refused 1 tool call: Bash (git log \\| head -5); two lines |\n")
+      expect(rows.size).to eq(2 + 4) # heading, rule, harness, provider, model, warnings
+    end
 
     it 'lists the main front matter fields, leaving sources to sources_table' do
       meta = {
@@ -1385,7 +1605,7 @@ RSpec.describe AgentCouncil do
   describe '.run_consolidation' do
     it 'fails cleanly when the config entry is malformed' do
       expect(described_class.run_consolidation({ 'provider' => 'zai' }, 'prompt', '/tmp/x', 'prefix'))
-        .to eq(['consolidator', false, "config entry needs 'provider' and 'model'"])
+        .to eq(['consolidator', false, "config entry needs 'provider' and 'model'", nil, nil, []])
     end
 
     it 'fails cleanly when there are no reports to consolidate' do
@@ -1409,7 +1629,7 @@ RSpec.describe AgentCouncil do
 
         result = described_class.run_consolidation({ 'provider' => 'zai', 'model' => 'glm-5.3' },
           'prompt', dir, 'prefix')
-        expect(result).to eq(['zai / glm-5.3', false, 'ArgumentError: invalid byte sequence'])
+        expect(result).to eq(['zai / glm-5.3', false, 'ArgumentError: invalid byte sequence', nil, nil, []])
       end
     end
 
@@ -1426,7 +1646,7 @@ RSpec.describe AgentCouncil do
           filename:, meta:, header: nil, pool: nil|
           captured = { run_dir: run_dir, filename: filename, meta: meta, header: header }
           File.write(File.join(run_dir, filename), 'consolidated body')
-          ['zai / glm-5.3', true, filename]
+          ['zai / glm-5.3', true, filename, nil, []]
         end
 
         label = ok = nil
@@ -1771,10 +1991,10 @@ RSpec.describe AgentCouncil do
 
     it 'lists failed agents, with their reasons, after the reports' do
       reports = [['#1 zai / glm-5.3', 'findings A']]
-      failures = [['#2 openai / gpt-x', 'pi exited 1: rate limited']]
+      failures = [['#2 openai / gpt-x', "pi exited 1: rate\nlimited", 'pi']]
       text = described_class.consolidation_prompt('THE QUESTION', reports, failures)
       expect(text).to end_with(
-        "# Agents without a report\n\n- #2 openai / gpt-x: pi exited 1: rate limited\n"
+        "# Agents without a report\n\n- #2 openai / gpt-x (harness: pi): pi exited 1: rate limited\n"
       )
     end
 
@@ -1792,6 +2012,16 @@ RSpec.describe AgentCouncil do
     end
   end
 
+  describe 'the sample configs in examples/configs' do
+    Dir[File.expand_path('../examples/configs/*.yml', __dir__)].each do |path|
+      it "#{File.basename(path)} is a valid config" do
+        config = YAML.safe_load_file(path)
+        entries = config.fetch('agents') + [config['consolidator']].compact
+        expect(entries.map { |entry| described_class.entry_error(entry) }).to all(be_nil)
+      end
+    end
+  end
+
   describe '.entry_error' do
     it 'accepts an entry with a provider and model, and a known harness or none' do
       expect(described_class.entry_error({ 'provider' => 'p', 'model' => 'm' })).to be_nil
@@ -1805,16 +2035,67 @@ RSpec.describe AgentCouncil do
       expect(described_class.entry_error({ 'harness' => false, 'provider' => 'p', 'model' => 'm' }))
         .to include('unknown harness, false')
     end
+
+    it 'accepts a claude entry without a provider, whose harness has a default' do
+      expect(described_class.entry_error({ 'harness' => 'claude', 'model' => 'm' })).to be_nil
+      expect(described_class.entry_error({ 'harness' => 'claude', 'provider' => 'bedrock', 'model' => 'm' }))
+        .to be_nil
+    end
+
+    it 'reports both problems of a claude entry with neither a model nor a string provider' do
+      expect(described_class.entry_error({ 'harness' => 'claude', 'provider' => 1 }))
+        .to eq("needs a string 'model' field, and gives a 'provider' that is not a string")
+    end
+
+    it 'asks a claude entry only for a model, and for a string provider if it gives one' do
+      expect(described_class.entry_error({ 'harness' => 'claude' })).to eq("needs a string 'model' field")
+      expect(described_class.entry_error({ 'harness' => 'claude', 'provider' => 1, 'model' => 'm' }))
+        .to eq("gives a 'provider' that is not a string")
+    end
+
+    it 'reports an unknown harness before missing fields' do
+      expect(described_class.entry_error({ 'harness' => 'nope' })).to start_with('names an unknown harness')
+    end
   end
 
   describe '.missing_agents' do
+    it "labels a claude entry without a provider by its harness's default, as its report is" do
+      config = { 'agents' => [{ 'harness' => 'claude', 'model' => 'claude-opus-5-5' }] }
+      label = '#1 anthropic / claude-opus-5-5'
+      expect(described_class.missing_agents(config, []).map(&:first)).to eq([label])
+      expect(described_class.missing_agents(config, [[label, 'body', {}]])).to eq([])
+    end
+
     it 'lists configured agents without a report, labeled as reports are' do
       zai = { 'provider' => 'zai', 'model' => 'glm-5.3' }
       config = { 'agents' => [zai, zai, { 'provider' => 'openai', 'model' => 'gpt-x' }] }
       reports = [['#2 zai / glm-5.3', 'body', {}]]
       expect(described_class.missing_agents(config, reports).map(&:first))
         .to eq(['#1 zai / glm-5.3', '#3 openai / gpt-x'])
-      expect(described_class.missing_agents(config, reports).first.last).to include('reason not recorded')
+      expect(described_class.missing_agents(config, reports).first[1]).to include('reason not recorded')
+    end
+
+    it "gives an agent's harness, and the error and warnings run.json records for its failed run" do
+      claude = { 'harness' => 'claude', 'provider' => 'anthropic', 'model' => 'm' }
+      config = { 'agents' => [{ 'provider' => 'zai', 'model' => 'glm-5.3' }, claude] }
+      runs = [{ 'agent_index' => 2, 'harness' => 'claude', 'provider' => 'anthropic', 'model' => 'm',
+                'ok' => false, 'error' => 'claude exited 1: out of turns', 'warnings' => ['refused make'] }]
+      expect(described_class.missing_agents(config, [], runs)).to eq(
+        [['#1 zai / glm-5.3', described_class::MISSING_REPORT_REASON, 'pi'],
+          ['#2 anthropic / m', 'claude exited 1: out of turns; warning: refused make', 'claude']]
+      )
+    end
+
+    it "ignores a run.json entry that isn't the configured agent's failed run" do
+      config = { 'agents' => [{ 'provider' => 'zai', 'model' => 'glm-5.3' }] }
+      run = { 'agent_index' => 1, 'provider' => 'zai', 'model' => 'glm-5.3', 'ok' => false,
+              'error' => 'boom' }
+      entries = [run.merge('model' => 'other'), run.merge('ok' => true), run.merge('harness' => 'claude'),
+        run.merge('error' => nil), 'junk']
+      entries.each do |entry|
+        expect(described_class.missing_agents(config, [], [entry]).first[1])
+          .to eq(described_class::MISSING_REPORT_REASON)
+      end
     end
 
     it 'is empty when every configured agent has a report' do

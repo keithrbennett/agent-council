@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
-# End-to-end runs of exe/agent-council against a fake `pi`, mostly for Ctrl-C:
+# End-to-end runs of exe/agent-council against a fake `pi` (and, for mixed
+# harness configs, a fake `claude`; see write_fake_claude), mostly for Ctrl-C:
 # SIGINT goes to agent-council's whole process group, as a terminal sends it.
 # Agents run in process groups of their own, so they should get only the
 # SIGTERM agent-council sends them; a fake pi that gets SIGINT records it.
@@ -342,6 +343,87 @@ RSpec.describe 'agent-council end to end' do
     expect(File.basename(reports('*_meta.md').first)).to eq(File.basename(meta_report))
   end
 
+  # A fake claude, answering by model: denied, with a report and a refused
+  # tool call recorded in its result event; split, with a split report and
+  # the same refused call, saving its prompt in bin_dir/consolidation_prompt;
+  # stuck, failing at the turn limit after that call was refused.
+  def write_fake_claude
+    denial = { tool_name: 'Bash', tool_input: { command: 'make' } }
+    stuck = JSON.generate(type: 'result', subtype: 'error_max_turns', is_error: true,
+      errors: ['Reached maximum number of turns (3)'], permission_denials: [denial])
+    result = ->(text, denials = []) do
+      JSON.generate(type: 'result', subtype: 'success', is_error: false, result: text,
+        permission_denials: denials, total_cost_usd: 0.02,
+        usage: { input_tokens: 1000, output_tokens: 200, cache_read_input_tokens: 200,
+                 cache_creation_input_tokens: 0 })
+    end
+    fake_claude = File.join(bin_dir, 'claude')
+    File.write(fake_claude, <<~SH)
+      #!/usr/bin/env bash
+      case " $* " in
+        *" --model denied "*) cat >/dev/null; echo '#{result.call('Claude answer.', [denial])}'; exit 0 ;;
+        *" --model split "*)
+          cat >'#{bin_dir}/consolidation_prompt'; echo '#{result.call(split_answer, [denial])}'; exit 0 ;;
+        *" --model stuck "*) cat >/dev/null; echo '#{stuck}'; exit 1 ;;
+      esac
+      cat >/dev/null
+      exit 1
+    SH
+    File.chmod(0o755, fake_claude)
+  end
+
+  it 'runs a config mixing harnesses, each entry under its own' do
+    write_fake_claude
+    agents = [{ 'provider' => 'done', 'model' => 'm1' }, { 'harness' => 'claude', 'model' => 'denied' }]
+    config = { 'agents' => agents, 'consolidator' => { 'harness' => 'claude', 'model' => 'split' } }
+    File.write(File.join(work_dir, 'config.yml'), YAML.dump(config))
+
+    status = run_council
+
+    expect(status.exitstatus).to eq(0), output_report
+    expect(out).to include('#1 pi / done / m1', '#2 claude / anthropic / denied')
+    expect(out).to include("Consolidator Agent:\n  claude / anthropic / split")
+    warning = 'Warning: Claude Code refused 1 tool call: Bash (make)'
+    expect(out).to match(%r{^  ✓ \S+  #2 anthropic / denied\n      #{Regexp.escape(warning)}$})
+    expect(reports('reviews/*').map { |path| File.basename(path)[/_\d\d_.*/] })
+      .to contain_exactly('_01_pi_done_m1.md', '_02_claude_anthropic_denied.md')
+    fields, body = AgentCouncil.parse_front_matter(File.read(reports('reviews/*_claude_*').first))
+    expect(fields.values_at('harness', 'provider', 'model')).to eq(%w[claude anthropic denied])
+    expect(body).to include("| harness | claude |\n", 'Claude answer.')
+    findings = reports('*_consolidated_claude_anthropic_split_findings.md')
+    expect(findings.size).to eq(1), output_report
+    expect(File.read(findings.first))
+      .to include("- Consolidator warnings: #{warning.delete_prefix('Warning: ')}\n")
+    run = JSON.parse(File.read(reports('run.json').first))
+    expect(run['analysts'].map { |a| a['harness'] }).to eq(%w[pi claude])
+    expect(run['analysts'].map { |a| a['warnings'] })
+      .to eq([nil, ['Claude Code refused 1 tool call: Bash (make)']])
+    expect(run['consolidations'].map { |c| c['harness'] }).to eq(%w[claude])
+    expect(run['consolidations'].first['warnings']).to eq(['Claude Code refused 1 tool call: Bash (make)'])
+    expect(out.scan("      #{warning}\n").size).to eq(2), output_report # the analyst's and the consolidator's
+    meta = File.read(reports('*_meta.md').first)
+    expect(meta).to include("| warnings | #{warning.delete_prefix('Warning: ')} |")
+  end
+
+  it "reports a failed run's warnings, to the console, run.json, and the consolidator" do
+    write_fake_claude
+    agents = [{ 'provider' => 'done', 'model' => 'm1' }, { 'harness' => 'claude', 'model' => 'stuck' }]
+    config = { 'agents' => agents, 'consolidator' => { 'harness' => 'claude', 'model' => 'split' } }
+    File.write(File.join(work_dir, 'config.yml'), YAML.dump(config))
+
+    status = run_council
+
+    expect(status.exitstatus).to eq(1), output_report
+    reason = 'claude exited 1: Reached maximum number of turns (3)'
+    warning = 'Claude Code refused 1 tool call: Bash (make)'
+    expect(out).to match(%r{^  ✗ \S+  #2 anthropic / stuck\n      #{Regexp.escape(reason)}\n      Warning: #{
+      Regexp.escape(warning)}$}), output_report
+    run = JSON.parse(File.read(reports('run.json').first))
+    expect(run['analysts'].last.values_at('ok', 'error', 'warnings')).to eq([false, reason, [warning]])
+    expect(File.read(File.join(bin_dir, 'consolidation_prompt')))
+      .to include("- #2 anthropic / stuck (harness: claude): #{reason}; warning: #{warning}\n")
+  end
+
   it 'writes the run dir under --output-dir when given' do
     write_config(%w[done])
 
@@ -367,6 +449,25 @@ RSpec.describe 'agent-council end to end' do
     end
 
     def reviews_snapshot = reports('reviews/*.md').to_h { |path| [path, File.read(path)] }
+
+    it 'consolidates under Claude Code, with a provider-less consolidator and its warnings' do
+      write_fake_claude
+      run_dir = finished_run('done')
+      config_path = File.join(work_dir, run_dir, 'config.yml')
+      consolidator = { 'harness' => 'claude', 'model' => 'split' }
+      config = YAML.load_file(config_path).merge('consolidator' => consolidator)
+      File.write(config_path, YAML.dump(config))
+
+      status = run_council(args: ['--consolidate', run_dir])
+
+      expect(status.exitstatus).to eq(0), output_report
+      expect(out).to include("Consolidator Agent:\n  claude / anthropic / split\n")
+      expect(out).to include("\n      Warning: Claude Code refused 1 tool call: Bash (make)\n")
+      expect(reports('*_consolidated_claude_anthropic_split_findings.md').size).to eq(1), output_report
+      run = JSON.parse(File.read(reports('run.json').first))
+      expect(run['consolidations'].last.values_at('harness', 'provider', 'warnings'))
+        .to eq(['claude', 'anthropic', ['Claude Code refused 1 tool call: Bash (make)']])
+    end
 
     it 'consolidates an existing run in place, running no analysts' do
       run_dir = finished_run('done')
@@ -440,13 +541,23 @@ RSpec.describe 'agent-council end to end' do
       expect(Dir.children(moved).grep(/_consolidated_pi_done_c\.md\z/).size).to eq(1)
     end
 
-    it 'tells the consolidator which configured agents have no report' do
+    it 'tells the consolidator which configured agents have no report, and why when run.json says' do
       run_dir = finished_run('capture', analysts: %w[done fails])
 
       expect(run_council(args: ['--consolidate', run_dir]).exitstatus).to eq(0), output_report
       expect(out).to include("Consolidation Report (in #{run_dir}, from 1 review):\n")
       expect(File.read(captured_path, encoding: 'UTF-8')).to end_with(
-        "# Agents without a report\n\n- #2 fails / m2: #{AgentCouncil::MISSING_REPORT_REASON}\n"
+        "# Agents without a report\n\n- #2 fails / m2 (harness: pi): pi exited 1: boom\n"
+      )
+    end
+
+    it "says why isn't known when run.json is missing" do
+      run_dir = finished_run('capture', analysts: %w[done fails])
+      File.delete(File.join(work_dir, run_dir, 'run.json'))
+
+      expect(run_council(args: ['--consolidate', run_dir]).exitstatus).to eq(0), output_report
+      expect(File.read(captured_path, encoding: 'UTF-8')).to end_with(
+        "# Agents without a report\n\n- #2 fails / m2 (harness: pi): #{AgentCouncil::MISSING_REPORT_REASON}\n"
       )
     end
 
@@ -484,7 +595,8 @@ RSpec.describe 'agent-council end to end' do
     expect(run_council.exitstatus).to eq(1), output_report
     captured = File.read(captured_path, encoding: 'UTF-8')
     expect(captured).to include('## Report from #1 done / m1')
-    expect(captured).to end_with("# Agents without a report\n\n- #2 fails / m2: pi exited 1: boom\n")
+    expect(captured)
+      .to end_with("# Agents without a report\n\n- #2 fails / m2 (harness: pi): pi exited 1: boom\n")
   end
 
   # Pre-claims every run dir name until run_council's exit deadline, so the

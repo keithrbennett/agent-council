@@ -17,6 +17,28 @@ RSpec.describe AgentCouncil::Harnesses do
     end
   end
 
+  describe '.with_defaults' do
+    it "fills in the provider of an entry that gives none from its harness's default" do
+      expect(described_class.with_defaults({ 'harness' => 'claude', 'model' => 'm' }))
+        .to eq({ 'harness' => 'claude', 'model' => 'm', 'provider' => 'anthropic' })
+      expect(described_class.with_defaults({ 'harness' => 'claude', 'provider' => nil, 'model' => 'm' }))
+        .to include('provider' => 'anthropic')
+      expect(described_class.with_defaults({ 'harness' => 'claude', 'provider' => ' ', 'model' => 'm' }))
+        .to include('provider' => 'anthropic')
+    end
+
+    it 'keeps a provider the entry gives' do
+      entry = { 'harness' => 'claude', 'provider' => 'bedrock', 'model' => 'm' }
+      expect(described_class.with_defaults(entry)).to be(entry)
+    end
+
+    it 'leaves an entry whose harness has no default, or that validation will reject, as it is' do
+      [{ 'model' => 'm' }, { 'harness' => 'nope', 'model' => 'm' }, nil, 'junk'].each do |entry|
+        expect(described_class.with_defaults(entry)).to be(entry)
+      end
+    end
+  end
+
   describe '.module_for' do
     it "returns the module of the entry's harness" do
       expect(described_class.module_for({ 'harness' => 'pi' })).to be(AgentCouncil::Harnesses::PiHarness)
@@ -31,6 +53,15 @@ RSpec.describe AgentCouncil::Harnesses do
   # The invariants below hold vacuously for an empty registry.
   it 'has at least one harness' do
     expect(described_class::BY_NAME).not_to be_empty
+  end
+
+  # What AgentCouncil calls on every harness (see harnesses.rb).
+  it 'gives every harness the whole interface' do
+    interface = %i[argv usage error_message exit_detail warnings final_response assistant_messages]
+    described_class::BY_NAME.each_value do |harness|
+      expect(harness).to respond_to(*interface)
+      expect(harness.const_defined?(:DEFAULT_PROVIDER, false)).to be(true), harness.name
+    end
   end
 
   it 'names each harness by its own NAME' do

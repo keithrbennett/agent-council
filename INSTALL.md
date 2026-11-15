@@ -3,14 +3,15 @@
 This guide is for developers comfortable with the command line who have
 never used Ruby. It takes you from a bare machine to a working
 `agent-council` command. Already have Ruby 3.3+ (or JRuby 10+) and
-`pi`? Just run `gem install agent-council`; see the
+`pi` (or Claude Code)? Just run `gem install agent-council`; see the
 [README](README.md#quick-start).
 
 ## 1. Prepare your system
 
 - **macOS and Linux:** any terminal works. Linux needs `curl` installed.
 - **Windows:** native Windows is **not supported**. Everything, including
-  Ruby, Pi, and agent-council, must be installed and run inside
+  Ruby, the harness CLIs you use (Pi, Claude Code, or both), and
+  agent-council, must be installed and run inside
   [WSL](https://learn.microsoft.com/windows/wsl/install) with Ubuntu. In
   an administrator PowerShell, run `wsl --install -d Ubuntu`, restart if
   asked, then open an Ubuntu terminal and follow the Linux steps below
@@ -73,15 +74,21 @@ For other install methods and details, see the
 [Mise documentation](https://mise.jdx.dev/getting-started.html) and its
 [Ruby page](https://mise.jdx.dev/lang/ruby.html).
 
-## 3. Install Pi and configure a provider
+## 3. Install a harness: Pi, Claude Code, or both
 
-agent-council drives AI models through the
-[Pi](https://github.com/earendil-works/pi) coding agent, version 1.0.4 or
-later. Install Pi by
+agent-council drives AI models through a coding-agent harness: by
+default the [Pi](https://github.com/earendil-works/pi) coding agent,
+version 1.0.4 or later. To use it, install Pi by
 following its [installation instructions](https://github.com/earendil-works/pi),
 and configure it with credentials for **at least one AI model provider**
 (see [Pi's documentation](https://pi.dev/docs/latest)). Under WSL, do both
 inside WSL.
+
+Agents can also run under [Claude Code](https://code.claude.com/docs)
+(see the README's [Choosing a harness](README.md#choosing-a-harness)).
+For those, install the `claude` CLI and log in (under WSL, inside WSL).
+A config needs Pi only if some agent, or the consolidator, runs under it,
+as every entry without a `harness` does.
 
 ## 4. Install agent-council
 

@@ -5,8 +5,8 @@ Every analyst received the identical prompt (included below as "Original
 prompt"), followed by formatting instructions for its report. Their reports follow under "Analyst reports", each headed "Report
 from" its source label (`#<agent number> <provider> / <model>`), with a
 "Harness:" line below it. Agents that produced no report are listed last,
-under "Agents without a report", each with the reason shown there (its
-failure, when known).
+under "Agents without a report", each with its harness and the reason
+shown there (its failure, when known, and any warnings about its run).
 
 Produce a consolidated report in two parts, with exactly these sections in
 this order. The first part is the findings; the second describes the
@@ -30,8 +30,10 @@ Issues raised by exactly one analyst, attributed to its source.
 
 - Assess whether each is plausible.
 - Group findings by agent; for each group:
-  - output a heading with the agent number, harness, provider, and model
-    name (the harness is shown under each report's heading)
+  - output a heading with the agent number, harness, provider, and model,
+    as `#<agent number> <harness> / <provider> / <model>` (e.g. `#1 claude /
+    anthropic / claude-opus-5-5`); the harness is on the "Harness:" line
+    under each report's heading
  
 ## Contradictions
 
@@ -47,18 +49,20 @@ result.
 
 ## Agent Consultants
 
-A list of provider/model agents consulted. For each agent listed under
+A list of the agents consulted, by harness, provider, and model. For each agent listed under
 "Agents without a report", say it produced no report and give the reason
 shown there; do not infer failures any other way. If a report shows its
-agent could not properly do the task, say so too.
+agent could not properly do the task, say so too, including when its
+metadata table lists warnings, such as tool calls its harness refused.
 
 ## Agent performance
 
 A brief review of each agent that produced a report: how deep its research
 went (e.g. did it read code, run commands, verify claims) and how much it
 added to the review (unique or confirmed findings vs. noise or errors).
-For each agent, print a header line with agent number, duration, harness, provider,
-and model. Then print a single text string below it with the performance information.
+For each agent, print a header line with its agent number, harness, provider,
+and model, as in the Unique findings headings, followed by its duration. Then
+print a single text string below it with the performance information.
 
 Rules:
 - Begin directly with the "## Findings" section; do not add a

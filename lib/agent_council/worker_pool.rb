@@ -11,10 +11,12 @@ module AgentCouncil
   # terminal's Ctrl-C reaches only agent-council, never the agents. Once
   # #trap_signals is installed, the first INT, TERM, HUP, or QUIT (not on
   # JRuby; see TERMINATING_SIGNALS) raises Interrupt in the main thread,
-  # whose rescue calls #shutdown: it sends every agent SIGTERM (pi then also
-  # stops any commands its bash tool started, which run detached and so would
-  # survive the agent), waits up to the grace period for the workers to
-  # finish, and SIGKILLs agents still running. A second trapped signal other
+  # whose rescue calls #shutdown: it sends every agent SIGTERM, waits up to
+  # the grace period for the workers to finish, and SIGKILLs agents still
+  # running. The commands an agent's shell tool started run in process
+  # groups of their own, which these signals don't reach; pi and Claude
+  # Code stop them on SIGTERM, but an agent that is SIGKILLed can't, so
+  # they may keep running. A second trapped signal other
   # than HUP SIGKILLs them at once. Any HUP after the first signal is
   # ignored: a closing terminal can deliver two at once (one forwarded by the
   # shell, one from the kernel), which must not skip the graceful stop. A

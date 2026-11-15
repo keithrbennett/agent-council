@@ -6,10 +6,13 @@ better than any single agent's, and a **head-to-head comparison** of the
 models and providers behind the agents, measured on speed, token usage,
 cost, and quality.
 
-agent-council runs the **same analytical prompt** through each agent
-using the [Pi](https://github.com/earendil-works/pi) coding-agent harness.
-The agents can use any mix of providers and models, including the same
-provider and model more than once.
+agent-council runs the **same analytical prompt** through each agent,
+under the coding-agent harness each one names: the
+[Pi](https://github.com/earendil-works/pi) harness, for any provider's
+models, or [Claude Code](https://code.claude.com/docs), for Anthropic's,
+billed however your `claude` login is. The agents can use any mix of
+harnesses, providers, and models, including the same model more than
+once, or under each harness.
 
 A **consolidator** agent then reads every agent's report, checks their
 claims against the project where it can, and writes two reports:
@@ -48,9 +51,10 @@ dataset for comparing models and providers on your own work.
 Public leaderboards tell you how models do on someone else's tasks.
 agent-council tells you how they do on *yours*: your codebase, your
 questions, your standards. Every run is a controlled experiment, with the
-same prompt, the same repository, and the same tools at the same moment,
-so the differences you see are differences in the models and in the
-providers serving them.
+same prompt, the same repository, and, under each harness, the same tools,
+at the same moment, so the differences you see are differences in the
+models and in the providers serving them (and, in a run that mixes
+harnesses, in the harnesses, whose tools and loaded context differ).
 
 - **Speed.** Every agent's wall-clock duration, side by side. Find out
   which models answer in two minutes and which take twenty, and whether
@@ -81,10 +85,10 @@ reports, prompt, config, and measurements are saved together in a
 timestamped directory, so a comparison can be rerun next month, against
 next month's models.
 
-The project is at an early stage; support for more harnesses than Pi,
-such as Claude Code and Codex, is among the
-[planned features](DESIGN.md#18-status-and-future-work), and will extend
-these comparisons to the same model running under different harnesses. See
+Because the harness is chosen per agent, a comparison can also pit the
+same model against itself under different harnesses. The project is at
+an early stage; support for more harnesses, such as Codex, is among the
+[planned features](DESIGN.md#18-status-and-future-work). See
 [`DESIGN.md`](DESIGN.md) for the rationale.
 
 ## What makes a good fit
@@ -129,7 +133,9 @@ in detail.
 1. **Install the prerequisites:** Ruby 3.3+ (or JRuby 10+) and the
    [`pi` CLI](https://github.com/earendil-works/pi) (`pi --version`). See
    [Prerequisites](#prerequisites), or [INSTALL.md](INSTALL.md) if you
-   need to install Ruby too.
+   need to install Ruby too. These steps use pi, the default harness;
+   to run agents under Claude Code as well, or instead (then without
+   pi), see [Choosing a harness](#choosing-a-harness).
 2. **Set up credentials for at least one provider in pi** (see
    [pi's documentation][pi-docs]), then list the models available to pi
    (a listed model can still be one your plan doesn't include). Two
@@ -198,18 +204,30 @@ consolidator, see
 - Ruby 3.3 or later, or JRuby 10 or later (standard library only for the
   tool itself; CI tests 3.3, 3.4, 4.0, JRuby 10.0 and the latest
   JRuby)
-- The [`pi` CLI](https://github.com/earendil-works/pi) installed
-  (`pi --version`): 1.0.4 or later, for `--no-mcp`; tested with pi
-  1.3.0, 1.4.0, and 1.5.2
-- Credentials for at least one provider (several give more diverse
-  viewpoints), configured through pi itself (see
-  [pi's documentation][pi-docs])
+- The harness CLIs your config uses (each run checks for them first):
+  - for pi, the default: the
+    [`pi` CLI](https://github.com/earendil-works/pi)
+    (`pi --version`), 1.0.4 or later, for `--no-mcp` (tested with pi
+    1.3.0, 1.4.0, and 1.5.2), with credentials for at least one provider
+    (several give more diverse viewpoints), configured through pi itself
+    (see [pi's documentation][pi-docs]);
+  - for Claude Code: the [`claude` CLI](https://code.claude.com/docs)
+    (`claude --version`; tested with 2.1.325, and earlier versions may
+    lack flags agent-council passes),
+    logged in or set up with an API key.
+
+  agent-council runs the `pi` and `claude` executables found on its
+  `PATH`, not your shell's aliases or functions of those names. If yours
+  add something, such as an environment variable or a directory on
+  `PATH`, set it in the environment you run agent-council from.
 - On Windows, WSL (e.g. Ubuntu): native Windows is not supported. Install
-  and run Ruby, pi, and agent-council inside WSL, from a WSL shell
+  and run Ruby, the harness CLIs your config uses, and agent-council
+  inside WSL, from a WSL shell
   ([INSTALL.md](INSTALL.md) has the steps). Windows drives are reachable
   at `/mnt/c/...`, but file access there is much slower than in the Linux
-  filesystem (e.g. `~/projects`). Set up pi's provider credentials inside
-  WSL too; WSL doesn't share them with Windows.
+  filesystem (e.g. `~/projects`). Set up pi's provider credentials (and
+  log in to Claude Code) inside WSL too; WSL doesn't share them with
+  Windows.
 
 ## Installation
 
@@ -264,9 +282,10 @@ Edit the config to choose the ensemble. The config is the optional second
 argument; if omitted, `./agent-council.yml` in the current directory is used
 (parent directories are not searched), else `~/.agent-council.yml` in your
 home directory. It is an error if neither exists. Each entry becomes one
-run of its harness (`pi` by default; see below) with that
-provider and model (see
-[How it works](#how-it-works-and-what-pi-is-told) for pi's full command), so no Ruby changes
+run of its harness (`pi` by default; see
+[Choosing a harness](#choosing-a-harness)) with that
+model and provider (see
+[How it works](#how-it-works-and-what-the-agents-are-told) for the full commands), so no Ruby changes
 are needed to add, remove, or swap models. A small config (replace the
 providers and models with ones you have credentials for):
 
@@ -288,23 +307,26 @@ consolidating a single report adds cost without adding anything.
 The config must be a YAML mapping with a non-empty `agents` list. Each
 agent, and the consolidator, needs string `provider` and `model` values
 (quote any value YAML would read as something else, such as a number,
-a date, or `yes`). An optional `harness` value names the harness it runs
-under; `pi`, the default, is currently the only one, and an unknown
+a date, or `yes`), except that a Claude Code entry may leave out
+`provider`. An optional `harness` value names the harness it runs
+under, `pi` (the default) or `claude`; an unknown
 name is rejected at startup (with `--consolidate`, only the
 consolidator's, since no analysts run). Other keys are ignored.
 
 More samples are in [`examples/configs/`](examples/configs/), which is
-included in the installed gem. For scripts and agents,
+included in the installed gem; `mixed-harness.yml` mixes pi and Claude
+Code agents. For scripts and agents,
 [`pi-models`](#occasional-utility-pi-models) lists the models in
 machine-readable forms.
 
-An optional top-level `consolidator:` entry (provider + model, same
-shape as an agent) runs after all agents finish. That model receives:
+An optional top-level `consolidator:` entry (the same shape as an
+agent's: a model, a provider unless its harness supplies one, and
+optionally a harness) runs after all agents finish. That model receives:
 
 - the original prompt;
 - the analyst reports in `reviews/`, each labeled with its source model;
-- a list of the agents without a report, with each one's failure reason
-  (in a normal run);
+- a list of the agents without a report, each with its harness and its
+  failure reason, followed by any warnings about its run;
 - the instructions in `lib/agent_council/templates/consolidate_prompt.md`
   in the gem's directory (`$AC_HOME`; see
   [Finding the installed documentation and examples](#finding-the-installed-documentation-and-examples))
@@ -314,6 +336,55 @@ agent-council saves its response as a report in the run dir itself (see
 [What you get](#what-you-get) for its name). Remove the key to skip consolidation. To
 consolidate a run that has already finished, see
 [Consolidating a finished run](#consolidating-a-finished-run).
+
+### Choosing a harness
+
+An entry with `harness: claude` runs under
+[Claude Code](https://code.claude.com/docs) instead of pi, so one config
+can mix the two, and can compare a model under each:
+
+```yaml
+agents:
+  - provider: openai
+    model: gpt-6.1-sol
+  - harness: claude
+    model: claude-opus-5-5
+consolidator:
+  harness: claude
+  model: claude-sonnet-5-5
+```
+
+- **Models.** `model` is any model name or alias `claude --model`
+  accepts. Claude Code takes no provider, so `provider` may be left out
+  and is then recorded as `anthropic`; one you do give (e.g. `bedrock`,
+  if your `claude` is set up to use it) only labels the run.
+- **Billing.** agent-council leaves authentication and billing to Claude
+  Code: an agent bills however `claude` would at your terminal, to your
+  subscription if you are logged in with one, or to an API key if one is
+  configured. Unlike an interactive session, `claude -p` doesn't ask
+  before using an `ANTHROPIC_API_KEY` in your environment, so a key
+  exported for another tool bills council runs to the API. On a
+  subscription, agents share your plan's usage limits with your
+  interactive work (several agents at once use them up faster), and the
+  reported cost is Claude Code's estimate at API prices, not a charge.
+- **Context.** Each agent runs as an interactive session started in your
+  project would, so your `CLAUDE.md` files, settings, hooks, and plugins
+  apply, and so does Claude Code's auto memory: agents see the memory
+  notes Claude Code has kept for the project, and are told, as an
+  interactive session is, that they may add to them. See
+  [Safety and privacy](#safety-and-privacy).
+- **Refused tool calls.** Claude Code can still refuse a tool call, for
+  example one that a `permissions.deny` rule in your settings or the
+  project's forbids. The agent then carries on without it; its report is
+  kept, and a warning naming the call (up to five distinct calls, with a
+  count of the rest) is printed under its progress line (the
+  consolidator's, under its result table), shown in the report's
+  metadata table (so the consolidator sees an analyst's too), and
+  recorded in `run.json`, since the report may lack what the call would
+  have found. If the run fails anyway (say, it runs out of turns after
+  repeated refusals), the warning still follows its failure reason, on
+  the console, in `run.json`, and in what the consolidator is told about
+  it, since the refusals may be why it failed.
 
 ## Running
 
@@ -382,7 +453,7 @@ agent-council \
   `examples/configs/single.yml` — a tiny, cheap prompt (one multiplication
   question — enough to prove a real answer came back) and a one-model
   config, for verifying your setup in seconds (the
-  [report-format addendum](#how-it-works-and-what-pi-is-told) may wrap
+  [report-format addendum](#how-it-works-and-what-the-agents-are-told) may wrap
   the number in a short report):
 
 ```bash
@@ -459,8 +530,8 @@ one with an unclosed quote, makes every command fail, `-h`, `-v`,
 Ctrl-C (or SIGTERM, SIGHUP, or SIGQUIT) stops the run, keeping reports
 already written:
 
-- Running agents, the consolidator included, get SIGTERM (pi then also
-  stops the commands it started) and a shared 5 seconds to exit before
+- Running agents, the consolidator included, get SIGTERM (pi and Claude
+  Code then also stop the commands they started) and a shared 5 seconds to exit before
   they are killed. A killed agent can't stop the commands it started, so
   those may keep running.
 - A second SIGINT, SIGTERM, or SIGQUIT kills them at once; further SIGHUPs
@@ -517,9 +588,11 @@ any suffix). Exit status is 0 only if the consolidation succeeded.
   `run_stamp` and `query` naming the consolidated report). A run where
   every analyst failed, or that was interrupted before any report was
   written, can't be consolidated.
-- **Failure reasons aren't saved in the run dir**, so the consolidator
-  is told only which configured agents have no report, with a note that
-  the reason wasn't recorded.
+- **Failure reasons come from `run.json`.** The consolidator is told
+  each configured agent without a report, with the error and warnings
+  `run.json` records for its failed run; for an agent with no such
+  entry (an interrupted run, a removed report, or no readable
+  `run.json`), with a note that the reason wasn't recorded.
 
 ### Time zone
 
@@ -624,9 +697,8 @@ agent-council-reports/
   `<agent-number>`, and, if the report was split, ends in `_findings` or `_meta` before `.md`); `<hh-mm-ss>` includes the run dir's suffix, if any,
   and `<provider>` and `<model>` are sanitized like the query slug below,
   but keep their case. `<harness>` is the agent's (or consolidator's)
-  `harness` config value (see
-  [Discovering and configuring models](#discovering-and-configuring-models)),
-  currently always `pi`, the only harness agent-council supports so far.
+  `harness` config value, `pi` or `claude` (see
+  [Choosing a harness](#choosing-a-harness)).
   `<agent-number>` is the agent's 1-based position in the config's
   `agents` list (`01`, `02`, ...), so every report has a unique name even
   if the same provider/model is configured more than once. The query slug
@@ -659,12 +731,16 @@ agent-council-reports/
   entry per run with its `agent_index` (analysts only), `harness`,
   `provider`, `model`, `ok`, `duration_seconds`, `usage`, and `report` (its
   path in the run dir; for a split consolidation, the `*_findings.md` file)
-  or `error`; a split consolidation also has `meta_report`, the `*_meta.md`
-  file, which has the front matter; `total_usage`, the
+  or `error`. A split consolidation also has `meta_report`, the `*_meta.md`
+  file, which has the front matter. Any entry the harness warned about
+  (such as a Claude Code run with refused tool calls) also has
+  `warnings`, a list of messages. The file also has `total_usage`, the
   entries' summed usage, whose `cost` is included only if every summed
   entry's cost is known; and `total_usage_runs`, how many entries reported
   usage (and so are in the total). Failed runs are included, since their
-  tokens were spent.
+  tokens were spent, but a Claude Code run that ends without its final
+  `result` event (e.g. because its `claude` was killed) reports no usage,
+  since only that event gives the run's totals.
   It is written once the reviews finish and updated after each
   consolidation, including each `--consolidate`; a `--consolidate` of a
   run dir without a readable `run.json` warns and writes none.
@@ -673,8 +749,9 @@ agent-council-reports/
   run, as reported by the harness: `input` (excluding cached input),
   `cache_read`, `cache_write`, and `output` token counts, plus `cost` in
   US dollars when the harness could price the run (pi uses its own price
-  table, so models missing from it have no cost). The cost is an
-  estimate from that table's per-token prices, not what you're billed:
+  table, so models missing from it have no cost; Claude Code prices runs
+  at Anthropic's API list prices). The cost is an
+  estimate from those per-token prices, not what you're billed:
   your provider's actual charges may differ, and on a subscription the
   marginal cost of a run may be nothing. `usage` is `null` when the
   provider reports no usage. Providers count tokens somewhat differently
@@ -687,7 +764,8 @@ agent-council-reports/
   not by filename parsing, so `.md` files in `reviews/` without
   `provider` and `model` front matter are ignored.
 - Below the front matter, the orchestrator adds a metadata table
-  summarizing its main fields and its run's duration and token usage
+  summarizing its main fields, its run's duration and token usage, and
+  any warnings about the run, such as tool calls Claude Code refused
   (for consolidated reports, under a `# Consolidated Report` title and a
   `### Prompt:` line, and followed by a `### Sources` table giving each
   source's duration, input (cached included), cached input, output, and
@@ -699,7 +777,8 @@ agent-council-reports/
   with this header and front matter in the `*_meta.md` file, and the text
   before it goes to the `*_findings.md` file under a `# Consolidated Findings`
   title, a few lines identifying the run (its stamp and query, the prompt
-  file, and the consolidator and time), and a legend of the agents (number,
+  file, the consolidator and time, and any warnings about the
+  consolidator's run), and a legend of the agents (number,
   harness, provider, model). If
   the marker is missing, repeated, inside a code fence, or not followed by
   the `Agent Consultants` heading, or the report no longer starts with the
@@ -734,7 +813,9 @@ ls agent-council-reports/*/*/reviews/*codebase-review*
 While the agents run, a `Review Progress:` section prints one line per
 agent as it finishes: `✓` or `✗`, its duration, its label (e.g.
 `#2 openai / gpt-6.1-sol`) and, for a failure, the reason on the line
-below. When all reviews finish, a `Reviews` table shows which models
+below; any warnings about a run (such as tool calls Claude Code
+refused) follow as indented `Warning:` lines, under its progress line or,
+for the consolidator, under its result row. When all reviews finish, a `Reviews` table shows which models
 succeeded, how long each took (`HH:MM:SS`) and their token usage in
 `In`, `Cached`, `Out`, and `Cost` columns (`In` counts cached input too;
 `-` when unknown; failed runs show what they used), with the failures'
@@ -758,32 +839,71 @@ as an `--output-dir` elsewhere) are printed absolute, as is a default
 config's (`Config:  [default] /path/to/agent-council.yml`), to show
 which default was picked up.
 
-## How it works (and what pi is told)
+## How it works (and what the agents are told)
 
 - Every analyst agent receives the **same bytes**: the prompt file's
   contents (with one trailing newline removed), a blank line, and the
   report-format addendum
   (`lib/agent_council/templates/analyst_format.md`, copied into each run
-  dir), piped to pi on stdin as the prompt. No roles, no per-model customization. The addendum asks for a
+  dir), piped to the agent's harness on stdin as the prompt. No roles, no per-model customization. The addendum asks for a
   Markdown report with `##` section headings, which can conflict with a
   prompt that asks for some other output form (the smoke-test prompt's
   "Reply with just the number, then one sentence explaining how you got
   it.", for example); models usually reconcile the two. (The
   consolidator gets its own prompt; see
   [Discovering and configuring models](#discovering-and-configuring-models).)
-- Each agent runs as
+- Under pi, each agent runs as
   `pi -p --mode json --no-session --no-mcp --tools read,grep,find,ls,bash
    --provider P --model M --append-system-prompt <scaffolding>`.
-- `--no-session` keeps runs independent: no conversation state leaks
-  between ensemble members.
-- `--no-mcp` turns off pi's built-in MCP support, so the MCP servers
-  configured for pi don't start and agents have no MCP tools. (An
-  extension that provides its own MCP support isn't affected.)
-- `--tools` is an allowlist for pi's built-in, extension, and custom
-  tools: `bash` remains for investigation (`git log`, dependency
-  inspection, ...), while file-editing tools and unlisted extension and
-  custom tools are unavailable. The allowlist and `--no-mcp` are the
-  only enforced restrictions (see [Safety and privacy](#safety-and-privacy)). A fixed
+  - `--no-session` keeps runs independent: no conversation state leaks
+    between ensemble members.
+  - `--no-mcp` turns off pi's built-in MCP support, so the MCP servers
+    configured for pi don't start and agents have no MCP tools. (An
+    extension that provides its own MCP support isn't affected.)
+  - `--tools` is an allowlist for pi's built-in, extension, and custom
+    tools: `bash` remains for investigation (`git log`, dependency
+    inspection, ...), while file-editing tools and unlisted extension and
+    custom tools are unavailable.
+  - Otherwise pi behaves normally: it loads context files such as
+    `AGENTS.md` and `CLAUDE.md` as in any pi run, and the analyzed repo's
+    `.pi` project resources only if pi already trusts the project
+    (agent-council passes no `--approve`). See
+    [pi's documentation][pi-docs] for what loads from where.
+  - The final response is read from pi's JSONL event stream. pi exits 0
+    even when the provider rejects the request (e.g. Copilot's
+    `model_not_available_for_integrator`) or the output is cut off;
+    agent-council detects these in the event stream and reports them as
+    failures, not reports. [`DESIGN.md`](DESIGN.md) §13 has the details.
+- Under Claude Code, each agent runs as
+  `claude -p --output-format stream-json --verbose --no-session-persistence
+   --tools Read,Grep,Glob,Bash --allowedTools Read,Grep,Glob,Bash
+   --permission-mode manual --strict-mcp-config --model M
+   --append-system-prompt <scaffolding>`.
+  - `--no-session-persistence` keeps runs independent: no session is
+    saved, to be resumed or to show up in your session list.
+  - `--tools` limits the built-in tools to these four: `Bash` remains for
+    investigation, while `Edit`, `Write`, and the rest are unavailable.
+    `--allowedTools` pre-approves the four, since `-p` mode can't ask
+    (a call that needs approval is refused), and `--permission-mode
+    manual` keeps your own default mode (such as `plan`) from applying.
+  - `--strict-mcp-config`, with no `--mcp-config`, loads no MCP servers,
+    neither yours nor a plugin's, so agents have no MCP tools. (Where an organization manages Claude
+    Code's MCP servers with a `managed-mcp.json`, Claude Code's own
+    message says it refuses this flag, which would fail every Claude Code
+    agent; that case is untested.)
+  - Otherwise Claude Code behaves as an interactive session started in
+    the analyzed repo would: it loads `CLAUDE.md` files (and what they
+    import, such as `@AGENTS.md`), your user and the project's settings,
+    hooks, and plugins, and its auto memory for the project (the
+    `MEMORY.md` index, with the instruction to keep it up to date).
+    (`--bare`, which would skip them, also permits only API-key
+    authentication, so it isn't used.)
+  - The final response is the stream's `result` event; a run that fails
+    (not logged in, an unknown model, the output cut off) is reported
+    with the reason Claude Code gives. [`DESIGN.md`](DESIGN.md) §13 has
+    the details.
+- The tool limits and the MCP settings above are the only enforced
+  restrictions (see [Safety and privacy](#safety-and-privacy)). A fixed
   scaffolding text appended to the system prompt (identical for all
   agents, the consolidator included, except the scratch path) tells agents
   not to modify project files, git state, software, or configuration, or
@@ -800,40 +920,51 @@ which default was picked up.
   and named in the scaffolding), deleted after the run. After Ctrl-C, a
   directory can be left behind if a second signal stops agent-council at
   once, or if cleanup after a killed agent doesn't finish in time.
-- Otherwise pi behaves normally: it loads context files such as
-  `AGENTS.md` and `CLAUDE.md` as in any pi run, and the analyzed repo's
-  `.pi` project resources only if pi already trusts the project
-  (agent-council passes no `--approve`). See
-  [pi's documentation][pi-docs] for what loads from where.
-- The final response is read from pi's JSONL event stream. pi exits 0
-  even when the provider rejects the request (e.g. Copilot's
-  `model_not_available_for_integrator`) or the output is cut off;
-  agent-council detects these in the event stream and reports them as
-  failures, not reports. [`DESIGN.md`](DESIGN.md) §13 has the details.
 
 ## Safety and privacy
 
 agent-council does not sandbox the agents. Before running it, know that:
 
-- **Agents have a shell.** Each agent, the consolidator included, gets pi's
-  `bash` tool, running as you, in the directory you run from, with your
+- **Agents have a shell.** Each agent, the consolidator included, gets a
+  shell tool (pi's `bash`, or Claude Code's `Bash`), running as you, in
+  the directory you run from, with your
   environment (including any API keys in it; agent-council only sets
   `TMPDIR`), your file permissions, and your network access. Of pi's
   built-in tools, only `edit` and `write` (and the Windows-only
-  `powershell`) are withheld. The read-only rules described above are
+  `powershell`) are withheld; of Claude Code's, all but `Read`, `Grep`,
+  `Glob`, and `Bash`. The read-only rules described above are
   instructions in the system prompt, which a model can ignore or misapply.
-- **Your pi extensions load.** `--no-mcp` turns off only pi's built-in
-  MCP support. Extensions you've installed load for every agent, as you,
-  and one that provides its own MCP support can still start servers.
+- **Your pi extensions, and your Claude Code hooks and plugins, load.**
+  `--no-mcp` turns off only pi's built-in
+  MCP support. Extensions you've installed load for every pi agent, as
+  you, and one that provides its own MCP support can still start servers.
+  Your Claude Code hooks and plugins run for every Claude Code agent, as
+  you, and so do hooks the analyzed repository's `.claude` settings
+  define (see the next item). Agents also get Claude Code's auto memory
+  for the project, so your memory notes go to their provider, and an
+  agent may add or change a memory file (with `Bash`), as an
+  interactive session may. `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` in the
+  environment you run agent-council from turns auto memory off.
 - **The analyzed repository can steer the agents.** Agents read the
-  repository's files, and pi loads its context files (such as
-  `AGENTS.md`) and, if the project is trusted, its `.pi` resources, so
-  text in the repository can try to direct what the agents run (prompt
-  injection). Prompts that permit tests,
-  such as `examples/prompts/review-latest-commit-prompt.md`, run the
-  project's own code.
+  repository's files, and the harness loads the repository's context
+  files and settings: pi its context files (such as `AGENTS.md`) and, if
+  the project is trusted, its `.pi` resources; Claude Code its
+  `CLAUDE.md` files and `.claude` settings, which apply without the
+  trust prompt an interactive session would show first (their hooks,
+  for one, run commands; checked). So the repository can direct what
+  runs: its text by prompt injection, and its hooks by running commands
+  of their own, whatever the agent does. To run Claude Code agents
+  without customizations, whether the repository's or yours (hooks,
+  plugins, skills, and the like), set `CLAUDE_CODE_SAFE_MODE=1` in the
+  environment you run agent-council from. Permission rules and admin-managed settings still apply. It also
+  skips `CLAUDE.md` files, so agents no longer see the project's own
+  instructions. Prompts that permit tests, such as
+  `examples/prompts/review-latest-commit-prompt.md`, run the project's
+  own code.
 - **Your code goes to every configured provider.** Whatever an agent reads,
-  and the output of whatever it runs, is sent to that agent's provider. The
+  and the output of whatever it runs, is sent to that agent's provider
+  (for a Claude Code agent, wherever your `claude` sends it: Anthropic,
+  unless it is set up for another). The
   consolidator's provider receives the prompt and all reports, plus
   anything the consolidator itself reads or runs. Check those providers'
   data policies before analyzing private code.
@@ -848,8 +979,8 @@ expose.
 
 ## Limitations (deliberate)
 
-No retries or timeouts of agent-council's own (pi itself may retry
-transient provider failures), no ranking
+No retries or timeouts of agent-council's own (the harnesses themselves
+may retry transient provider failures), no ranking
 or scoring of reports
 (beyond the optional consolidator's synthesis), no manifests or indexes —
 the directory layout is the index. See [`DESIGN.md`](DESIGN.md) §18–19.

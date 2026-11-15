@@ -16,6 +16,10 @@ module AgentCouncil
     module PiHarness
       NAME = 'pi'
 
+      # No default: pi runs the provider an entry gives, so every entry
+      # needs one.
+      DEFAULT_PROVIDER = nil
+
       # Analysis toolset (pi's built-in tool names): edit/write (and the
       # Windows-only powershell) are withheld. bash, a full shell, stays for
       # investigation (git log/status, dependency inspection, ...); only the
@@ -131,6 +135,16 @@ module AgentCouncil
 
         message = candidates.detect { |m| UNUSABLE_STOP_REASONS.include?(m['stopReason']) }
         message && "stopped early (stopReason: #{message['stopReason']})"
+      end
+
+      # Why a run that exited nonzero failed: pi explains it on stderr.
+      module_function def exit_detail(_stdout, stderr)
+        stderr.lines.map(&:strip).reject(&:empty?).first || 'no error output'
+      end
+
+      # Warnings about a run that succeeded; pi's stream has none to give.
+      module_function def warnings(_jsonl)
+        []
       end
     end
   end

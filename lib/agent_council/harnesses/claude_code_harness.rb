@@ -1,0 +1,209 @@
+# frozen_string_literal: true
+
+# AgentCouncil::Harnesses::ClaudeCodeHarness — all knowledge specific to
+# the Claude Code harness: how to invoke the claude CLI for one model run,
+# with its tool allowlist and the shared read-only scaffolding, and how to
+# read its stream-json output afterward.
+#
+# AgentCouncil is harness-agnostic and finds this module through
+# AgentCouncil::Harnesses (lib/agent_council/harnesses.rb), by its NAME.
+# Authentication and billing are left to Claude Code: a run bills however
+# claude would at the user's terminal.
+
+require 'json'
+require_relative 'scaffold'
+
+module AgentCouncil
+  module Harnesses
+    module ClaudeCodeHarness
+      NAME = 'claude'
+
+      # Recorded as an entry's provider when it gives none. Claude Code takes
+      # no provider argument, so a provider an entry does give only labels
+      # the run (e.g. bedrock, for a claude set up to use it).
+      DEFAULT_PROVIDER = 'anthropic'
+
+      # Analysis toolset (Claude Code's built-in tool names): Edit, Write, and
+      # the rest are absent. Bash, a full shell, stays for investigation;
+      # only the scaffolding text asks the model to use it read-only.
+      TOOLS = 'Read,Grep,Glob,Bash'
+
+      # Invocation for one model run. The substantive prompt is not part of
+      # argv; it is piped to stdin. provider is not passed: Claude Code
+      # takes none.
+      module_function def argv(_provider, model, scratch_dir)
+        [
+          NAME,
+          '-p',                              # non-interactive: process prompt and exit
+          '--output-format', 'stream-json',  # JSONL event stream on stdout
+          '--verbose',                       # required by stream-json with -p
+          '--no-session-persistence',        # ephemeral: no session saved
+          '--tools', TOOLS,                  # the only built-in tools available
+          '--allowedTools', TOOLS,           # ...and pre-approved, since -p can't ask
+          '--permission-mode', 'manual',     # the same for every user, whatever their defaultMode
+          '--strict-mcp-config',             # with no --mcp-config: no MCP servers
+          '--model', model,
+          '--append-system-prompt', Harnesses.scaffold_text(scratch_dir)
+        ]
+      end
+
+      # --- event stream reading ---
+
+      # The events of a stream-json stream, in order. Unparseable lines and
+      # non-objects are skipped.
+      module_function def events(jsonl)
+        jsonl.each_line.filter_map do |line|
+          event =
+            begin
+              JSON.parse(line)
+            rescue JSON::ParserError
+              nil
+            end
+          event if event.is_a?(Hash)
+        end
+      end
+
+      # The run's result event: the last one, which ends the stream. nil if
+      # there is none, e.g. for a run that was killed.
+      module_function def result_event(jsonl)
+        events(jsonl).reverse_each.detect { |event| event['type'] == 'result' }
+      end
+
+      # The messages of the stream's assistant events, in order (several per
+      # model request, one per content block).
+      module_function def assistant_messages(jsonl)
+        events(jsonl).filter_map do |event|
+          message = event['message'] if event['type'] == 'assistant'
+          message if message.is_a?(Hash)
+        end
+      end
+
+      # The final response: the result event's text, for a run that didn't
+      # fail.
+      module_function def final_response(jsonl)
+        result = result_event(jsonl)
+        return nil unless result && result['is_error'] != true
+
+        text = result['result']
+        text.is_a?(String) ? text : nil
+      end
+
+      # Our usage keys, each mapped to Claude Code's name for it. Its input
+      # excludes cache reads and writes, as pi's does.
+      USAGE_KEYS = { 'input' => 'input_tokens', 'output' => 'output_tokens',
+                     'cache_read' => 'cache_read_input_tokens',
+                     'cache_write' => 'cache_creation_input_tokens' }.freeze
+
+      # Token usage as AgentCouncil expects it (see Harnesses), from the
+      # result event alone: it totals the whole run, while the assistant
+      # events' usage is per-message snapshots that undercount output. nil
+      # when the stream has no result event (as for a run whose claude was
+      # killed: no usage beats an undercount) or reports no usage (as when
+      # the run never reached a model).
+      module_function def usage(jsonl)
+        result = result_event(jsonl)
+        usage = result && result['usage']
+        return nil unless usage.is_a?(Hash)
+
+        totals = USAGE_KEYS.transform_values { |key| count(usage[key]) }
+        return nil if totals.values.all?(&:zero?)
+
+        cost = count(result['total_cost_usd'])
+        cost.positive? ? totals.merge('cost' => cost.round(6)) : totals
+      end
+
+      module_function def count(value)
+        value.is_a?(Numeric) && value.positive? ? value : 0
+      end
+
+      # Why the run produced no usable report, or nil. A failed run has a
+      # result event with is_error true (its subtype is usually still
+      # "success", so it isn't checked); one that isn't flagged but has no
+      # text is reported as such, since the report is that text. The reason
+      # is its errors, if any (e.g. the turn limit, with no result text),
+      # otherwise its result text (e.g. "Not logged in · Please run
+      # /login").
+      module_function def error_message(jsonl)
+        result = result_event(jsonl)
+        return 'the stream has no result event' unless result
+        return error_reason(result) || 'the run failed and gave no reason' if result['is_error'] == true
+
+        text = result['result']
+        'the result event has no text' unless text.is_a?(String) && !text.strip.empty?
+      end
+
+      # The reason a failed run's result event gives, or nil if it gives none.
+      module_function def error_reason(result)
+        errors = Array(result['errors']).grep(String).map(&:strip).reject(&:empty?)
+        return errors.join('; ') unless errors.empty?
+
+        text = result['result']
+        text if text.is_a?(String) && !text.strip.empty?
+      end
+
+      # Why a run that exited nonzero failed. Claude Code explains a failure
+      # in a result event with is_error true, and its stderr is then
+      # usually empty, so that reason, if it gives one, comes first.
+      # Otherwise stderr is likelier to say why (e.g. for a crash) than
+      # whatever else the stream shows (e.g. a result with no text), which
+      # is the last resort. Returned whole: the caller puts it on one line
+      # and shortens it (see Harnesses).
+      module_function def exit_detail(stdout, stderr)
+        result = result_event(stdout)
+        reason = error_reason(result) if result && result['is_error'] == true
+        return reason if reason
+
+        stderr_line = stderr.lines.map(&:strip).reject(&:empty?).first
+        return stderr_line if stderr_line
+
+        (error_message(stdout) if result) || 'no error output'
+      end
+
+      # Warnings about a run, succeeded or not: the tool calls Claude Code
+      # refused, which -p mode can't ask about. The run usually still
+      # succeeds (the model saw the refusal and answered without that
+      # call), but its report may be missing what the call would have
+      # found; a run that fails (say, out of turns) may have failed
+      # because of them.
+      module_function def warnings(jsonl)
+        result = result_event(jsonl)
+        denials = result && result['permission_denials']
+        return [] unless denials.is_a?(Array) && !denials.empty?
+
+        calls = denials.map { |denial| denied_call(denial) }.uniq
+        listed = calls.first(MAX_LISTED_CALLS).map do |tool, target|
+          target ? "#{tool} (#{shorten(target)})" : tool
+        end
+        listed << "and #{calls.size - listed.size} more" if calls.size > listed.size
+        ["Claude Code refused #{denials.size} tool call#{'s' unless denials.size == 1}: #{listed.join('; ')}"]
+      end
+
+      # Distinct refused calls named in a warning, so a run refused many
+      # times still gets a warning of a readable length.
+      MAX_LISTED_CALLS = 5
+
+      # The tool_input keys that say what a refused call was for, in order
+      # of preference: Bash's command, Read's file_path, then Grep's and
+      # Glob's pattern and path.
+      TARGET_KEYS = %w[command file_path pattern path].freeze
+
+      # A refused tool call as [tool, target]: its tool and what it was for,
+      # such as a Bash command or the file a Read asked for, on one line,
+      # or nil if the call gives none. Compared whole, so calls that differ
+      # only past where a warning shortens them still count as different.
+      module_function def denied_call(denial)
+        return ['unknown tool', nil] unless denial.is_a?(Hash)
+
+        tool = denial['tool_name'].is_a?(String) ? denial['tool_name'] : 'unknown tool'
+        input = denial['tool_input']
+        target = TARGET_KEYS.map { |key| input[key] }.grep(String).first if input.is_a?(Hash)
+        target = target&.gsub(/\s+/, ' ')&.strip
+        [tool, (target unless target.nil? || target.empty?)]
+      end
+
+      module_function def shorten(target)
+        target.length > 80 ? "#{target[0, 80]}..." : target
+      end
+    end
+  end
+end
