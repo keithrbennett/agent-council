@@ -6,6 +6,7 @@ AllCops:
     - 'vendor/**/*'
     - 'tmp/**/*'
     - 'coverage/**/*'
+    - 'untracked/**/*'
 
 Layout/CaseIndentation:
   Enabled: false
