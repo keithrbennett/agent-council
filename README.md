@@ -62,7 +62,9 @@ harnesses, in the harnesses, whose tools and loaded context differ).
 - **Tokens and cost.** Input, cached input, and output tokens, and an
   estimated dollar cost where the harness can price the model, per agent
   and in total. See whether the model that costs ten times as much finds
-  ten times as much.
+  ten times as much. The cost is an estimate that can be far from what
+  you pay, in either direction; see
+  [How far to trust the cost](#how-far-to-trust-the-cost).
 - **Quality.** The reports sit side by side, labeled by source. The
   consolidator shows which findings each model shared with the others,
   which only it found, and where models contradicted each other, and its
@@ -377,7 +379,8 @@ consolidator:
   exported for another tool bills council runs to the API. On a
   subscription, agents share your plan's usage limits with your
   interactive work (several agents at once use them up faster), and the
-  reported cost is Claude Code's estimate at API prices, not a charge.
+  reported cost is Claude Code's estimate at API prices, not a charge
+  (see [How far to trust the cost](#how-far-to-trust-the-cost)).
 - **Context.** Each agent runs as an interactive session started in your
   project would, so your `CLAUDE.md` files, settings, hooks, and plugins
   apply, and so does Claude Code's auto memory: agents see the memory
@@ -764,13 +767,10 @@ agent-council-reports/
   `cache_read`, `cache_write`, and `output` token counts, plus `cost` in
   US dollars when the harness could price the run (pi uses its own price
   table, so models missing from it have no cost; Claude Code prices runs
-  at Anthropic's API list prices). The cost is an
-  estimate from those per-token prices, not what you're billed:
-  your provider's actual charges may differ, and on a subscription the
-  marginal cost of a run may be nothing. `usage` is `null` when the
-  provider reports no usage. Providers count tokens somewhat differently
-  (reasoning tokens, for example), so compare counts across providers
-  only roughly.
+  at Anthropic's API list prices), recorded as the harness reports it,
+  only rounded to six decimal places. It is an estimate, not what you're
+  billed; see [How far to trust the cost](#how-far-to-trust-the-cost).
+  `usage` is `null` when the provider reports no usage.
 
   `--consolidate` relies on the analysts' `prompt_file`, `config_file`,
   `run_stamp`, and `query`, and on `agent_index` to tell which configured
@@ -832,7 +832,8 @@ refused) follow as indented `Warning:` lines, under its progress line or,
 for the consolidator, under its result row. When all reviews finish, a `Reviews` table shows which models
 succeeded, how long each took (`HH:MM:SS`) and their token usage in
 `In`, `Cached`, `Out`, and `Cost` columns (`In` counts cached input too;
-`-` when unknown; failed runs show what they used), with the failures'
+`-` when unknown; failed runs show what they used; `Cost` is an estimate,
+see [How far to trust the cost](#how-far-to-trust-the-cost)), with the failures'
 reasons listed below it under `Errors:`. A
 `--- Reviews complete (N/M succeeded; <total usage>) ---` line follows,
 e.g. `2.1M in (2.0M cached) / 32.7k out, $0.18`. The total's cost is
@@ -852,6 +853,33 @@ agent-council is installed. Paths outside the working directory (such
 as an `--output-dir` elsewhere) are printed absolute, as is a default
 config's (`Config:  [default] /path/to/agent-council.yml`), to show
 which default was picked up.
+
+### How far to trust the cost
+
+Every cost agent-council shows or records is the harness's estimate
+from per-token prices, not a bill, and it can be far off in either
+direction:
+
+- **Subscriptions.** On a subscription or plan (a Claude Code login, or
+  a plan-based pi provider), the estimate is what the usage would cost
+  at pay-per-token prices. What you actually pay for a run may be
+  nothing extra, while the run uses up your plan's limits.
+- **Price tables.** pi prices runs from its own price table, which may
+  not match what your provider charges (discounts, price changes, or
+  routing to a differently priced upstream), and a model missing from
+  it gets no cost at all. Claude Code prices runs at Anthropic's API
+  list prices.
+- **Stopped runs.** An agent stopped by Ctrl-C (or another signal)
+  records no usage, though its provider still bills for what it used,
+  and a run stopped before every analyst finished writes no `run.json`
+  at all. A runaway agent stopped by hand, the most expensive kind of
+  run, is therefore missing from the totals entirely.
+- **Token counts.** Providers count tokens somewhat differently
+  (reasoning tokens, for example), so compare counts, and the costs
+  built on them, across providers only roughly.
+
+For what you were actually charged, check your provider's billing or
+usage page.
 
 ## How it works (and what the agents are told)
 

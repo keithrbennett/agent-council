@@ -11,7 +11,9 @@
 - `USE_CASES.md`, a catalog of what agent-council can be used for, is
   added, and the README gains a "What makes a good fit" section.
 - Costs are now described as estimates (for pi agents, from pi's price
-  table), not what you're billed.
+  table), not what you're billed. A new README section, "How far to
+  trust the cost", says why they can be far off: subscription pricing,
+  price tables, stopped runs recording no usage, and token counting.
 - The state-of-the-codebase and test-coverage-analysis sample prompts
   no longer tell agents to write their report to a file in the project;
   like the other samples, they deliver it as the final message, which
