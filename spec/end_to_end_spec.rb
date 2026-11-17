@@ -100,9 +100,11 @@ RSpec.describe 'agent-council end to end' do
   end
 
   def write_config(providers, consolidator: nil)
-    agents = providers.map.with_index(1) { |provider, i| { 'provider' => provider, 'model' => "m#{i}" } }
+    agents = providers.map.with_index(1) do |provider, i|
+      { 'harness' => 'pi', 'provider' => provider, 'model' => "m#{i}" }
+    end
     config = { 'agents' => agents }
-    config['consolidator'] = { 'provider' => consolidator, 'model' => 'c' } if consolidator
+    config['consolidator'] = { 'harness' => 'pi', 'provider' => consolidator, 'model' => 'c' } if consolidator
     File.write(File.join(work_dir, 'config.yml'), YAML.dump(config))
   end
 
@@ -374,8 +376,10 @@ RSpec.describe 'agent-council end to end' do
 
   it 'runs a config mixing harnesses, each entry under its own' do
     write_fake_claude
-    agents = [{ 'provider' => 'done', 'model' => 'm1' }, { 'harness' => 'claude', 'model' => 'denied' }]
-    config = { 'agents' => agents, 'consolidator' => { 'harness' => 'claude', 'model' => 'split' } }
+    agents = [{ 'harness' => 'pi', 'provider' => 'done', 'model' => 'm1' },
+      { 'harness' => 'claude', 'provider' => 'anthropic', 'model' => 'denied' }]
+    consolidator = { 'harness' => 'claude', 'provider' => 'anthropic', 'model' => 'split' }
+    config = { 'agents' => agents, 'consolidator' => consolidator }
     File.write(File.join(work_dir, 'config.yml'), YAML.dump(config))
 
     status = run_council
@@ -407,8 +411,10 @@ RSpec.describe 'agent-council end to end' do
 
   it "reports a failed run's warnings, to the console, run.json, and the consolidator" do
     write_fake_claude
-    agents = [{ 'provider' => 'done', 'model' => 'm1' }, { 'harness' => 'claude', 'model' => 'stuck' }]
-    config = { 'agents' => agents, 'consolidator' => { 'harness' => 'claude', 'model' => 'split' } }
+    agents = [{ 'harness' => 'pi', 'provider' => 'done', 'model' => 'm1' },
+      { 'harness' => 'claude', 'provider' => 'anthropic', 'model' => 'stuck' }]
+    consolidator = { 'harness' => 'claude', 'provider' => 'anthropic', 'model' => 'split' }
+    config = { 'agents' => agents, 'consolidator' => consolidator }
     File.write(File.join(work_dir, 'config.yml'), YAML.dump(config))
 
     status = run_council
@@ -443,18 +449,18 @@ RSpec.describe 'agent-council end to end' do
       expect(run_council.exitstatus).to eq(analysts.include?('fails') ? 1 : 0), output_report
       run_dir = Dir.glob('agent-council-reports/*/*', base: work_dir).first
       config = YAML.load_file(File.join(work_dir, run_dir, 'config.yml'))
-      config['consolidator'] = { 'provider' => consolidator, 'model' => 'c' }
+      config['consolidator'] = { 'harness' => 'pi', 'provider' => consolidator, 'model' => 'c' }
       File.write(File.join(work_dir, run_dir, 'config.yml'), YAML.dump(config))
       run_dir
     end
 
     def reviews_snapshot = reports('reviews/*.md').to_h { |path| [path, File.read(path)] }
 
-    it 'consolidates under Claude Code, with a provider-less consolidator and its warnings' do
+    it 'consolidates under Claude Code, with its warnings' do
       write_fake_claude
       run_dir = finished_run('done')
       config_path = File.join(work_dir, run_dir, 'config.yml')
-      consolidator = { 'harness' => 'claude', 'model' => 'split' }
+      consolidator = { 'harness' => 'claude', 'provider' => 'anthropic', 'model' => 'split' }
       config = YAML.load_file(config_path).merge('consolidator' => consolidator)
       File.write(config_path, YAML.dump(config))
 

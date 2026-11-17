@@ -62,7 +62,7 @@ For example:
 
 ## 4. Architecture
 
-There are two harnesses, pi and Claude Code, and the orchestration is harness-agnostic: it looks up each agent's harness module by its config entry's `harness` key (§5) in `AgentCouncil::Harnesses::BY_NAME` (`lib/agent_council/harnesses.rb`), so another harness is another such module, added there. Config entries, reports, and `run.json` entries that give no harness are pi's. Each module is a plain namespace with the same functions (`NAME`, `DEFAULT_PROVIDER`, `argv`, `usage`, `error_message`, `exit_detail`, `warnings`, `final_response`, `assistant_messages`); `NAME` is both the config value and the executable that `argv` runs, which the startup check looks for on `PATH`, and goes into filenames unsanitized, so it must be filename-safe. `DEFAULT_PROVIDER` is the provider recorded for an entry that gives none: `anthropic` for Claude Code, which takes no provider argument, and none for pi, which runs the provider it is given. Validated config entries are completed with it (`Harnesses.with_defaults`), so everything after config loading (labels, filenames, front matter, `run.json`) sees a provider, and a report from a provider-less entry looks like any other. The scaffolding text (§10) is shared.
+There are two harnesses, pi and Claude Code, and the orchestration is harness-agnostic: it looks up each agent's harness module by its config entry's `harness` key (§5) in `AgentCouncil::Harnesses::BY_NAME` (`lib/agent_council/harnesses.rb`), so another harness is another such module, added there. Every config entry names its harness (§5); reports and `run.json` entries always record theirs, and one that gives none (hand-edited, or older than 0.1.0, when every agent ran under pi) is read as pi's. Each module is a plain namespace with the same functions (`NAME`, `argv`, `usage`, `error_message`, `exit_detail`, `warnings`, `final_response`, `assistant_messages`); `NAME` is both the config value and the executable that `argv` runs, which the startup check looks for on `PATH`, and goes into filenames unsanitized, so it must be filename-safe. Claude Code takes no provider argument, so a Claude Code entry's provider only labels the run. The scaffolding text (§10) is shared.
 
 **Labels.** The short labels (`#1 provider / model`) don't show the harness. They appear in progress lines, result tables, the consolidation prompt, and a consolidated report's `### Sources` table and `sources` front matter. The startup agent list, each report's byline table, and the findings file's legend (`#1 pi / provider / model`) do show it. Short labels don't need the harness to stay unique: the only ones used as lookup keys are the analysts', which match reports to their `run.json` entries and to the configured agents, and each carries its agent number. Nor does the consolidator need it in the labels, since each report it reads states its harness in its byline (§12). So they stay as they are, and a mixed run's output reads the same as before.
 
@@ -87,27 +87,33 @@ Example:
 
 ```yaml
 agents:
-  - provider: anthropic
+  - harness: pi
+    provider: anthropic
     model: MODEL_ID_HERE
 
-  - provider: openai
+  - harness: pi
+    provider: openai
     model: MODEL_ID_HERE
 
-  - provider: opencode-go
+  - harness: pi
+    provider: opencode-go
     model: MODEL_ID_HERE
 
-  - provider: zai
+  - harness: pi
+    provider: zai
     model: MODEL_ID_HERE
 
-  - harness: claude        # Claude Code; provider omitted, recorded as anthropic
+  - harness: claude        # Claude Code; the provider only labels the run
+    provider: anthropic
     model: MODEL_ID_HERE
 
 consolidator:              # optional; synthesizes the agents' reports (§12)
+  harness: pi
   provider: anthropic
   model: MODEL_ID_HERE
 ```
 
-Any entry may also give a `harness`: `pi`, the default, or `claude`; an unknown one is rejected at startup (with `--consolidate`, only the consolidator's, since no analysts run). A `claude` entry may omit `provider` (§4); one it gives is not passed to Claude Code and only labels the run (e.g. `bedrock`, for a `claude` set up to use it).
+Every entry gives `harness`, `provider`, and `model`, each a nonblank string; there are no defaults, and no `defaults:` section supplying them (one was considered and rejected). A default harness or provider would go stale as harnesses change (pi is the right default only as long as it is), and a `defaults:` section's provider would apply across harnesses whose providers differ. `harness` is `pi` or `claude`; an unknown one is rejected at startup (with `--consolidate`, only the consolidator's, since no analysts run). A `claude` entry's provider is not passed to Claude Code (§4) and only labels the run (e.g. `bedrock`, for a `claude` set up to use it). A config error lists every bad entry, each named by its key (`'agents' entry #2`, `'consolidator'`) with every problem it has, so one edit fixes them all; when an entry gives no harness, a line saying what every entry needs follows, and, if no entry gives one (as in a 0.1.0 config, which ran everything under pi), a hint to add `harness: pi`. A run made by 0.1.0, when every entry ran under pi, has a config copy without `harness`; `--consolidate` rejects its consolidator like any other entry, with a hint to add `harness: pi`, while its reports and `run.json` are still read as pi's.
 
 Exact provider and model identifiers must be verified against the installed harness: `pi --list-models` for pi, and the names and aliases `claude --model` accepts for Claude Code.
 
@@ -267,15 +273,16 @@ Each run gets its own directory, a day bucket, and an `hh-mm-ss` time, created a
 - **Metadata is YAML front matter written by the orchestrator**, never by the model: it gives tools structured provenance, stays readable in the terminal, and is how reports are identified, so nothing parses filenames (a consolidation's findings file, meant to be pasted elsewhere, has identifying lines in place of front matter instead). Timestamps are unquoted ISO 8601, so they parse directly as `Time` objects. Beyond the `provider` and `model` every report needs to be recognized, `--consolidate` needs the analysts' `prompt_file`, `config_file`, `run_stamp`, and `query`, and their `agent_index` to tell which configured agents have no report.
 - **Measurements go in `run.json`, not front matter.** Front matter identifies a document; a run's duration and token usage are data about the run, wanted for analysis across many runs, and most tools can't read front matter without tripping over the Markdown after it. So they go in one JSON file per run dir, readable by any language's standard library or `jq`; the byline table still shows a report's own duration and usage to its readers.
 
-The optional consolidator (a top-level `consolidator:` entry in the config,
-with a provider and model like an agent's, the provider optional for
-Claude Code; §5) runs after all agents finish, as one more run, under its
-own entry's harness, with the tools and scaffolding an analyst gets under
-that harness. Its prompt is
-`lib/agent_council/templates/consolidate_prompt.md` followed by the
-original prompt, every analyst report labeled with its source, and the
-agents without a report, each with its harness and its failure reason and warnings (with `--consolidate`, as `run.json` records them, else a note that the reason wasn't recorded). A consolidation
-failure is reported but does not change a normal run's exit status
+The optional consolidator (a top-level `consolidator:` entry in the
+config, with a harness, provider, and model like an agent's; §5) runs
+after all agents finish, as one more run, under its own entry's harness,
+with the tools and scaffolding an analyst gets under that harness. Its
+prompt is `lib/agent_council/templates/consolidate_prompt.md` followed
+by the original prompt, every analyst report labeled with its source,
+and the agents without a report, each with its harness and its failure
+reason and warnings (with `--consolidate`, as `run.json` records them,
+else a note that the reason wasn't recorded). A consolidation failure is
+reported but does not change a normal run's exit status
 (`--consolidate`'s exit status is the consolidation's).
 
 **The consolidated report is split into two files.** The consolidator is asked to write its findings, then a line containing only `=== META ===`, then the sections that describe the consultation (`Agent Consultants`, `Agent performance`), and the orchestrator splits the report at that line. The findings file has no front matter or orchestration tables (the consolidator's own findings may still contain tables), so it can be pasted into an AI chat without spending tokens on the rest; it carries a legend of agent number, harness, provider, and model, since the findings cite agents by number. The rest goes to a meta file. A marker line was chosen over parsing headings, which depended on the model's exact section names and on code fences, and over a JSON or YAML wrapper, where one unescaped quote or bad indent in thousands of tokens of Markdown would lose the whole report. If the marker is missing, repeated, inside a code fence, or not followed by the `Agent Consultants` heading (which makes a quoted one unlikely to be taken for the real one), or if the report no longer starts with the header written to it, the report is left unsplit, with a warning that says why, rather than guessed at, and so it is if a split file can't be written; the original single file is not kept after a successful split, to avoid duplicate text. The findings file has no front matter, so it opens with a few lines identifying its run instead, and `run.json` records the meta file, which has the front matter, next to it. The consolidator's report is first written under the meta file's name, which, being created exclusively, keeps the configuration taken against a concurrent consolidation, and then rewritten in place; a report that can't be split is renamed to the unsuffixed name, which releases the meta name, so that guard covers split reports only. Each report in the consolidator's prompt states its harness, so findings can be attributed to harness, provider, and model.

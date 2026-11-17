@@ -151,11 +151,13 @@ module AgentCouncil
   # without one it's spawned untracked.
   module_function def run_agent(agent, prompt, run_dir, file_prefix, index: nil, filename: nil, meta: {},
     header: nil, pool: nil)
-    agent = Harnesses.with_defaults(agent) # already done for config entries; cheap to repeat
     provider = agent['provider'] if agent.is_a?(Hash)
     model = agent['model'] if agent.is_a?(Hash)
     label = agent_label(provider, model, index)
-    return [label, false, "config entry needs 'provider' and 'model'", nil, []] if provider.nil? || model.nil?
+    # Config entries are validated at startup; this guards direct callers.
+    if (error = entry_error(agent))
+      return [label, false, "config entry #{error}", nil, []]
+    end
 
     # Removed in the ensure below rather than via Dir.mktmpdir's block form,
     # with errors ignored: a child that is still exiting (e.g. one just
@@ -592,11 +594,10 @@ module AgentCouncil
   # pool: as for run_agent.
   module_function def run_consolidation(consolidator, original_prompt, run_dir, file_prefix,
     meta: {}, prompt_path: nil, failures: [], analyst_runs: [], pool: nil)
-    consolidator = Harnesses.with_defaults(consolidator) # as in run_agent
     provider = consolidator['provider'] if consolidator.is_a?(Hash)
     model = consolidator['model'] if consolidator.is_a?(Hash)
-    if provider.nil? || model.nil?
-      return ['consolidator', false, "config entry needs 'provider' and 'model'", nil, nil, []]
+    if (error = entry_error(consolidator))
+      return ['consolidator', false, "config entry #{error}", nil, nil, []]
     end
 
     reports = collect_reports(File.join(run_dir, REVIEWS_DIR_NAME))
@@ -833,28 +834,97 @@ module AgentCouncil
     entry.is_a?(Hash) && entry['provider'].is_a?(String) && entry['model'].is_a?(String)
   end
 
-  # Why a config entry can't be run, as a phrase following the entry's
-  # name, or nil if it can: its 'harness', if any, must be a known one, and
-  # it must be labelable once its harness's default provider, if any, is
-  # filled in (see Harnesses.with_defaults).
-  module_function def entry_error(entry)
-    harness = entry['harness'] if entry.is_a?(Hash)
-    unless harness.nil? || Harnesses::BY_NAME.key?(harness)
-      return "names an unknown harness, #{harness.inspect} (known: #{Harnesses::BY_NAME.keys.join(', ')})"
+  # The keys every config entry (agent or consolidator) must give, each a
+  # nonblank string. None has a default: a default harness or provider
+  # would go stale as harnesses change, so a config says what it runs.
+  ENTRY_KEYS = %w[harness provider model].freeze
+
+  # What kind of YAML value a value is, for error messages.
+  module_function def yaml_kind(value)
+    case value
+    when Hash then 'a mapping'
+    when Array then 'a list'
+    when String then 'a string'
+    when nil then 'null'
+    when true, false then 'a boolean'
+    when Numeric then 'a number'
+    else "a #{value.class.name.downcase}" # unreachable from safe_load, which rejects dates
     end
-    return if labelable_entry?(Harnesses.with_defaults(entry))
+  end
 
-    # harness is now nil or known, so this finds its module.
-    harness_module = Harnesses::BY_NAME[Harnesses.name_of(entry)] if entry.is_a?(Hash)
-    return "needs string 'provider' and 'model' fields" unless harness_module&.const_get(:DEFAULT_PROVIDER)
+  # 'a', 'a' and 'b', 'a', 'b', and 'c': names quoted and joined.
+  module_function def quoted_list(names)
+    quoted = names.map { |name| "'#{name}'" }
+    quoted.size < 3 ? quoted.join(' and ') : "#{quoted[0..-2].join(', ')}, and #{quoted.last}"
+  end
 
-    # Its harness has a default provider, so the provider may be left out;
-    # one it gives must still be a string. Both problems, if both.
-    provider = entry['provider']
+  # Why a config entry can't be run, as a phrase following the entry's
+  # name, or nil if it can: it must be a mapping giving each of ENTRY_KEYS
+  # as a nonblank string, and its harness must be a known one. Every
+  # problem is named, so one edit can fix them all.
+  module_function def entry_error(entry)
+    known = Harnesses::BY_NAME.keys
+    return "must be a mapping giving #{entry_needs}, but is #{yaml_kind(entry)}" unless entry.is_a?(Hash)
+
+    missing = ENTRY_KEYS.select { |key| entry[key].nil? }
+    blank = ENTRY_KEYS.select { |key| entry[key].is_a?(String) && blank_value?(entry[key]) }
+    non_strings = ENTRY_KEYS.reject { |key| entry[key].nil? || entry[key].is_a?(String) }
     problems = []
-    problems << "needs a string 'model' field" unless entry['model'].is_a?(String)
-    problems << "gives a 'provider' that is not a string" unless provider.nil? || provider.is_a?(String)
-    problems.join(', and ')
+    problems << "is missing #{quoted_list(missing)}" unless missing.empty?
+    unless blank.empty?
+      problems << "gives #{blank.size == 1 ? 'a blank' : 'blank values for'} #{quoted_list(blank)}"
+    end
+    non_strings.each do |key|
+      value = entry[key]
+      # Quoting fixes a scalar YAML read as a number, date, or boolean, but
+      # no quoted value but a known name makes a harness valid.
+      fix =
+        if key == 'harness' then " (known: #{known.join(', ')})"
+        elsif !value.is_a?(Hash) && !value.is_a?(Array) then ' (quote it)'
+        end
+      problems << "gives '#{key}' as #{yaml_kind(value)}, #{value.inspect}, not a string#{fix}"
+    end
+    harness = entry['harness']
+    if harness.is_a?(String) && !blank_value?(harness) && !known.include?(harness)
+      problems << "names an unknown harness, #{harness.inspect} (known: #{known.join(', ')})"
+    end
+    return if problems.empty?
+
+    problems.join('; ')
+  end
+
+  # The keys every entry gives, with the known harnesses.
+  module_function def entry_needs
+    "#{quoted_list(ENTRY_KEYS)} (harness: #{Harnesses::BY_NAME.keys.join(', ')})"
+  end
+
+  # True if a config value counts as missing: absent, null, or blank.
+  module_function def blank_value?(value)
+    value.nil? || (value.is_a?(String) && value.strip.empty?)
+  end
+
+  # Added after the errors when an entry gives no harness, which may be
+  # one from a 0.1.0 config, when every entry ran under pi.
+  MISSING_HARNESS_HINT =
+    "If this is a 0.1.0 config, it ran every entry under pi: add 'harness: pi' to each entry."
+
+  # Aborts, if any of entries (a Hash of name, e.g. "'agents' entry #2", to
+  # config entry) has an error, with one line per bad entry, naming the
+  # config file, so one edit can fix them all. When a bad entry is a
+  # mapping without a harness, a line saying what every entry needs
+  # follows, and then hint, if no entry gives a harness (as in a 0.1.0
+  # config; a config that names some may have a typo instead).
+  module_function def abort_on_entry_errors(entries, config_path, hint: MISSING_HARNESS_HINT)
+    bad = entries.filter_map { |name, entry| (error = entry_error(entry)) && [name, entry, error] }
+    return if bad.empty?
+
+    lines = bad.map { |name, _entry, error| "#{name} in #{config_path} #{error}" }
+    harnessless = ->(entry) { entry.is_a?(Hash) && blank_value?(entry['harness']) }
+    if bad.any? { |_name, entry, _error| harnessless.(entry) }
+      lines << "Every entry needs #{entry_needs}."
+      lines << hint if entries.values.all?(&harnessless)
+    end
+    abort lines.join("\n")
   end
 
   # True if `name` (a bare command name) is an executable file in a PATH
@@ -1027,7 +1097,7 @@ module AgentCouncil
       abort <<~MESSAGE
         No config file given, and neither ./#{CWD_CONFIG_NAME} nor ~/#{HOME_CONFIG_NAME} exists.
         Pass a config path: agent-council PROMPT_FILE CONFIG_FILE
-        Minimal config: agents: [{provider: ..., model: ...}]
+        Minimal config: agents: [{harness: pi, provider: ..., model: ...}]
         Sample configs: #{File.join(EXAMPLES_DIR, 'configs')}
       MESSAGE
     end
@@ -1064,21 +1134,17 @@ module AgentCouncil
     abort "Config file must be a YAML mapping: #{config_path}" unless config.is_a?(Hash)
 
     agents = config['agents']
-    abort "No agents defined in #{config_path}" unless agents.is_a?(Array) && !agents.empty?
-    agents.each_with_index do |agent, i|
-      error = entry_error(agent)
-      abort "Agent ##{i + 1} in #{config_path} #{error}" if error
+    abort "No 'agents' list in #{config_path}" if agents.nil?
+    unless agents.is_a?(Array)
+      abort "'agents' in #{config_path} must be a list of entries, but is #{yaml_kind(agents)}"
     end
-    agents = agents.map { |agent| Harnesses.with_defaults(agent) }
-
+    abort "'agents' in #{config_path} is an empty list; it needs at least one entry" if agents.empty?
     consolidator = config['consolidator']
-    if consolidator
-      error = entry_error(consolidator)
-      abort "Consolidator in #{config_path} #{error}" if error
-      consolidator = Harnesses.with_defaults(consolidator)
-      unless File.file?(CONSOLIDATE_PROMPT_PATH)
-        abort "Consolidator configured but template missing: #{CONSOLIDATE_PROMPT_PATH}"
-      end
+    entries = agents.each_with_index.to_h { |agent, i| ["'agents' entry ##{i + 1}", agent] }
+    entries["'consolidator'"] = consolidator if consolidator
+    abort_on_entry_errors(entries, config_path)
+    if consolidator && !File.file?(CONSOLIDATE_PROMPT_PATH)
+      abort "Consolidator configured but template missing: #{CONSOLIDATE_PROMPT_PATH}"
     end
 
     # A consolidator of false, like nil, means none, as in the check above.
@@ -1228,9 +1294,9 @@ module AgentCouncil
       end
     consolidator = config['consolidator'] if config.is_a?(Hash)
     abort "No consolidator in #{config_path}; add one to consolidate" unless consolidator
-    error = entry_error(consolidator)
-    abort "Consolidator in #{config_path} #{error}" if error
-    consolidator = Harnesses.with_defaults(consolidator)
+    abort_on_entry_errors({ "'consolidator'" => consolidator }, config_path,
+      hint: "If this run predates the 'harness' key, its consolidator ran under pi: " \
+        "add 'harness: pi' to the copy.")
     unless File.file?(CONSOLIDATE_PROMPT_PATH)
       abort "Consolidation template missing: #{CONSOLIDATE_PROMPT_PATH}"
     end
@@ -1328,7 +1394,6 @@ module AgentCouncil
     agents = config['agents'].is_a?(Array) ? config['agents'] : []
     present = reports.map(&:first)
     agents.each_with_index.filter_map do |agent, i|
-      agent = Harnesses.with_defaults(agent)
       next unless labelable_entry?(agent)
 
       label = agent_label(agent['provider'], agent['model'], i + 1)

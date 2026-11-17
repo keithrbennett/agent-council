@@ -106,7 +106,7 @@ The tests make no model calls. For changes affecting how a harness is invoked or
   examples/configs/single.yml
 ```
 
-`single.yml` names one provider and model; if you lack credentials for them, copy it and substitute a pair from `pi --list-models`, so a missing credential isn't mistaken for a bug in your change. Real runs send whatever the agents read and run to the configured providers, and cost money; see "Safety and privacy" in the [README](README.md#safety-and-privacy).
+`single.yml` names one pi provider and model; if you lack credentials for them, copy it and substitute a pair from `pi --list-models`, so a missing credential isn't mistaken for a bug in your change. Real runs send whatever the agents read and run to the configured providers, and cost money; see "Safety and privacy" in the [README](README.md#safety-and-privacy).
 
 In the pull request, identify:
 

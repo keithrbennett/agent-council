@@ -19,15 +19,20 @@ This uses four provider routes across four distinct agent model families. Opus 5
 
 ```yaml
 agents:
-  - provider: openai-codex
+  - harness: pi
+    provider: openai-codex
     model: gpt-6-sol
-  - provider: github-copilot
+  - harness: pi
+    provider: github-copilot
     model: gemini-3.8-flash
-  - provider: opencode-go
+  - harness: pi
+    provider: opencode-go
     model: deepseek-v4-pro
-  - provider: cursor
+  - harness: pi
+    provider: cursor
     model: claude-opus-5-5-high
 consolidator:
+  harness: pi
   provider: openai-codex
   model: gpt-6-astra
 ```

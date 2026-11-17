@@ -6,7 +6,7 @@ require 'spec_helper'
 
 RSpec.describe AgentCouncil::Harnesses do
   describe '.name_of' do
-    it "gives an entry's harness, or the default when it names none" do
+    it "gives an entry's harness, or pi for one that names none" do
       expect(described_class.name_of({ 'harness' => 'other' })).to eq('other')
       expect(described_class.name_of({ 'provider' => 'p' })).to eq('pi')
       expect(described_class.name_of(nil)).to eq('pi')
@@ -14,28 +14,6 @@ RSpec.describe AgentCouncil::Harnesses do
 
     it 'reads a non-string value, as in hand-edited front matter, as the default' do
       expect(described_class.name_of({ 'harness' => false })).to eq('pi')
-    end
-  end
-
-  describe '.with_defaults' do
-    it "fills in the provider of an entry that gives none from its harness's default" do
-      expect(described_class.with_defaults({ 'harness' => 'claude', 'model' => 'm' }))
-        .to eq({ 'harness' => 'claude', 'model' => 'm', 'provider' => 'anthropic' })
-      expect(described_class.with_defaults({ 'harness' => 'claude', 'provider' => nil, 'model' => 'm' }))
-        .to include('provider' => 'anthropic')
-      expect(described_class.with_defaults({ 'harness' => 'claude', 'provider' => ' ', 'model' => 'm' }))
-        .to include('provider' => 'anthropic')
-    end
-
-    it 'keeps a provider the entry gives' do
-      entry = { 'harness' => 'claude', 'provider' => 'bedrock', 'model' => 'm' }
-      expect(described_class.with_defaults(entry)).to be(entry)
-    end
-
-    it 'leaves an entry whose harness has no default, or that validation will reject, as it is' do
-      [{ 'model' => 'm' }, { 'harness' => 'nope', 'model' => 'm' }, nil, 'junk'].each do |entry|
-        expect(described_class.with_defaults(entry)).to be(entry)
-      end
     end
   end
 
@@ -60,7 +38,6 @@ RSpec.describe AgentCouncil::Harnesses do
     interface = %i[argv usage error_message exit_detail warnings final_response assistant_messages]
     described_class::BY_NAME.each_value do |harness|
       expect(harness).to respond_to(*interface)
-      expect(harness.const_defined?(:DEFAULT_PROVIDER, false)).to be(true), harness.name
     end
   end
 

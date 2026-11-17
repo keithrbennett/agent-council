@@ -76,9 +76,10 @@ For other install methods and details, see the
 
 ## 3. Install a harness: Pi, Claude Code, or both
 
-agent-council drives AI models through a coding-agent harness: by
-default the [Pi](https://github.com/earendil-works/pi) coding agent,
-version 1.0.4 or later. To use it, install Pi by
+agent-council drives AI models through a coding-agent harness, which
+each config entry names. Most samples use the
+[Pi](https://github.com/earendil-works/pi) coding agent, version 1.0.4
+or later. To use it, install Pi by
 following its [installation instructions](https://github.com/earendil-works/pi),
 and configure it with credentials for **at least one AI model provider**
 (see [Pi's documentation](https://pi.dev/docs/latest)). Under WSL, do both
@@ -87,8 +88,8 @@ inside WSL.
 Agents can also run under [Claude Code](https://code.claude.com/docs)
 (see the README's [Choosing a harness](README.md#choosing-a-harness)).
 For those, install the `claude` CLI and log in (under WSL, inside WSL).
-A config needs Pi only if some agent, or the consolidator, runs under it,
-as every entry without a `harness` does.
+A config needs Pi only if some agent, or the consolidator, runs under it
+(`harness: pi`).
 
 ## 4. Install agent-council
 

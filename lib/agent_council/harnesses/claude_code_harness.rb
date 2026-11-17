@@ -18,11 +18,6 @@ module AgentCouncil
     module ClaudeCodeHarness
       NAME = 'claude'
 
-      # Recorded as an entry's provider when it gives none. Claude Code takes
-      # no provider argument, so a provider an entry does give only labels
-      # the run (e.g. bedrock, for a claude set up to use it).
-      DEFAULT_PROVIDER = 'anthropic'
-
       # Analysis toolset (Claude Code's built-in tool names): Edit, Write, and
       # the rest are absent. Bash, a full shell, stays for investigation;
       # only the scaffolding text asks the model to use it read-only.
@@ -30,7 +25,8 @@ module AgentCouncil
 
       # Invocation for one model run. The substantive prompt is not part of
       # argv; it is piped to stdin. provider is not passed: Claude Code
-      # takes none.
+      # takes none, so an entry's provider only labels the run (e.g.
+      # bedrock, for a claude set up to use it).
       module_function def argv(_provider, model, scratch_dir)
         [
           NAME,

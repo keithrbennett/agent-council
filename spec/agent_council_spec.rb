@@ -181,7 +181,7 @@ RSpec.describe AgentCouncil do
   end
 
   describe '.run_agent' do
-    let(:agent) { { 'provider' => 'p', 'model' => 'm' } }
+    let(:agent) { { 'harness' => 'pi', 'provider' => 'p', 'model' => 'm' } }
     let(:pi_harness) { AgentCouncil::Harnesses::PiHarness }
     let(:run_dir) { Dir.mktmpdir }
     let(:scratch_dirs) { [] }
@@ -196,6 +196,17 @@ RSpec.describe AgentCouncil do
         File.write(File.join(env.fetch('TMPDIR'), 'leftover'), 'x')
         [stdout, 'boom', status]
       end
+    end
+
+    # Config entries are validated at startup; run_agent guards direct callers.
+    it 'fails an entry without a harness, spawning nothing' do
+      allow(Open3).to receive(:capture3)
+      _label, ok, detail =
+        described_class.run_agent(agent.except('harness'), 'prompt', run_dir, 'prefix', index: 1)
+      expect(ok).to be(false)
+      expect(detail).to eq("config entry is missing 'harness'")
+      expect(Open3).not_to have_received(:capture3)
+      expect(Dir.children(run_dir)).to be_empty
     end
 
     describe 'under Claude Code' do
@@ -267,15 +278,6 @@ RSpec.describe AgentCouncil do
         expect(ok).to be(true)
         expect(File.read(File.join(run_dir, filename)))
           .to include('| warnings | Claude Code refused 1 tool call: Bash (cat README.md) |')
-      end
-
-      it 'fills in the default provider of an entry given straight to it' do
-        stub_capture3(claude_fixture('success'), instance_double(Process::Status, success?: true))
-        entry = { 'harness' => 'claude', 'model' => 'claude-haiku-5-5' }
-        label, ok, filename = described_class.run_agent(entry, 'prompt', run_dir, 'prefix', index: 1)
-        expect(ok).to be(true), filename
-        expect(label).to eq('#1 anthropic / claude-haiku-5-5')
-        expect(filename).to eq('prefix_01_claude_anthropic_claude-haiku-5-5.md')
       end
 
       it 'treats a harness returning nil for its warnings as having none' do
@@ -527,6 +529,8 @@ RSpec.describe AgentCouncil do
   describe '.main' do
     include_context 'with isolated cwd and home'
 
+    let(:pi_entry) { { 'harness' => 'pi', 'provider' => 'p', 'model' => 'm' } }
+
     it 'aborts on native Windows, pointing to WSL' do
       allow(described_class).to receive(:windows?).and_return(true)
       expect { described_class.main(['-h']) }
@@ -604,7 +608,7 @@ RSpec.describe AgentCouncil do
 
     it 'uses AGENT_COUNCIL_OPTS as defaults for supported options' do
       File.write('p_prompt.md', 'hi')
-      File.write('config.yml', YAML.dump('agents' => [{ 'provider' => 'p', 'model' => 'm' }]))
+      File.write('config.yml', YAML.dump('agents' => [pi_entry]))
       ENV[described_class::ENV_OPTS_VAR] = '--output-dir from-env'
       allow(described_class).to receive(:abort_unless_harnesses_installed)
       allow(described_class).to receive(:run_agent).and_return(['#1 p / m', true, 'report.md', nil, []])
@@ -619,7 +623,7 @@ RSpec.describe AgentCouncil do
 
     it 'lets command-line options override AGENT_COUNCIL_OPTS defaults' do
       File.write('p_prompt.md', 'hi')
-      File.write('config.yml', YAML.dump('agents' => [{ 'provider' => 'p', 'model' => 'm' }]))
+      File.write('config.yml', YAML.dump('agents' => [pi_entry]))
       ENV[described_class::ENV_OPTS_VAR] = '--output-dir from-env'
       allow(described_class).to receive(:abort_unless_harnesses_installed)
       allow(described_class).to receive(:run_agent).and_return(['#1 p / m', true, 'report.md', nil, []])
@@ -693,7 +697,7 @@ RSpec.describe AgentCouncil do
 
     it 'aborts with a message, not a backtrace, when the run dir cannot be created' do
       File.write('p_prompt.md', 'hi')
-      File.write('config.yml', YAML.dump('agents' => [{ 'provider' => 'p', 'model' => 'm' }]))
+      File.write('config.yml', YAML.dump('agents' => [pi_entry]))
       allow(described_class).to receive(:abort_unless_harnesses_installed)
       allow(described_class).to receive(:claim_run_dir).and_raise(Errno::EACCES, 'out')
       expect { described_class.main(['-o', 'out', 'p_prompt.md', 'config.yml']) }
@@ -708,7 +712,8 @@ RSpec.describe AgentCouncil do
         .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
         .and output(a_string_starting_with(
           "No config file given, and neither ./agent-council.yml nor ~/.agent-council.yml exists.\n"
-        ).and(including("Sample configs: #{samples}\n"))).to_stderr
+        ).and(including("Sample configs: #{samples}\n",
+          'Minimal config: agents: [{harness: pi, provider: ..., model: ...}]'))).to_stderr
       expect(File).not_to exist('agent-council-reports')
     end
 
@@ -721,7 +726,7 @@ RSpec.describe AgentCouncil do
       it "aborts before creating a run dir when #{situation}" do
         FileUtils.mkdir_p(%w[p c])
         File.write(prompt, 'hi')
-        File.write(config, YAML.dump('agents' => [{ 'provider' => 'p', 'model' => 'm' }]))
+        File.write(config, YAML.dump('agents' => [pi_entry]))
         expect { described_class.main([prompt, config]) }
           .to raise_error(SystemExit)
           .and output(/need different file names, since all three are copied into the run dir: #{names}, /)
@@ -732,7 +737,7 @@ RSpec.describe AgentCouncil do
 
     it 'aborts before creating a run dir when the prompt is named like the reviews dir' do
       File.write('reviews', 'hi')
-      File.write('c.yml', YAML.dump('agents' => [{ 'provider' => 'p', 'model' => 'm' }]))
+      File.write('c.yml', YAML.dump('agents' => [pi_entry]))
       expect { described_class.main(['reviews', 'c.yml']) }
         .to raise_error(SystemExit)
         .and output(/The prompt can't be named reviews/).to_stderr
@@ -741,7 +746,7 @@ RSpec.describe AgentCouncil do
 
     it 'aborts before creating a run dir when the harness executable is not on PATH, naming it once' do
       File.write('p_prompt.md', 'hi')
-      agents = Array.new(2) { { 'provider' => 'p', 'model' => 'm' } }
+      agents = Array.new(2) { { 'harness' => 'pi', 'provider' => 'p', 'model' => 'm' } }
       File.write('config.yml', YAML.dump('agents' => agents))
       Dir.mkdir('empty-bin')
       allow(ENV).to receive(:fetch).and_call_original
@@ -754,7 +759,7 @@ RSpec.describe AgentCouncil do
     end
 
     it 'leaves a consolidator: false, which means none, out of the executable check' do
-      agent = { 'provider' => 'p', 'model' => 'm' }
+      agent = { 'harness' => 'pi', 'provider' => 'p', 'model' => 'm' }
       File.write('p_prompt.md', 'hi')
       File.write('config.yml', YAML.dump('agents' => [agent], 'consolidator' => false))
       allow(described_class).to receive(:abort_unless_harnesses_installed).and_raise(SystemExit)
@@ -768,7 +773,7 @@ RSpec.describe AgentCouncil do
         'other' => other })
       File.write('p_prompt.md', 'hi')
       agent = { 'harness' => 'other', 'provider' => 'p', 'model' => 'm' }
-      consolidator = { 'provider' => 'p', 'model' => 'm' }
+      consolidator = { 'harness' => 'pi', 'provider' => 'p', 'model' => 'm' }
       File.write('config.yml', YAML.dump('agents' => [agent], 'consolidator' => consolidator))
       Dir.mkdir('empty-bin')
       allow(ENV).to receive(:fetch).and_call_original
@@ -778,14 +783,55 @@ RSpec.describe AgentCouncil do
         .and output(/other-harness executable not found.*\npi executable not found/).to_stderr
     end
 
-    it 'aborts naming the agent whose entry lacks a provider or model' do
+    it 'aborts naming every bad entry and the keys each lacks, then what every entry needs' do
       File.write('p_prompt.md', 'hi')
-      agents = [{ 'provider' => 'p', 'model' => 'm' }, { 'model' => 'm' }]
-      File.write('config.yml', YAML.dump('agents' => agents))
+      agents = [pi_entry, { 'model' => 'm' }, { 'harness' => 'pi', 'model' => 'm' }]
+      File.write('config.yml', YAML.dump('agents' => agents, 'consolidator' => pi_entry.except('harness')))
       expect { described_class.main(['p_prompt.md', 'config.yml']) }
         .to raise_error(SystemExit)
-        .and output(/Agent #2 in config\.yml needs string 'provider' and 'model' fields/).to_stderr
+        .and output(<<~ERR).to_stderr
+          'agents' entry #2 in config.yml is missing 'harness' and 'provider'
+          'agents' entry #3 in config.yml is missing 'provider'
+          'consolidator' in config.yml is missing 'harness'
+          Every entry needs 'harness', 'provider', and 'model' (harness: pi, claude).
+        ERR
       expect(File).not_to exist('agent-council-reports')
+    end
+
+    # A config that names some harnesses isn't a 0.1.0 one; it may have a typo.
+    it 'gives the 0.1.0 hint only when no entry names a harness' do
+      File.write('p_prompt.md', 'hi')
+      harnessless = pi_entry.except('harness')
+      File.write('config.yml', YAML.dump('agents' => [harnessless, harnessless.dup]))
+      expect { described_class.main(['p_prompt.md', 'config.yml']) }
+        .to raise_error(SystemExit)
+        .and output(a_string_ending_with("claude).\n#{described_class::MISSING_HARNESS_HINT}\n"))
+        .to_stderr
+    end
+
+    {
+      'no agents key'        => [{}, "No 'agents' list in config.yml"],
+      'agents as a mapping'  => [{ 'agents' => { 'harness' => 'pi' } },
+        "'agents' in config.yml must be a list of entries, but is a mapping"],
+      'an empty agents list' => [{ 'agents' => [] }, "'agents' in config.yml is an empty list"],
+    }.each do |situation, (config, message)|
+      it "aborts on #{situation}, saying what is wrong" do
+        File.write('p_prompt.md', 'hi')
+        File.write('config.yml', YAML.dump(config))
+        expect { described_class.main(['p_prompt.md', 'config.yml']) }
+          .to raise_error(SystemExit)
+          .and output(a_string_including(message)).to_stderr
+      end
+    end
+
+    it 'aborts on a consolidator given as a list, naming its key' do
+      File.write('p_prompt.md', 'hi')
+      entry = { 'harness' => 'pi', 'provider' => 'p', 'model' => 'm' }
+      File.write('config.yml', YAML.dump('agents' => [entry], 'consolidator' => [entry.dup]))
+      expect { described_class.main(['p_prompt.md', 'config.yml']) }
+        .to raise_error(SystemExit)
+        .and output(/\A'consolidator' in config\.yml must be a mapping giving .*, but is a list\n\z/)
+        .to_stderr
     end
 
     it 'aborts on an agent with an unknown harness, naming the agent' do
@@ -794,17 +840,18 @@ RSpec.describe AgentCouncil do
       File.write('config.yml', YAML.dump('agents' => [agent]))
       expect { described_class.main(['p_prompt.md', 'config.yml']) }
         .to raise_error(SystemExit)
-        .and output(/Agent #1 in config\.yml names an unknown harness, "nope"/).to_stderr
+        .and output(/'agents' entry #1 in config\.yml names an unknown harness, "nope"/).to_stderr
       expect(File).not_to exist('agent-council-reports')
     end
 
     it 'aborts on an unknown harness, listing the known ones' do
       File.write('p_prompt.md', 'hi')
-      File.write('config.yml', YAML.dump('agents' => [{ 'provider' => 'p', 'model' => 'm' }],
+      File.write('config.yml', YAML.dump('agents' => [pi_entry],
         'consolidator' => { 'harness' => 'nope', 'provider' => 'p', 'model' => 'm' }))
       expect { described_class.main(['p_prompt.md', 'config.yml']) }
         .to raise_error(SystemExit)
-        .and output(/Consolidator in config\.yml names an unknown harness, "nope" \(known: pi[,)]/).to_stderr
+        .and output(/'consolidator' in config\.yml names an unknown harness, "nope" \(known: pi[,)]/)
+        .to_stderr
       expect(File).not_to exist('agent-council-reports')
     end
   end
@@ -813,7 +860,9 @@ RSpec.describe AgentCouncil do
     include_context 'with isolated cwd and home'
 
     let(:run_dir) { 'agent-council-reports/2026-09-03/09-14-02' }
-    let(:consolidator_config) { { 'consolidator' => { 'provider' => 'c', 'model' => 'cm' } } }
+    let(:consolidator_config) do
+      { 'consolidator' => { 'harness' => 'pi', 'provider' => 'c', 'model' => 'cm' } }
+    end
     let(:analyst_fields) do
       { 'role' => 'analyst', 'query' => 'review', 'prompt_file' => 'review_prompt.md',
         'config_file' => 'config.yml', 'run_stamp' => '2026-09-03-09-14-02',
@@ -944,13 +993,25 @@ RSpec.describe AgentCouncil do
     end
 
     it 'aborts when the consolidator entry is malformed' do
-      write_run(config: { 'consolidator' => { 'provider' => 'c' } })
-      expect_abort(/Consolidator in .*config\.yml needs string 'provider' and 'model' fields/)
+      write_run(config: { 'consolidator' => { 'harness' => 'pi', 'provider' => 'c' } })
+      expect_abort("'consolidator' in #{run_dir}/config.yml is missing 'model'\n")
+    end
+
+    it "suggests 'harness: pi' for a consolidator from before the 'harness' key" do
+      write_run(config: { 'consolidator' => { 'provider' => 'c', 'model' => 'cm' } })
+      expect_abort(/is missing 'harness'\nEvery entry needs .*\nIf this run predates the 'harness' key, /)
+    end
+
+    it "suggests 'harness: pi' for a blank harness too, but not for a named one" do
+      write_run(config: { 'consolidator' => { 'harness' => ' ', 'provider' => 'c', 'model' => 'cm' } })
+      expect_abort(/gives a blank 'harness'\n.*\n.*'harness: pi' to the copy/)
+      write_run(config: { 'consolidator' => { 'harness' => 'pi', 'provider' => 'c' } })
+      expect_abort(satisfy { |err| err.include?("is missing 'model'") && !err.include?('predates') })
     end
 
     it 'aborts when the consolidator names an unknown harness' do
       write_run(config: { 'consolidator' => { 'harness' => 'nope', 'provider' => 'c', 'model' => 'm' } })
-      expect_abort(/Consolidator in .*config\.yml names an unknown harness, "nope"/)
+      expect_abort(/'consolidator' in .*config\.yml names an unknown harness, "nope"/)
     end
 
     it "checks only the consolidator's harness executable, since no analysts run" do
@@ -960,14 +1021,6 @@ RSpec.describe AgentCouncil do
       expect { described_class.main(['--consolidate', run_dir]) }.to raise_error(SystemExit)
       expect(described_class).to have_received(:abort_unless_harnesses_installed)
         .with([consolidator_config['consolidator']])
-    end
-
-    it "completes a consolidator without a provider from its harness's default" do
-      write_run(config: { 'consolidator' => { 'harness' => 'claude', 'model' => 'cm' } })
-      allow(described_class).to receive(:abort_unless_harnesses_installed).and_raise(SystemExit)
-      expect { described_class.main(['--consolidate', run_dir]) }.to raise_error(SystemExit)
-      expect(described_class).to have_received(:abort_unless_harnesses_installed)
-        .with([{ 'harness' => 'claude', 'model' => 'cm', 'provider' => 'anthropic' }])
     end
 
     it 'aborts when the harness executable is not on PATH' do
@@ -1095,7 +1148,7 @@ RSpec.describe AgentCouncil do
     # The point of mixing harnesses: one model under each.
     it 'tells apart the same provider and model under each harness, by agent number and harness' do
       pi = { 'provider' => 'anthropic', 'model' => 'claude-opus-5-5' }
-      claude = AgentCouncil::Harnesses.with_defaults(pi.except('provider').merge('harness' => 'claude'))
+      claude = pi.merge('harness' => 'claude')
       names = [[pi, 1], [claude, 2]].map { |entry, i| described_class.report_filename('p', entry, index: i) }
       expect(names).to eq(%w[p_01_pi_anthropic_claude-opus-5-5.md p_02_claude_anthropic_claude-opus-5-5.md])
       labels = [1, 2].map { |index| described_class.agent_label('anthropic', 'claude-opus-5-5', index) }
@@ -1603,14 +1656,16 @@ RSpec.describe AgentCouncil do
   end
 
   describe '.run_consolidation' do
+    let(:zai) { { 'harness' => 'pi', 'provider' => 'zai', 'model' => 'glm-5.3' } }
+
     it 'fails cleanly when the config entry is malformed' do
       expect(described_class.run_consolidation({ 'provider' => 'zai' }, 'prompt', '/tmp/x', 'prefix'))
-        .to eq(['consolidator', false, "config entry needs 'provider' and 'model'", nil, nil, []])
+        .to eq(['consolidator', false, "config entry is missing 'harness' and 'model'", nil, nil, []])
     end
 
     it 'fails cleanly when there are no reports to consolidate' do
       Dir.mktmpdir do |dir|
-        result = described_class.run_consolidation({ 'provider' => 'zai', 'model' => 'glm-5.3' },
+        result = described_class.run_consolidation(zai,
           'prompt', dir, 'prefix')
         expect(result[0]).to eq('zai / glm-5.3')
         expect(result[1]).to be(false)
@@ -1627,7 +1682,7 @@ RSpec.describe AgentCouncil do
         allow(File).to receive(:read).and_call_original
         allow(File).to receive(:read).with(report, any_args).and_raise(ArgumentError, 'invalid byte sequence')
 
-        result = described_class.run_consolidation({ 'provider' => 'zai', 'model' => 'glm-5.3' },
+        result = described_class.run_consolidation(zai,
           'prompt', dir, 'prefix')
         expect(result).to eq(['zai / glm-5.3', false, 'ArgumentError: invalid byte sequence', nil, nil, []])
       end
@@ -1651,7 +1706,7 @@ RSpec.describe AgentCouncil do
 
         label = ok = nil
         expect do
-          label, ok, = described_class.run_consolidation({ 'provider' => 'zai', 'model' => 'glm-5.3' },
+          label, ok, = described_class.run_consolidation(zai,
             'prompt', dir, 'prefix', meta: {
               'query'     => 'check-prev-commits',
               'timestamp' => '2026-09-03T19:23:57',
@@ -2023,47 +2078,65 @@ RSpec.describe AgentCouncil do
   end
 
   describe '.entry_error' do
-    it 'accepts an entry with a provider and model, and a known harness or none' do
-      expect(described_class.entry_error({ 'provider' => 'p', 'model' => 'm' })).to be_nil
-      expect(described_class.entry_error({ 'harness' => 'pi', 'provider' => 'p', 'model' => 'm' })).to be_nil
+    let(:entry) { { 'harness' => 'pi', 'provider' => 'p', 'model' => 'm' } }
+
+    it 'accepts an entry giving a known harness, a provider, and a model' do
+      expect(described_class.entry_error(entry)).to be_nil
+      expect(described_class.entry_error(entry.merge('harness' => 'claude', 'extra' => 1))).to be_nil
     end
 
-    it 'rejects an entry without a string provider and model, or with an unknown harness' do
-      needs = "needs string 'provider' and 'model'"
-      expect(described_class.entry_error({ 'provider' => 'p' })).to include(needs)
-      expect(described_class.entry_error(nil)).to include(needs)
-      expect(described_class.entry_error({ 'harness' => false, 'provider' => 'p', 'model' => 'm' }))
-        .to include('unknown harness, false')
+    it 'names every missing or blank key at once' do
+      expect(described_class.entry_error({ 'model' => 'm', 'provider' => ' ' })).to eq(
+        "is missing 'harness'; gives a blank 'provider'"
+      )
+      expect(described_class.entry_error({ 'harness' => 'pi', 'model' => '' })).to eq(
+        "is missing 'provider'; gives a blank 'model'"
+      )
+      expect(described_class.entry_error({ 'harness' => ' ', 'provider' => '', 'model' => 'm' })).to eq(
+        "gives blank values for 'harness' and 'provider'"
+      )
+      expect(described_class.entry_error({})).to eq("is missing 'harness', 'provider', and 'model'")
     end
 
-    it 'accepts a claude entry without a provider, whose harness has a default' do
-      expect(described_class.entry_error({ 'harness' => 'claude', 'model' => 'm' })).to be_nil
-      expect(described_class.entry_error({ 'harness' => 'claude', 'provider' => 'bedrock', 'model' => 'm' }))
-        .to be_nil
+    it 'says what a non-mapping entry is' do
+      expect(described_class.entry_error(nil)).to end_with(', but is null')
+      expect(described_class.entry_error('oops')).to end_with(', but is a string')
+      expect(described_class.entry_error([entry])).to eq(
+        "must be a mapping giving 'harness', 'provider', and 'model' (harness: pi, claude), but is a list"
+      )
     end
 
-    it 'reports both problems of a claude entry with neither a model nor a string provider' do
-      expect(described_class.entry_error({ 'harness' => 'claude', 'provider' => 1 }))
-        .to eq("needs a string 'model' field, and gives a 'provider' that is not a string")
+    it 'names a value that is not a string, and its kind' do
+      expect(described_class.entry_error(entry.merge('model' => 2026, 'harness' => false))).to eq(
+        "gives 'harness' as a boolean, false, not a string (known: pi, claude); " \
+        "gives 'model' as a number, 2026, not a string (quote it)"
+      )
     end
 
-    it 'asks a claude entry only for a model, and for a string provider if it gives one' do
-      expect(described_class.entry_error({ 'harness' => 'claude' })).to eq("needs a string 'model' field")
-      expect(described_class.entry_error({ 'harness' => 'claude', 'provider' => 1, 'model' => 'm' }))
-        .to eq("gives a 'provider' that is not a string")
+    it "doesn't suggest quoting a list or mapping" do
+      expect(described_class.entry_error(entry.merge('provider' => ['p'], 'model' => { 'm' => 1 }))).to eq(
+        "gives 'provider' as a list, [\"p\"], not a string; " \
+        "gives 'model' as a mapping, {\"m\" => 1}, not a string"
+      )
     end
 
-    it 'reports an unknown harness before missing fields' do
-      expect(described_class.entry_error({ 'harness' => 'nope' })).to start_with('names an unknown harness')
+    it 'reports an unknown harness along with the other problems' do
+      expect(described_class.entry_error({ 'harness' => 'nope', 'model' => 'm' })).to eq(
+        "is missing 'provider'; names an unknown harness, \"nope\" (known: pi, claude)"
+      )
+    end
+
+    # c60b7f8 let a Claude Code entry omit its provider; now none may.
+    it 'requires a provider of a Claude Code entry too' do
+      expect(described_class.entry_error({ 'harness' => 'claude', 'model' => 'm' }))
+        .to eq("is missing 'provider'")
     end
   end
 
   describe '.missing_agents' do
-    it "labels a claude entry without a provider by its harness's default, as its report is" do
-      config = { 'agents' => [{ 'harness' => 'claude', 'model' => 'claude-opus-5-5' }] }
-      label = '#1 anthropic / claude-opus-5-5'
-      expect(described_class.missing_agents(config, []).map(&:first)).to eq([label])
-      expect(described_class.missing_agents(config, [[label, 'body', {}]])).to eq([])
+    it "skips an entry it can't label" do
+      config = { 'agents' => [{ 'harness' => 'claude', 'model' => 'claude-opus-5-5' }, 'junk'] }
+      expect(described_class.missing_agents(config, [])).to eq([])
     end
 
     it 'lists configured agents without a report, labeled as reports are' do

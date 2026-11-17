@@ -1,21 +1,27 @@
-# Sample ensemble: four analysts and a consolidator. Replace any provider or
-# model you don't have credentials for (see `pi --list-models`). The
+# Sample ensemble: four analysts and a consolidator, all under pi. Replace any
+# provider or model you don't have credentials for (see `pi --list-models`). The
 # commented-out entries are alternatives: uncommenting the extra agent adds a
 # fifth analyst; to swap in the other consolidator, uncomment its provider
 # and model lines and comment out the active pair.
 agents:
-  - provider: opencode-go
+  - harness: pi
+    provider: opencode-go
     model: glm-5.3
-  - provider: opencode-go
+  - harness: pi
+    provider: opencode-go
     model: kimi-k3
-  - provider: openai
+  - harness: pi
+    provider: openai
     model: gpt-6.1-sol
-#  - provider: opencode-go
+#  - harness: pi
+#    provider: opencode-go
 #    model: minimax-m3
-  - provider: cursor
+  - harness: pi
+    provider: cursor
     model: claude-sonnet-5-5-high
 
 consolidator:
+  harness: pi
 #  provider: deepseek
 #  model: deepseek-v4-pro
   provider: opencode-go

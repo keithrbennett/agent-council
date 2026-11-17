@@ -133,9 +133,9 @@ in detail.
 1. **Install the prerequisites:** Ruby 3.3+ (or JRuby 10+) and the
    [`pi` CLI](https://github.com/earendil-works/pi) (`pi --version`). See
    [Prerequisites](#prerequisites), or [INSTALL.md](INSTALL.md) if you
-   need to install Ruby too. These steps use pi, the default harness;
-   to run agents under Claude Code as well, or instead (then without
-   pi), see [Choosing a harness](#choosing-a-harness).
+   need to install Ruby too. These steps run every agent under pi; to
+   run agents under Claude Code as well, or instead (then without pi),
+   see [Choosing a harness](#choosing-a-harness).
 2. **Set up credentials for at least one provider in pi** (see
    [pi's documentation][pi-docs]), then list the models available to pi
    (a listed model can still be one your plan doesn't include). Two
@@ -166,11 +166,14 @@ in detail.
    ```yaml
    # agent-council.yml
    agents:
-     - provider: <provider-1>
+     - harness: pi
+       provider: <provider-1>
        model: <model-1>
-     - provider: <provider-2>
+     - harness: pi
+       provider: <provider-2>
        model: <model-2>
    consolidator:
+     harness: pi
      provider: <provider-1>
      model: <model-1>
    ```
@@ -205,7 +208,7 @@ consolidator, see
   tool itself; CI tests 3.3, 3.4, 4.0, JRuby 10.0 and the latest
   JRuby)
 - The harness CLIs your config uses (each run checks for them first):
-  - for pi, the default: the
+  - for pi: the
     [`pi` CLI](https://github.com/earendil-works/pi)
     (`pi --version`), 1.0.4 or later, for `--no-mcp` (tested with pi
     1.3.0, 1.4.0, and 1.5.2), with credentials for at least one provider
@@ -282,7 +285,7 @@ Edit the config to choose the ensemble. The config is the optional second
 argument; if omitted, `./agent-council.yml` in the current directory is used
 (parent directories are not searched), else `~/.agent-council.yml` in your
 home directory. It is an error if neither exists. Each entry becomes one
-run of its harness (`pi` by default; see
+run of the harness it names (see
 [Choosing a harness](#choosing-a-harness)) with that
 model and provider (see
 [How it works](#how-it-works-and-what-the-agents-are-told) for the full commands), so no Ruby changes
@@ -292,11 +295,14 @@ providers and models with ones you have credentials for):
 ```yaml
 # agent-council.yml
 agents:
-  - provider: opencode-go
+  - harness: pi
+    provider: opencode-go
     model: kimi-k2.7-code
-  - provider: openai
+  - harness: pi
+    provider: openai
     model: gpt-6.1-sol
 consolidator:            # optional; omit to skip consolidation
+  harness: pi
   provider: opencode-go
   model: kimi-k2.7-code
 ```
@@ -305,13 +311,15 @@ Use at least two agents: a council of one gives a single viewpoint, and
 consolidating a single report adds cost without adding anything.
 
 The config must be a YAML mapping with a non-empty `agents` list. Each
-agent, and the consolidator, needs string `provider` and `model` values
-(quote any value YAML would read as something else, such as a number,
-a date, or `yes`), except that a Claude Code entry may leave out
-`provider`. An optional `harness` value names the harness it runs
-under, `pi` (the default) or `claude`; an unknown
-name is rejected at startup (with `--consolidate`, only the
-consolidator's, since no analysts run). Other keys are ignored.
+agent, and the consolidator, needs nonblank string `harness`,
+`provider`, and `model` values (quote any value YAML would read as
+something else, such as a number, a date, or `yes`). None has a default;
+a 0.1.0 config needs `harness: pi` added to each entry. `harness` names
+the harness the entry runs under, `pi` or `claude`; an unknown name is
+rejected at startup (with `--consolidate`, only the consolidator's,
+since no analysts run). Other keys are ignored. A config error lists
+every bad entry, named as in `'agents' entry #2` or `'consolidator'`,
+with every problem it has.
 
 More samples are in [`examples/configs/`](examples/configs/), which is
 included in the installed gem; `mixed-harness.yml` mixes pi and Claude
@@ -320,8 +328,8 @@ Code agents. For scripts and agents,
 machine-readable forms.
 
 An optional top-level `consolidator:` entry (the same shape as an
-agent's: a model, a provider unless its harness supplies one, and
-optionally a harness) runs after all agents finish. That model receives:
+agent's: a harness, a provider, and a model) runs after all agents
+finish. That model receives:
 
 - the original prompt;
 - the analyst reports in `reviews/`, each labeled with its source model;
@@ -345,19 +353,22 @@ can mix the two, and can compare a model under each:
 
 ```yaml
 agents:
-  - provider: openai
+  - harness: pi
+    provider: openai
     model: gpt-6.1-sol
   - harness: claude
+    provider: anthropic
     model: claude-opus-5-5
 consolidator:
   harness: claude
+  provider: anthropic
   model: claude-sonnet-5-5
 ```
 
 - **Models.** `model` is any model name or alias `claude --model`
-  accepts. Claude Code takes no provider, so `provider` may be left out
-  and is then recorded as `anthropic`; one you do give (e.g. `bedrock`,
-  if your `claude` is set up to use it) only labels the run.
+  accepts. Claude Code takes no provider, so `provider` only labels the
+  run: `anthropic`, or e.g. `bedrock` if your `claude` is set up to use
+  it.
 - **Billing.** agent-council leaves authentication and billing to Claude
   Code: an agent bills however `claude` would at your terminal, to your
   subscription if you are logged in with one, or to an API key if one is
@@ -569,9 +580,12 @@ any suffix). Exit status is 0 only if the consolidation succeeded.
     then no longer records the run's original consolidator).
   - If the run had no consolidator, add a `consolidator:` entry to the
     copy first; otherwise `--consolidate` exits with an error.
+  - A run made by agent-council 0.1.0, before entries named their
+    harness, has a consolidator with no `harness`; it ran under pi, so
+    add `harness: pi` to it (the error message says so).
   - Leave the copy's `agents:` exactly as they were (same order,
-    providers, and models): an agent counts as having no report when no
-    report carries its number, provider, and model.
+    harnesses, providers, and models): an agent counts as having no
+    report when no report carries its number, provider, and model.
 - **The consolidation instructions are the current template's** (the
   installed gem's, or a checkout's own), which may have changed since
   the run.
@@ -1020,7 +1034,8 @@ two ways:
   (`--json`, for `jq`), or one `provider/id` per line (`--ids`, for shell
   loops), and exits non-zero with a clear message if pi is missing or
   fails. `pi-models -h` lists the options and the JSON fields. In a config
-  entry, its `provider` is `provider` and its `id` is `model`.
+  entry (with `harness: pi`), its `provider` is `provider` and its `id`
+  is `model`.
 - **Source.** `pi-models` asks pi over its RPC interface instead of running
   `pi --list-models`, so its list can include models that
   `pi --list-models` omits (e.g. extra `github-copilot` models), and those

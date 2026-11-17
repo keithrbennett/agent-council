@@ -6,5 +6,6 @@
 #     "$AC_HOME/examples/prompts/smoke-test-prompt.md" \
 #     "$AC_HOME/examples/configs/single.yml"
 agents:
-  - provider: opencode-go # OPENCODE_API_KEY
+  - harness: pi
+    provider: opencode-go # OPENCODE_API_KEY
     model: kimi-k2.7-code

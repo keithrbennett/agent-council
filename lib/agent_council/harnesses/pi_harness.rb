@@ -16,10 +16,6 @@ module AgentCouncil
     module PiHarness
       NAME = 'pi'
 
-      # No default: pi runs the provider an entry gives, so every entry
-      # needs one.
-      DEFAULT_PROVIDER = nil
-
       # Analysis toolset (pi's built-in tool names): edit/write (and the
       # Windows-only powershell) are withheld. bash, a full shell, stays for
       # investigation (git log/status, dependency inspection, ...); only the

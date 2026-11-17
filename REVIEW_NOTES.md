@@ -29,11 +29,14 @@ Leaving out project settings instead, with `--setting-sources` or
 was not adopted: unlike safe mode, either would also drop the project's
 own permission rules, and neither is tested.
 
-## Non-issue: a harness without DEFAULT_PROVIDER would make validation raise
+## Accepted risk: --consolidate leaves out provider-less agents of c60b7f8 runs
 
-`entry_error` and `Harnesses.with_defaults` read each registered
-harness's `DEFAULT_PROVIDER` without checking that it is defined. Every
-harness must define it (`nil` when entries must give a provider): it is
-part of the interface documented in `lib/agent_council/harnesses.rb`,
-and `spec/agent_council/harnesses_spec.rb` fails for a harness that
-lacks it, so a missing one is caught in CI, not by users.
+c60b7f8 (unreleased) let a Claude Code entry omit `provider`, filling in
+`anthropic`; now every entry must give one, with no defaults. For a run
+made by that commit, `missing_agents` skips a config-copy agent without
+a provider (`labelable_entry?`), so the consolidator isn't told about it
+if it has no report, and `--consolidate` rejects such a consolidator.
+Only the maintainer's own pre-release runs can have such entries, and
+bringing back an `anthropic` fallback (or reading labels from
+`run.json`) for them would reintroduce a default. Fix by adding
+`provider: anthropic` to the run's config copy.

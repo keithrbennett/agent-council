@@ -26,23 +26,31 @@
 - The test-coverage-analysis sample prompt uses only the cov-loupe CLI,
   since agents have no MCP tools.
 - Agents and the consolidator can run under Claude Code, alongside pi
-  agents in the same config: an optional `harness` config value names
-  the harness, `pi` (the default) or `claude`, and an unknown name is
-  rejected at startup (with `--consolidate`, only the consolidator's,
-  since no analysts run). A Claude Code entry may omit `provider`, which
-  is then recorded as `anthropic`. Runs bill however `claude` does at
-  your terminal, to a subscription login or an API key; agent-council
-  sets nothing for billing. Of Claude Code's built-in tools, agents get
-  only `Read`, `Grep`, `Glob`, and `Bash`; they get no MCP servers, and
-  they load `CLAUDE.md`, settings, hooks, plugins, and auto memory as an
-  interactive session would, including the analyzed repository's own
-  hooks. A tool call Claude Code refuses (e.g. under a `permissions.deny`
-  rule) is reported as a warning, also shown in the report's metadata
-  table (where the consolidator sees it) and recorded in `run.json`; the
-  report is kept, and a run that fails anyway still gets the warning.
-  Only configs that use Claude Code need the `claude` CLI. A config
-  error in an agent's entry now names the agent (e.g. "Agent #2 in
-  ...").
+  agents in the same config: each entry's `harness` value names its
+  harness, `pi` or `claude`, and an unknown name is rejected at startup
+  (with `--consolidate`, only the consolidator's, since no analysts
+  run). A Claude Code entry's `provider` only labels the run. Runs bill
+  however `claude` does at your terminal, to a subscription login or an
+  API key; agent-council sets nothing for billing. Of Claude Code's
+  built-in tools, agents get only `Read`, `Grep`, `Glob`, and `Bash`;
+  they get no MCP servers, and they load `CLAUDE.md`, settings, hooks,
+  plugins, and auto memory as an interactive session would, including
+  the analyzed repository's own hooks. A tool call Claude Code refuses
+  (e.g. under a `permissions.deny` rule) is reported as a warning, also
+  shown in the report's metadata table (where the consolidator sees it)
+  and recorded in `run.json`; the report is kept, and a run that fails
+  anyway still gets the warning. Only configs that use Claude Code need
+  the `claude` CLI.
+- **Breaking:** every agent and consolidator entry must give `harness`,
+  `provider`, and `model`; there are no defaults. To update a 0.1.0
+  config, add `harness: pi` to each entry. To `--consolidate` a run made
+  by 0.1.0, add `harness: pi` to the consolidator in the run's config
+  copy; its reports and `run.json` are still read as pi's.
+- Config errors list every bad entry at once, each named by its key
+  (e.g. `'agents' entry #2` or `'consolidator'`) with every problem it
+  has (missing or blank keys, values that aren't strings, an unknown
+  harness), and say what a misshapen `agents` list or entry is instead
+  (e.g. a consolidator given as a list).
 
 ## 0.1.0 (2026-11-09)
 
