@@ -217,14 +217,16 @@ consolidator, see
     (several give more diverse viewpoints), configured through pi itself
     (see [pi's documentation][pi-docs]);
   - for Claude Code: the [`claude` CLI](https://code.claude.com/docs)
-    (`claude --version`; tested with 2.1.325, and earlier versions may
+    (`claude --version`; tested with 2.1.325 and 2.1.327, and earlier versions may
     lack flags agent-council passes),
     logged in or set up with an API key.
 
   agent-council runs the `pi` and `claude` executables found on its
   `PATH`, not your shell's aliases or functions of those names. If yours
   add something, such as an environment variable or a directory on
-  `PATH`, set it in the environment you run agent-council from.
+  `PATH`, set it in the environment you run agent-council from (for
+  one case, see
+  [Claude Code's sandbox](#claude-codes-sandbox)).
 - On Windows, WSL (e.g. Ubuntu): native Windows is not supported. Install
   and run Ruby, the harness CLIs your config uses, and agent-council
   inside WSL, from a WSL shell
@@ -944,14 +946,14 @@ usage page.
     (not logged in, an unknown model, the output cut off) is reported
     with the reason Claude Code gives. [`DESIGN.md`](DESIGN.md) §13 has
     the details.
-- The tool limits and the MCP settings above are the only enforced
-  restrictions (see [Safety and privacy](#safety-and-privacy)). A fixed
-  scaffolding text appended to the system prompt (identical for all
-  agents, the consolidator included, except the scratch path) tells agents
-  not to modify project files, git state, software, or configuration, or
-  start persistent services (they get a scratch directory for temporary
-  files), and
-  not to run tests, builds, or similar commands, which can collide between
+- The tool limits and the MCP settings above are the only restrictions
+  agent-council enforces (see [Safety and
+  privacy](#safety-and-privacy)). A fixed scaffolding text appended to
+  the system prompt (identical for all agents, the consolidator
+  included, except the scratch path) tells agents not to modify project
+  files, git state, software, or configuration, or start persistent
+  services (they get a scratch directory for temporary files), and not
+  to run tests, builds, or similar commands, which can collide between
   concurrent analysts, unless the prompt permits them (as
   `examples/prompts/review-latest-commit-prompt.md` does for tests and
   linters); where such a command isn't permitted but would help, the
@@ -965,13 +967,20 @@ usage page.
 
 ## Safety and privacy
 
-agent-council does not sandbox the agents. Before running it, know that:
+agent-council does not sandbox the agents (Claude Code's own sandbox,
+off by default, restricts Claude Code agents' commands if Claude
+Code's settings enable it, and the analyzed repository's settings can
+enable or disable it; see
+[Claude Code's sandbox](#claude-codes-sandbox)).
+Before running it, know that:
 
 - **Agents have a shell.** Each agent, the consolidator included, gets a
   shell tool (pi's `bash`, or Claude Code's `Bash`), running as you, in
   the directory you run from, with your
   environment (including any API keys in it; agent-council only sets
-  `TMPDIR`), your file permissions, and your network access. Of pi's
+  `TMPDIR`), your file permissions, and your network access (for
+  Claude Code agents, unless its sandbox restricts writes and network
+  access). Of pi's
   built-in tools, only `edit` and `write` (and the Windows-only
   `powershell`) are withheld; of Claude Code's, all but `Read`, `Grep`,
   `Glob`, and `Bash`. The read-only rules described above are
@@ -1018,6 +1027,64 @@ agent-council does not sandbox the agents. Before running it, know that:
 Run agent-council only on repositories you trust, or inside a container, VM,
 or disposable checkout that holds no credentials you aren't willing to
 expose.
+
+### Claude Code's sandbox
+
+agent-council doesn't turn Claude Code's sandbox on or off: Claude
+Code's settings decide (`sandbox.enabled`, off by default), as in an
+interactive session, including settings committed to the analyzed
+repository, which can enable it or disable one you enabled (only
+`--settings` or managed settings take precedence over them). When it's
+enabled, Claude Code agents' `Bash` commands run in it, except those
+matching `sandbox.excludedCommands`, which run outside it, and to which
+the analyzed repository's settings can add (not checked). The points
+below are from Claude Code's [sandboxing
+docs](https://code.claude.com/docs/en/sandboxing) unless marked as
+checked; most apply on any platform, the last two were checked on Linux.
+
+- **It doesn't protect the repository.** The working directory, which is
+  the analyzed repository, stays writable, apart from protected files
+  such as the `.claude` settings files and `.git/hooks`. In a check
+  (Claude Code 2.1.325, with the sandbox's other settings at their
+  defaults), it blocked network access and writes to the home directory
+  outside the working directory; reads weren't checked.
+- **An agent's request to run a command outside it was refused.** Claude
+  Code's docs say an allow rule matching a command also approves an
+  unsandboxed retry without a prompt, but in a check (Claude Code
+  2.1.327) with agent-council's options, the retry was refused, and
+  Claude Code reported the refusal, which agent-council shows as a
+  warning. To disable such retries altogether, set
+  `sandbox.allowUnsandboxedCommands` to `false` in your user settings
+  (the analyzed repository's settings could otherwise override it). This
+  doesn't affect `sandbox.excludedCommands`.
+- **The scratch path named in the prompt isn't writable.** Inside the
+  sandbox, Claude Code points `TMPDIR` at a directory of its own inside
+  the scratch directory, and in a check (2.1.327), writes there worked
+  but writes to the scratch path agent-council names in the prompt
+  failed ("read-only file system"). Agents can still write under
+  `$TMPDIR` or, against the rules they're given, in the working
+  directory.
+- **agent-council doesn't notice other sandbox trouble.** When the
+  sandbox can't start, commands run unsandboxed unless
+  `sandbox.failIfUnavailable` is `true`; an agent whose commands fail or
+  run unsandboxed is still reported like any other.
+- **Every `Bash` call failed** in a check on Ubuntu, whose AppArmor
+  restricts unprivileged user namespaces, with a `setgroups` error from
+  the distribution's `/usr/bin/bwrap` (bubblewrap, which runs the
+  sandbox on Linux, alongside `socat`). The docs' fixes are an AppArmor
+  profile for `/usr/bin/bwrap` or a sysctl. A copy of `bwrap` elsewhere
+  with its own such profile also worked. Claude Code runs the first
+  `bwrap` on the `PATH` it inherits, and agent-council runs `claude`
+  directly, not through your shell, so a shell alias or function doesn't
+  reach agents: put the working `bwrap`'s directory first on `PATH` in
+  the environment you run agent-council from.
+- **Commands ran unsandboxed** in a check where a socket path under the
+  temporary directory exceeded the Unix limit of about 108 bytes.
+  agent-council sets each agent's `TMPDIR` to a scratch directory inside
+  your own temporary directory (from `TMPDIR`, `TMP`, or `TEMP`, else
+  `/tmp`), which adds about 36 bytes, so keep yours short, e.g.
+  `TMPDIR=/tmp agent-council ...`, and keep `CLAUDE_CODE_TMPDIR` short
+  too if you set it.
 
 ## Limitations (deliberate)
 
