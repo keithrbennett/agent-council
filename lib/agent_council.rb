@@ -1197,9 +1197,10 @@ module AgentCouncil
     # A default config's path is absolute (resolve_config_path makes it
     # so), to show which of the defaults was picked up.
     puts
-    puts(argv[1] ? "Config:  #{relative_path(config_path)}" : "Config:  [default] #{config_path}")
-    puts "Prompt:  #{relative_path(prompt_path)}"
-    puts "Run Dir: #{relative_path(run_dir)}"
+    puts "Working Dir: #{Dir.pwd}"
+    puts(argv[1] ? "Config:      #{relative_path(config_path)}" : "Config:      [default] #{config_path}")
+    puts "Prompt:      #{relative_path(prompt_path)}"
+    puts "Run Dir:     #{relative_path(run_dir)}"
     puts "\nReview Agents (#{agents.size}):"
     agents.each_with_index do |agent, i|
       puts "  ##{i + 1} #{agent_descriptor(agent)}"
@@ -1336,9 +1337,10 @@ module AgentCouncil
       'run_stamp')
     meta['timestamp'] = iso_timestamp(meta['timestamp']) if meta['timestamp'].is_a?(Time)
 
-    puts "Config:  #{relative_path(config_path)}"
-    puts "Prompt:  #{relative_path(prompt_path)}"
-    puts "Run Dir: #{relative_path(run_dir)}"
+    puts "Working Dir: #{Dir.pwd}"
+    puts "Config:      #{relative_path(config_path)}"
+    puts "Prompt:      #{relative_path(prompt_path)}"
+    puts "Run Dir:     #{relative_path(run_dir)}"
     puts "\nConsolidator Agent:\n  #{agent_descriptor(consolidator)}"
     puts "\nConsolidation Report (in #{relative_path(run_dir)}, " \
       "from #{reports.size} review#{'s' unless reports.size == 1}):"

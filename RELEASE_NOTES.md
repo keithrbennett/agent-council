@@ -68,6 +68,10 @@
   has (missing or blank keys, values that aren't strings, an unknown
   harness), and say what a misshapen `agents` list or entry is instead
   (e.g. a consolidator given as a list).
+- The startup header of a run and of `--consolidate` now begins with a
+  `Working Dir:` line giving the working directory, which the relative
+  paths after it are shown against. The labels after it are realigned to
+  match.
 
 ## 0.1.0 (2026-11-09)
 

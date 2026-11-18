@@ -810,10 +810,12 @@ agent-council-reports/
   have different file names, and none can be named `reviews`; a run that
   would break either rule stops before starting.
 
-Each run starts by printing its config, prompt, and run directory
-(`Run Dir: agent-council-reports/2026-09-03/09-14-02`), then its agents
-under `Review Agents (N):` and, if configured, `Consolidator Agent:`;
-these labels also name the harness (e.g. `#2 pi / openai / gpt-6.1-sol`).
+Each run starts by printing its working directory (`Working Dir:`, which
+relative paths below are shown against), config, prompt, and run
+directory (`Run Dir: agent-council-reports/2026-09-03/09-14-02`), then
+its agents under `Review Agents (N):` and, if configured,
+`Consolidator Agent:`; these labels also name the harness
+(e.g. `#2 pi / openai / gpt-6.1-sol`).
 You can open the run dir while agents are still working, or after a
 Ctrl-C (see [Stopping a run](#stopping-a-run)). Other access patterns:
 
@@ -849,11 +851,12 @@ complete ---` (or `--- Consolidation error ---`). One model's failure
 does not affect the others. Exit status is 0 only if every analyst
 agent succeeded; the consolidator's result doesn't affect it.
 
-Output paths are printed relative to the current working directory (e.g.
+Output paths are printed relative to the current working directory (shown
+on the `Working Dir:` line; e.g.
 `agent-council-reports/2026-09-04/21-39-01/reviews`), not to where
 agent-council is installed. Paths outside the working directory (such
 as an `--output-dir` elsewhere) are printed absolute, as is a default
-config's (`Config:  [default] /path/to/agent-council.yml`), to show
+config's (`Config: [default] /path/to/agent-council.yml`), to show
 which default was picked up.
 
 ### How far to trust the cost

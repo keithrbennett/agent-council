@@ -231,8 +231,10 @@ RSpec.describe 'agent-council end to end' do
     expect(out).to include('--- Reviews complete (2/2 succeeded; 2.4k in (400 cached) / 400 out, $0.04) ---',
       '--- Consolidation complete ---')
     expect(out.index('Reviews (in ')).to be < out.index('Consolidation Report (in ')
-    expect(out).to match(%r{^Config:  config\.yml\nPrompt:  prompt\.md\nRun Dir: agent-council-reports/\S+$}),
-      output_report
+    expect(out).to include(
+      "Working Dir: #{File.realpath(work_dir)}\nConfig:      config.yml\nPrompt:      prompt.md\n"
+    ), output_report
+    expect(out).to match(%r{^Prompt:      prompt\.md\nRun Dir:     agent-council-reports/\S+$}), output_report
     expect(out).to include("Review Agents (2):\n  #1 pi / done / m1\n  #2 pi / done / m2\n")
     expect(out).to include("Consolidator Agent:\n  pi / done / c\n")
     expect(reports('reviews/*.md').size).to eq(2)
@@ -245,7 +247,8 @@ RSpec.describe 'agent-council end to end' do
     FileUtils.mv(File.join(work_dir, 'config.yml'), File.join(work_dir, 'agent-council.yml'))
 
     expect(run_council(args: %w[prompt.md]).exitstatus).to eq(0), output_report
-    expect(out).to include("Config:  [default] #{File.join(File.realpath(work_dir), 'agent-council.yml')}\n")
+    default_config = File.join(File.realpath(work_dir), 'agent-council.yml')
+    expect(out).to include("Config:      [default] #{default_config}\n")
     expect(err).to be_empty
   end
 
@@ -436,7 +439,7 @@ RSpec.describe 'agent-council end to end' do
     status = run_council(args: %w[-o out/council prompt.md config.yml])
 
     expect(status.exitstatus).to eq(0), output_report
-    expect(out).to match(%r{^Run Dir: out/council/\d{4}-\d\d-\d\d/\d\d-\d\d-\d\d$}), output_report
+    expect(out).to match(%r{^Run Dir:     out/council/\d{4}-\d\d-\d\d/\d\d-\d\d-\d\d$}), output_report
     expect(Dir.glob('out/council/*/*/reviews/*.md', base: work_dir).size).to eq(1)
     expect(File).not_to exist(File.join(work_dir, 'agent-council-reports'))
   end
@@ -486,7 +489,8 @@ RSpec.describe 'agent-council end to end' do
         output_report
       expect(out).to include('--- Consolidation complete ---')
       expect(out).to include(
-        "Config:  #{run_dir}/config.yml\nPrompt:  #{run_dir}/prompt.md\nRun Dir: #{run_dir}\n",
+        "Working Dir: #{File.realpath(work_dir)}\nConfig:      #{run_dir}/config.yml\n" \
+          "Prompt:      #{run_dir}/prompt.md\nRun Dir:     #{run_dir}\n",
         "Consolidator Agent:\n  pi / done / c\n",
         "Consolidation Report (in #{run_dir}, from 2 reviews):\n"
       )
@@ -620,7 +624,7 @@ RSpec.describe 'agent-council end to end' do
     expect(run_dirs.size).to eq(1), run_dirs.inspect
     run_dir = run_dirs.first
     expect(taken.map { |name| "#{name}-2" }).to include(run_dir)
-    expect(out).to include("Run Dir: #{File.join('agent-council-reports', run_dir)}")
+    expect(out).to include("Run Dir:     #{File.join('agent-council-reports', run_dir)}")
     expect(out.index('Run Dir:')).to be < out.index('Review Progress:') # printed at startup
     day, run_name = run_dir.split('/')
     [*reports('reviews/*.md'), *reports('*consolidated*.md')].each do |path|
