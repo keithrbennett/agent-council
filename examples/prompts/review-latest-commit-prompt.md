@@ -38,7 +38,7 @@ relevant tests and linters, and reproduce suspected defects.
 
 Tests and linters that generate temporary files or coverage data are
 permitted (builds are not); direct their output to your scratch
-directory where the tool allows it. Avoid unnecessary modifications to the
+directory (`$TMPDIR`) where the tool allows it. Avoid unnecessary modifications to the
 working tree.
 
 For each issue, identify the affected file and location, explain the problem

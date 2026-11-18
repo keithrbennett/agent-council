@@ -25,7 +25,7 @@ RSpec.describe AgentCouncil::Harnesses::PiHarness do
   end
 
   describe '.argv' do
-    let(:argv) { described_class.argv('zai', 'glm-5.3', '/tmp/scratch-xyz') }
+    let(:argv) { described_class.argv('zai', 'glm-5.3') }
 
     it 'invokes pi non-interactively with a JSON event stream and no session' do
       expect(argv.first).to eq('pi')
@@ -52,15 +52,15 @@ RSpec.describe AgentCouncil::Harnesses::PiHarness do
     it 'works with only its own file required' do
       lib = File.expand_path('../../lib', __dir__)
       script = "require 'agent_council/harnesses/pi_harness'; " \
-               "print AgentCouncil::Harnesses::PiHarness.argv('p', 'm', '/x').last"
+               "print AgentCouncil::Harnesses::PiHarness.argv('p', 'm').last"
       out, err, status = Open3.capture3(RbConfig.ruby, '-I', lib, '-e', script)
       expect(status).to be_success, err
-      expect(out).to eq(AgentCouncil::Harnesses.scaffold_text('/x'))
+      expect(out).to eq(AgentCouncil::Harnesses.scaffold_text)
     end
 
     it 'appends the shared scaffolding to the system prompt' do
       expect(argv[argv.index('--append-system-prompt') + 1])
-        .to eq(AgentCouncil::Harnesses.scaffold_text('/tmp/scratch-xyz'))
+        .to eq(AgentCouncil::Harnesses.scaffold_text)
     end
   end
 

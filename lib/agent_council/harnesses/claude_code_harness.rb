@@ -27,7 +27,7 @@ module AgentCouncil
       # argv; it is piped to stdin. provider is not passed: Claude Code
       # takes none, so an entry's provider only labels the run (e.g.
       # bedrock, for a claude set up to use it).
-      module_function def argv(_provider, model, scratch_dir)
+      module_function def argv(_provider, model)
         [
           NAME,
           '-p',                              # non-interactive: process prompt and exit
@@ -39,7 +39,7 @@ module AgentCouncil
           '--permission-mode', 'manual',     # the same for every user, whatever their defaultMode
           '--strict-mcp-config',             # with no --mcp-config: no MCP servers
           '--model', model,
-          '--append-system-prompt', Harnesses.scaffold_text(scratch_dir)
+          '--append-system-prompt', Harnesses.scaffold_text
         ]
       end
 

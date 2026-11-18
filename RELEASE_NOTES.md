@@ -18,12 +18,17 @@
   Bash sandbox, which Claude Code's settings turn on, and which the
   analyzed repository's settings can turn on or off: it leaves the
   repository writable, commands in `sandbox.excludedCommands` run
-  outside it, the scratch path named in the prompt isn't writable in it
-  (`$TMPDIR` is), an agent's request to run a command outside it was
-  refused in a check, and agent-council doesn't notice other sandbox
-  trouble. On Linux, a `bwrap` blocked by AppArmor makes every command
-  fail (an alias can't fix it for agents), and a `TMPDIR` too long for
-  the sandbox to start leaves commands unsandboxed by default.
+  outside it, an agent's request to run a command outside it was refused
+  in a check, and agent-council doesn't notice other sandbox trouble. On
+  Linux, a `bwrap` blocked by AppArmor makes every command fail (an
+  alias can't fix it for agents), and a `TMPDIR` too long for the
+  sandbox to start leaves commands unsandboxed by default.
+- The scaffolding tells agents to use `$TMPDIR` for scratch space
+  instead of giving the scratch directory's path, which Claude Code's
+  sandbox makes read-only (`$TMPDIR` is a writable directory inside it).
+  The scaffolding is now identical for every agent. agent-council also
+  sets each agent's `CLAUDE_CODE_TMPDIR` to its scratch directory, so
+  the sandbox's `$TMPDIR` stays inside it, whatever your own setting.
 - The state-of-the-codebase and test-coverage-analysis sample prompts
   no longer tell agents to write their report to a file in the project;
   like the other samples, they deliver it as the final message, which

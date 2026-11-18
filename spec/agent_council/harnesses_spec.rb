@@ -47,7 +47,7 @@ RSpec.describe AgentCouncil::Harnesses do
 
   # The startup check looks for NAME on PATH, so it must be what argv runs.
   it 'runs each harness as its NAME' do
-    runs_as_name = satisfy { |harness| harness.argv('p', 'm', '/tmp').first == harness::NAME }
+    runs_as_name = satisfy { |harness| harness.argv('p', 'm').first == harness::NAME }
     expect(described_class::BY_NAME.values).to all(runs_as_name)
   end
 
@@ -58,10 +58,13 @@ RSpec.describe AgentCouncil::Harnesses do
   end
 
   describe '.scaffold_text' do
-    subject(:scaffold) { described_class.scaffold_text('/tmp/scratch-xyz') }
+    subject(:scaffold) { described_class.scaffold_text }
 
-    it 'names the unique scratch dir' do
-      expect(scaffold).to include('/tmp/scratch-xyz')
+    # Under Claude Code's sandbox the scratch dir itself is read-only, but
+    # $TMPDIR (a dir inside it) is writable, so agents are sent there.
+    it 'points agents at $TMPDIR for scratch space, not at a path' do
+      expect(scaffold).to include('$TMPDIR')
+      expect(scaffold).not_to include('agent-council-') # Dir.mktmpdir's prefix
     end
 
     # Safety-critical invariants; deliberate rewording should update these.

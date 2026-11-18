@@ -950,20 +950,23 @@ usage page.
   agent-council enforces (see [Safety and
   privacy](#safety-and-privacy)). A fixed scaffolding text appended to
   the system prompt (identical for all agents, the consolidator
-  included, except the scratch path) tells agents not to modify project
-  files, git state, software, or configuration, or start persistent
-  services (they get a scratch directory for temporary files), and not
-  to run tests, builds, or similar commands, which can collide between
-  concurrent analysts, unless the prompt permits them (as
+  included) tells agents not to modify project files, git state,
+  software, or configuration, or start persistent services (they get a
+  scratch directory for temporary files), and not to run tests, builds,
+  or similar commands, which can collide between concurrent analysts,
+  unless the prompt permits them (as
   `examples/prompts/review-latest-commit-prompt.md` does for tests and
   linters); where such a command isn't permitted but would help, the
   agent describes what it would run instead. The full text is
   `scaffold_text` in `lib/agent_council/harnesses/scaffold.rb`;
   [`DESIGN.md`](DESIGN.md) §10 explains the rules.
-- Each agent gets its own disposable temp directory (exposed via `TMPDIR`
-  and named in the scaffolding), deleted after the run. After Ctrl-C, a
-  directory can be left behind if a second signal stops agent-council at
-  once, or if cleanup after a killed agent doesn't finish in time.
+- Each agent gets its own disposable temp directory, as its `TMPDIR`,
+  which the scaffolding tells it to use for scratch space, deleted after
+  the run (under Claude Code's sandbox, `TMPDIR` is a directory Claude
+  Code makes inside it; see [Claude Code's
+  sandbox](#claude-codes-sandbox)). After Ctrl-C, a directory can be
+  left behind if a second signal stops agent-council at once, or if
+  cleanup after a killed agent doesn't finish in time.
 
 ## Safety and privacy
 
@@ -976,15 +979,15 @@ Before running it, know that:
 
 - **Agents have a shell.** Each agent, the consolidator included, gets a
   shell tool (pi's `bash`, or Claude Code's `Bash`), running as you, in
-  the directory you run from, with your
-  environment (including any API keys in it; agent-council only sets
-  `TMPDIR`), your file permissions, and your network access (for
-  Claude Code agents, unless its sandbox restricts writes and network
-  access). Of pi's
-  built-in tools, only `edit` and `write` (and the Windows-only
-  `powershell`) are withheld; of Claude Code's, all but `Read`, `Grep`,
-  `Glob`, and `Bash`. The read-only rules described above are
-  instructions in the system prompt, which a model can ignore or misapply.
+  the directory you run from, with your environment (including any API
+  keys in it; agent-council only sets `TMPDIR` and `CLAUDE_CODE_TMPDIR`,
+  both to the agent's scratch directory), your file permissions, and
+  your network access (for Claude Code agents, unless its sandbox
+  restricts writes and network access). Of pi's built-in tools, only
+  `edit` and `write` (and the Windows-only `powershell`) are withheld;
+  of Claude Code's, all but `Read`, `Grep`, `Glob`, and `Bash`. The
+  read-only rules described above are instructions in the system prompt,
+  which a model can ignore or misapply.
 - **Your pi extensions, and your Claude Code hooks and plugins, load.**
   `--no-mcp` turns off only pi's built-in
   MCP support. Extensions you've installed load for every pi agent, as
@@ -1057,13 +1060,14 @@ checked; most apply on any platform, the last two were checked on Linux.
   `sandbox.allowUnsandboxedCommands` to `false` in your user settings
   (the analyzed repository's settings could otherwise override it). This
   doesn't affect `sandbox.excludedCommands`.
-- **The scratch path named in the prompt isn't writable.** Inside the
-  sandbox, Claude Code points `TMPDIR` at a directory of its own inside
-  the scratch directory, and in a check (2.1.327), writes there worked
-  but writes to the scratch path agent-council names in the prompt
-  failed ("read-only file system"). Agents can still write under
-  `$TMPDIR` or, against the rules they're given, in the working
-  directory.
+- **The scratch directory itself isn't writable.** Inside the sandbox,
+  Claude Code points `TMPDIR` at a directory of its own inside
+  agent-council's scratch directory (agent-council sets
+  `CLAUDE_CODE_TMPDIR` so that it is). In a check (2.1.327), writes under
+  `$TMPDIR` worked, but writes to the scratch directory's own path
+  failed ("read-only file system"). The scaffolding sends agents to
+  `$TMPDIR`, not to that path, so this only matters to an agent that
+  finds the path some other way.
 - **agent-council doesn't notice other sandbox trouble.** When the
   sandbox can't start, commands run unsandboxed unless
   `sandbox.failIfUnavailable` is `true`; an agent whose commands fail or
@@ -1080,11 +1084,11 @@ checked; most apply on any platform, the last two were checked on Linux.
   the environment you run agent-council from.
 - **Commands ran unsandboxed** in a check where a socket path under the
   temporary directory exceeded the Unix limit of about 108 bytes.
-  agent-council sets each agent's `TMPDIR` to a scratch directory inside
-  your own temporary directory (from `TMPDIR`, `TMP`, or `TEMP`, else
-  `/tmp`), which adds about 36 bytes, so keep yours short, e.g.
-  `TMPDIR=/tmp agent-council ...`, and keep `CLAUDE_CODE_TMPDIR` short
-  too if you set it.
+  agent-council sets each agent's `TMPDIR` and `CLAUDE_CODE_TMPDIR` to a
+  scratch directory inside your own temporary directory (from `TMPDIR`,
+  `TMP`, or `TEMP`, else `/tmp`), which adds about 36 bytes, so keep
+  yours short, e.g. `TMPDIR=/tmp agent-council ...`. A
+  `CLAUDE_CODE_TMPDIR` of your own doesn't reach agents.
 
 ## Limitations (deliberate)
 

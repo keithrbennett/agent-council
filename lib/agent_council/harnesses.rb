@@ -8,7 +8,9 @@
 # error_message, exit_detail, warnings, final_response,
 # assistant_messages), not an adapter framework; AgentCouncil looks one up
 # per agent with module_for. NAME is both the config value and the
-# executable argv runs, which the startup check looks for on PATH. It also
+# executable argv runs, which the startup check looks for on PATH. The
+# scaffolding sends agents to $TMPDIR, which run_agent sets to the
+# scratch dir, so a harness must pass TMPDIR through to its tools. It also
 # goes into report filenames unsanitized, so it must be one
 # AgentCouncil.sanitize leaves unchanged (the specs check this).
 #

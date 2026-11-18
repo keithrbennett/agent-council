@@ -25,7 +25,7 @@ module AgentCouncil
       # Invocation for one model run. The substantive prompt is not part of argv;
       # it is piped to stdin (byte-identical for every analyst; the
       # consolidator gets its own).
-      module_function def argv(provider, model, scratch_dir)
+      module_function def argv(provider, model)
         [
           NAME,
           '-p',               # non-interactive: process prompt and exit
@@ -35,7 +35,7 @@ module AgentCouncil
           '--tools', TOOLS,
           '--provider', provider,
           '--model', model,
-          '--append-system-prompt', Harnesses.scaffold_text(scratch_dir)
+          '--append-system-prompt', Harnesses.scaffold_text
         ]
       end
 

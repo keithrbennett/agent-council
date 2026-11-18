@@ -323,7 +323,7 @@ RSpec.describe AgentCouncil do
     it "runs and reads the output of the agent's own harness, naming it in the filename and front matter" do
       other = Module.new do
         const_set(:NAME, 'other')
-        module_function def argv(provider, model, _scratch_dir) = ['sh', '-c', "echo #{provider}-#{model}"]
+        module_function def argv(provider, model) = ['sh', '-c', "echo #{provider}-#{model}"]
         module_function def usage(_stdout) = { 'input' => 1, 'output' => 2 }
         module_function def error_message(_stdout) = nil
         module_function def final_response(stdout) = "answer from #{stdout.strip}"
@@ -342,6 +342,21 @@ RSpec.describe AgentCouncil do
       fields, body = described_class.parse_front_matter(File.read(File.join(run_dir, filename)))
       expect(fields['harness']).to eq('other')
       expect(body).to eq("answer from p-m\n")
+    end
+
+    it "sets the scratch dir as the agent's TMPDIR and CLAUDE_CODE_TMPDIR, and nothing else" do
+      envs = []
+      allow(Open3).to receive(:capture3) do |env, *_argv, **_opts|
+        envs << env
+        ['', '', instance_double(Process::Status, success?: true)]
+      end
+      allow(pi_harness).to receive_messages(error_message: nil, final_response: 'answer')
+      described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
+      expect(envs.size).to eq(1)
+      expect(envs.first.keys).to contain_exactly('TMPDIR', 'CLAUDE_CODE_TMPDIR')
+      expect(envs.first['CLAUDE_CODE_TMPDIR']).to eq(envs.first['TMPDIR'])
+      expect(File.basename(envs.first['TMPDIR'])).to start_with('agent-council-')
+      expect(File.dirname(envs.first['TMPDIR'])).to eq(File.realpath(Dir.tmpdir)).or eq(Dir.tmpdir)
     end
 
     it 'deletes the scratch dir after a successful run' do

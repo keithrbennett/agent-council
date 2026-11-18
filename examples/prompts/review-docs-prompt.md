@@ -85,7 +85,7 @@ those steps by reading the code instead.
 **DO NOT EDIT ANY CODE OR TRACKED FILES, AND DO NOT COMMIT.**
 
 Commands otherwise permitted here may generate temporary files; direct
-their output to your scratch directory where the tool allows it.
+their output to your scratch directory (`$TMPDIR`) where the tool allows it.
 Avoid unnecessary modifications to the working tree.
 
 ## Report

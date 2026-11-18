@@ -24,7 +24,7 @@ RSpec.describe AgentCouncil::Harnesses::ClaudeCodeHarness do
   end
 
   describe '.argv' do
-    let(:argv) { described_class.argv('anthropic', 'claude-opus-5-5', '/tmp/scratch-xyz') }
+    let(:argv) { described_class.argv('anthropic', 'claude-opus-5-5') }
 
     def value_of(flag) = argv[argv.index(flag) + 1]
 
@@ -61,7 +61,7 @@ RSpec.describe AgentCouncil::Harnesses::ClaudeCodeHarness do
     end
 
     it 'appends the shared scaffolding to the system prompt' do
-      expect(argv.last).to eq(AgentCouncil::Harnesses.scaffold_text('/tmp/scratch-xyz'))
+      expect(argv.last).to eq(AgentCouncil::Harnesses.scaffold_text)
       expect(argv[-2]).to eq('--append-system-prompt')
     end
 
@@ -69,10 +69,10 @@ RSpec.describe AgentCouncil::Harnesses::ClaudeCodeHarness do
     it 'works with only its own file required' do
       lib = File.expand_path('../../lib', __dir__)
       script = "require 'agent_council/harnesses/claude_code_harness'; " \
-               "print AgentCouncil::Harnesses::ClaudeCodeHarness.argv('p', 'm', '/x').last"
+               "print AgentCouncil::Harnesses::ClaudeCodeHarness.argv('p', 'm').last"
       out, err, status = Open3.capture3(RbConfig.ruby, '-I', lib, '-e', script)
       expect(status).to be_success, err
-      expect(out).to eq(AgentCouncil::Harnesses.scaffold_text('/x'))
+      expect(out).to eq(AgentCouncil::Harnesses.scaffold_text)
     end
   end
 
