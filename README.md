@@ -517,6 +517,51 @@ agent-council \
   so run your full test suite first; it stops with an error if the coverage
   data looks out of date.
 
+### What a run prints
+
+A run of `review-latest-commit-prompt.md` with four review agents and a
+consolidator, from a repository's root with the default config:
+
+```text
+Working Dir: /home/me/code/my-project
+Config:      [default] /home/me/.agent-council.yml
+Prompt:      examples/prompts/review-latest-commit-prompt.md
+Run Dir:     agent-council-reports/2026-11-18/22-46-15
+
+Review Agents (4):
+  #1 pi / deepseek / deepseek-flash
+  #2 pi / deepseek / deepseek-flash
+  #3 pi / openrouter / deepseek/deepseek-v4.1-flash-1017
+  #4 pi / openrouter / deepseek/deepseek-v4.1-flash-1017
+
+Consolidator Agent:
+  pi / anthropic / claude-sonnet-5-5
+
+Review Progress:
+  ✓ 00:01:53  #3 openrouter / deepseek/deepseek-v4.1-flash-1017
+  ✓ 00:02:31  #4 openrouter / deepseek/deepseek-v4.1-flash-1017
+  ✓ 00:02:42  #2 deepseek / deepseek-flash
+  ✓ 00:03:45  #1 deepseek / deepseek-flash
+
+Reviews (in agent-council-reports/2026-11-18/22-46-15/reviews):
+  Ok  Duration  Agent                                                  In  Cached    Out   Cost
+  ✓   00:03:45  #1 deepseek / deepseek-flash                         1.1M    1.1M  29.4k  $0.05
+  ✓   00:02:42  #2 deepseek / deepseek-flash                       967.2k  924.8k  22.8k  $0.05
+  ✓   00:01:53  #3 openrouter / deepseek/deepseek-v4.1-flash-1017    1.4M    1.4M  30.0k  $0.06
+  ✓   00:02:31  #4 openrouter / deepseek/deepseek-v4.1-flash-1017    1.4M    1.3M  25.6k  $0.02
+
+--- Reviews complete (4/4 succeeded; 4.9M in (4.7M cached) / 107.9k out, $0.18) ---
+
+Consolidation Report (in agent-council-reports/2026-11-18/22-46-15):
+  Ok  Duration  Agent                             In  Cached   Out   Cost
+  ✓   00:00:17  anthropic / claude-sonnet-5-5  11.7k       0  2.2k  $0.05
+```
+
+Progress lines appear as each agent finishes. Costs are the harness's
+estimates and can be far off; see [How far to trust the
+cost](#how-far-to-trust-the-cost). The files the run wrote are described
+in [What you get](#what-you-get).
+
 ### Setting your own defaults with `AGENT_COUNCIL_OPTS`
 
 To use the same options on every run, put them in the
