@@ -3,6 +3,9 @@
 Review the latest commit and any uncommitted changes.
 Report only issues needing addressing.
 
+Begin the report with the full hash and subject of the commit reviewed
+(from `git log -1 --format='%H %s'`).
+
 Evaluate whether the changes are:
 
 - Correct and complete.
