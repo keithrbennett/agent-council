@@ -1,6 +1,6 @@
 # Release Notes
 
-## 0.2.0 (unreleased)
+## 0.2.0 (2026-11-19)
 
 - `--gem-dir` prints the root directory of the agent-council application,
   which holds its documentation and examples, and exits.
