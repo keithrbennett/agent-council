@@ -256,7 +256,7 @@ to write one. To work on agent-council itself, see
 
 The installed gem contains this README, [`INSTALL.md`](INSTALL.md),
 [`USE_CASES.md`](USE_CASES.md), [`DESIGN.md`](DESIGN.md),
-`RELEASE_NOTES.md`, and the sample prompts and configs under
+[`RUNAWAY_AGENTS.md`](RUNAWAY_AGENTS.md), `RELEASE_NOTES.md`, and the sample prompts and configs under
 `examples/`, all matching the installed version. The help
 output shows where they are for the copy of `agent-council` you are
 actually running:
@@ -605,6 +605,12 @@ already written:
   and doesn't stop the run.
 
 [`DESIGN.md`](DESIGN.md) §7 explains why it works this way.
+
+agent-council has no time limit, so an agent that never finishes holds
+up the run until you stop it. To stop a run automatically after a set
+time, run it under the `timeout` command; [`RUNAWAY_AGENTS.md`](RUNAWAY_AGENTS.md)
+explains how, the options to use and avoid, and why there's no
+built-in limit yet.
 
 ### Consolidating a finished run
 

@@ -52,6 +52,7 @@ Gem::Specification.new do |spec|
     patterns = %w[
       lib/**/* exe/* examples/prompts/*.md examples/configs/*.yml
       README.md INSTALL.md USE_CASES.md RELEASE_NOTES.md LICENSE.txt DESIGN.md
+      RUNAWAY_AGENTS.md
     ]
     tracked = `git ls-files -z`
     # Outside a git checkout this would otherwise build a gem with no files.
