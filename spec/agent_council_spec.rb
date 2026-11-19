@@ -2129,9 +2129,10 @@ RSpec.describe AgentCouncil do
     end
 
     it "doesn't suggest quoting a list or mapping" do
+      # Ruby 3.4 changed Hash#inspect's spacing, so the mapping isn't spelled out.
       expect(described_class.entry_error(entry.merge('provider' => ['p'], 'model' => { 'm' => 1 }))).to eq(
         "gives 'provider' as a list, [\"p\"], not a string; " \
-        "gives 'model' as a mapping, {\"m\" => 1}, not a string"
+        "gives 'model' as a mapping, #{{ 'm' => 1 }.inspect}, not a string"
       )
     end
 
