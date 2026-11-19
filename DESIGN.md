@@ -62,7 +62,7 @@ For example:
 
 ## 4. Architecture
 
-There are two harnesses, pi and Claude Code, and the orchestration is harness-agnostic: it looks up each agent's harness module by its config entry's `harness` key (§5) in `AgentCouncil::Harnesses::BY_NAME` (`lib/agent_council/harnesses.rb`), so another harness is another such module, added there. Every config entry names its harness (§5); reports and `run.json` entries always record theirs, and one that gives none (hand-edited, or older than 0.1.0, when every agent ran under pi) is read as pi's. Each module is a plain namespace with the same functions (`NAME`, `argv`, `usage`, `error_message`, `exit_detail`, `warnings`, `final_response`, `assistant_messages`); `NAME` is both the config value and the executable that `argv` runs, which the startup check looks for on `PATH`, and goes into filenames unsanitized, so it must be filename-safe. Claude Code takes no provider argument, so a Claude Code entry's provider only labels the run. The scaffolding text (§10) is shared.
+There are two harnesses, pi and Claude Code, and the orchestration is harness-agnostic: it looks up each agent's harness module by its config entry's `harness` key (§5) in `AgentCouncil::Harnesses::BY_NAME` (`lib/agent_council/harnesses.rb`), so another harness is another such module, added there. Every config entry names its harness (§5); reports and `run.json` entries always record theirs, and one that gives none (hand-edited, or older than 0.1.0, when every agent ran under pi) is read as pi's. Each module is a plain namespace with the same functions (`NAME`, `argv`, `usage`, `error_message`, `exit_detail`, `warnings`, `final_response`, `assistant_messages`); `NAME` is both the config value and the executable that `argv` runs, which the startup check looks for on `PATH`, and goes into filenames unsanitized, so it must be filename-safe. Claude Code takes no provider argument, so a Claude Code entry's provider only labels the agent. The scaffolding text (§10) is shared.
 
 **Labels.** The short labels (`#1 provider / model`) don't show the harness. They appear in progress lines, result tables, the consolidation prompt, and a consolidated report's `### Sources` table and `sources` front matter. The startup agent list, each report's byline table, and the findings file's legend (`#1 pi / provider / model`) do show it. Short labels don't need the harness to stay unique: the only ones used as lookup keys are the analysts', which match reports to their `run.json` entries and to the configured agents, and each carries its agent number. Nor does the consolidator need it in the labels, since each report it reads states its harness in its byline (§12). So they stay as they are, and a mixed run's output reads the same as before.
 
@@ -103,7 +103,7 @@ agents:
     provider: zai
     model: MODEL_ID_HERE
 
-  - harness: claude        # Claude Code; the provider only labels the run
+  - harness: claude        # Claude Code; the provider only labels the agent
     provider: anthropic
     model: MODEL_ID_HERE
 
@@ -113,7 +113,7 @@ consolidator:              # optional; synthesizes the agents' reports (§12)
   model: MODEL_ID_HERE
 ```
 
-Every entry gives `harness`, `provider`, and `model`, each a nonblank string; there are no defaults, and no `defaults:` section supplying them (one was considered and rejected). A default harness or provider would go stale as harnesses change (pi is the right default only as long as it is), and a `defaults:` section's provider would apply across harnesses whose providers differ. `harness` is `pi` or `claude`; an unknown one is rejected at startup (with `--consolidate`, only the consolidator's, since no analysts run). A `claude` entry's provider is not passed to Claude Code (§4) and only labels the run (e.g. `bedrock`, for a `claude` set up to use it). A config error lists every bad entry, each named by its key (`'agents' entry #2`, `'consolidator'`) with every problem it has, so one edit fixes them all; when an entry gives no harness, a line saying what every entry needs follows, and, if no entry gives one (as in a 0.1.0 config, which ran everything under pi), a hint to add `harness: pi`. A run made by 0.1.0, when every entry ran under pi, has a config copy without `harness`; `--consolidate` rejects its consolidator like any other entry, with a hint to add `harness: pi`, while its reports and `run.json` are still read as pi's.
+Every entry gives `harness`, `provider`, and `model`, each a nonblank string; there are no defaults, and no `defaults:` section supplying them (one was considered and rejected). A default harness or provider would go stale as harnesses change (pi is the right default only as long as it is), and a `defaults:` section's provider would apply across harnesses whose providers differ. `harness` is `pi` or `claude`; an unknown one is rejected at startup (with `--consolidate`, only the consolidator's, since no analysts run). A `claude` entry's provider is not passed to Claude Code (§4) and only labels the agent (e.g. `bedrock`, for a `claude` set up to use it). A config error lists every bad entry, each named by its key (`'agents' entry #2`, `'consolidator'`) with every problem it has, so one edit fixes them all; when an entry gives no harness, a line saying what every entry needs follows, and, if no entry gives one (as in a 0.1.0 config, which ran everything under pi), a hint to add `harness: pi`. A run made by 0.1.0, when every entry ran under pi, has a config copy without `harness`; `--consolidate` rejects its consolidator like any other entry, with a hint to add `harness: pi`, while its reports and `run.json` are still read as pi's.
 
 Exact provider and model identifiers must be verified against the installed harness: `pi --list-models` for pi, and the names and aliases `claude --model` accepts for Claude Code.
 
@@ -135,7 +135,7 @@ document the arguments, options, and `AGENT_COUNCIL_OPTS`. The command:
 
 1. reads the prompt;
 2. reads the configuration;
-3. launches all configured analyst runs;
+3. launches all configured analysts;
 4. saves each successful result as its agent finishes;
 5. waits for all of them, then prints a concise success/failure summary;
 6. runs the consolidator, if one is configured, over the saved reports.
@@ -222,8 +222,8 @@ The analyzed repository's own `.pi` resources load only if pi already trusts the
 
 Pi's exceptions to normal behavior:
 
-- each model run is independent;
-- no conversation/session state leaks between runs (`--no-session`);
+- each agent is independent;
+- no conversation/session state leaks between agents (`--no-session`);
 - pi's built-in MCP support is off (`--no-mcp`), so configured MCP servers don't start, which keeps any from doing something merely by starting, and agents have no MCP tools; an extension providing its own MCP support isn't affected, and extensions load as usual;
 - the tool list is restricted and the scaffolding appended to the system prompt (§10);
 - the report-format addendum is appended to each analyst's prompt.
@@ -245,7 +245,7 @@ claude -p --output-format stream-json --verbose
 The flags were checked with Claude Code 2.1.325, and again with 2.1.327 (and, for the comparison with pi's allowlist, pi 1.5.2):
 
 - `--tools` limits the built-in tools as pi's allowlist does: Edit and Write are absent, not merely refused.
-- `--allowedTools` is required. Without it, Bash commands Claude Code doesn't consider read-only (`git log` and `ls` are; `ruby -e ...` isn't) are refused, since `-p` mode can't ask, and the run still ends as a success, with the refusal recorded only in the `result` event's `permission_denials`. With it, a call can still be refused, by a `permissions.deny` rule in the user's or the analyzed project's settings (checked: a project rule denying `Bash(cat:*)` was recorded the same way). A nonempty `permission_denials` is reported as a warning naming the refused calls (`ClaudeCodeHarness.warnings`), printed under the run's progress line, shown in the report's byline table (which the consolidator reads, and which its template asks it to take into account), and recorded in its `run.json` entry, not a failure: the report is kept, but may lack what the call would have found. A run that fails anyway (say, by running out of turns after refusals) gets the warning too, since the refusals may be why; it follows the failure reason on the console, in `run.json`, and in the reason the consolidation prompt gives for the missing report.
+- `--allowedTools` is required. Without it, Bash commands Claude Code doesn't consider read-only (`git log` and `ls` are; `ruby -e ...` isn't) are refused, since `-p` mode can't ask, and the agent still ends as a success, with the refusal recorded only in the `result` event's `permission_denials`. With it, a call can still be refused, by a `permissions.deny` rule in the user's or the analyzed project's settings (checked: a project rule denying `Bash(cat:*)` was recorded the same way). A nonempty `permission_denials` is reported as a warning naming the refused calls (`ClaudeCodeHarness.warnings`), printed under the agent's progress line, shown in the report's byline table (which the consolidator reads, and which its template asks it to take into account), and recorded in its `run.json` entry, not a failure: the report is kept, but may lack what the call would have found. An agent that fails anyway (say, by running out of turns after refusals) gets the warning too, since the refusals may be why; it follows the failure reason on the console, in `run.json`, and in the reason the consolidation prompt gives for the missing report.
 - `--permission-mode manual` makes the outcome the same for every user; without it the user's own `defaultMode` (e.g. `auto`, or `plan`, which would run nothing) applies (checked: with `defaultMode` set to `plan`, the `init` event reports `plan` without the flag and `default` with it). `manual` is the name `claude --help` lists for the mode the stream reports as `default`; `default` is still accepted but no longer listed, so it isn't used.
 - `--strict-mcp-config` with no `--mcp-config` loads no MCP servers: `init` reports `mcp_servers: []` even for a user with servers configured, and a plugin that provides MCP tools doesn't load, while other plugins do (checked). Not tested: an enterprise `managed-mcp.json`, under which Claude Code's binary has the message "You cannot use --strict-mcp-config when an enterprise MCP config is present", so Claude Code agents would presumably fail there; the README notes it.
 
@@ -260,7 +260,7 @@ The flags were checked with Claude Code 2.1.325, and again with 2.1.327 (and, fo
 - Checked with 2.1.327, with agent-council's argv and the sandbox enabled: inside the sandbox `TMPDIR` is `<scratch>/claude-<uid>`, which is writable, while a write to the scratch path itself fails with "read-only file system". So the scaffolding names the scratch dir as `$TMPDIR`, not by path; `$TMPDIR` is the scratch dir itself for pi and unsandboxed Claude Code, and a dir inside it under the sandbox, so cleanup covers both. The sandbox makes that dir under `CLAUDE_CODE_TMPDIR` if set, so agent-council sets it to the scratch dir too; otherwise a user's own setting would put the dir outside, shared between agents and never removed (checked: with both set, the sandboxed `TMPDIR` was `<scratch>/claude-<uid>`). (`--add-dir` with the scratch path was the alternative; it would widen what Claude Code allows, and wasn't tried.) An unsandboxed retry (`dangerouslyDisableSandbox: true`) of a blocked home-directory write was refused ("Run outside of the sandbox") and reported in `permission_denials`, so agent-council warns of it, although the docs say an allow rule matching a command approves such a retry. Why agent-council's `--allowedTools Read,Grep,Glob,Bash` didn't approve it isn't known.
 - agent-council doesn't detect other sandbox trouble: `ClaudeCodeHarness.warnings` reads only `permission_denials`.
 
-**Billing.** agent-council leaves authentication and billing entirely to Claude Code: it passes no option and sets no environment variable for them (the only variables it sets for an agent are `TMPDIR` and `CLAUDE_CODE_TMPDIR`, both to its scratch dir, §10). An agent bills however `claude` would at the user's terminal: a subscription login, or an API key if one is configured. One caveat, which the README gives: interactive Claude Code asks before using an `ANTHROPIC_API_KEY` found in the environment, but `-p` mode doesn't ask, so a key exported for another tool may bill council runs to the API. Subscription runs also share the user's usage limits with their interactive work; a limit hit mid-run is expected to end the run as an ordinary agent failure, but that hasn't been observed (§13). The reported cost is recorded unadjusted (only rounded to six decimal places); like other subscription providers' figures it is notional (the stream gives its `costBasis` as `list`). Telling billing sources apart in `run.json` is not built (§18); the sources for it are the `init` event's `apiKeySource` (`none` for a login), `claude auth status --json` (`subscriptionType`, e.g. `pro`), and the stream's `rate_limit_event`s, which give the plan's utilization of its 5-hour and weekly windows.
+**Billing.** agent-council leaves authentication and billing entirely to Claude Code: it passes no option and sets no environment variable for them (the only variables it sets for an agent are `TMPDIR` and `CLAUDE_CODE_TMPDIR`, both to its scratch dir, §10). An agent bills however `claude` would at the user's terminal: a subscription login, or an API key if one is configured. One caveat, which the README gives: interactive Claude Code asks before using an `ANTHROPIC_API_KEY` found in the environment, but `-p` mode doesn't ask, so a key exported for another tool may bill council runs to the API. Subscription runs also share the user's usage limits with their interactive work; a limit hit while an agent is working is expected to end it as an ordinary agent failure, but that hasn't been observed (§13). The reported cost is recorded unadjusted (only rounded to six decimal places); like other subscription providers' figures it is notional (the stream gives its `costBasis` as `list`). Telling billing sources apart in `run.json` is not built (§18); the sources for it are the `init` event's `apiKeySource` (`none` for a login), `claude auth status --json` (`subscriptionType`, e.g. `pro`), and the stream's `rate_limit_event`s, which give the plan's utilization of its 5-hour and weekly windows.
 
 ### No MCP, in either harness
 
@@ -276,15 +276,15 @@ The harness returns the final response to the Ruby process, which writes that te
 
 Each run gets its own directory, a day bucket, and an `hh-mm-ss` time, created atomically with a `-2`, `-3`, ... suffix if that name is already taken, and printed when the run starts, so an in-progress or interrupted run is easy to find. [The README's "What you get" section](README.md#what-you-get) specifies the layout, filenames, query slug, and front matter; the decisions behind them are:
 
-- **Inputs are copied into the run dir** (the prompt, config, and `analyst_format.md`, each under its own file name), so an analyst run's inputs are recoverable later. The orchestrator is versioned in git and deliberately not copied; the harness and agent-council versions, the scaffolding text, and the consolidation template are not recorded.
+- **Inputs are copied into the run dir** (the prompt, config, and `analyst_format.md`, each under its own file name), so an analyst's inputs are recoverable later. The orchestrator is versioned in git and deliberately not copied; the harness and agent-council versions, the scaffolding text, and the consolidation template are not recorded.
 - **Only analysts' reports go in `reviews/`.** The consolidator's reports (normally a findings and a meta file) and the input copies sit at the run dir root.
 - **Filenames are self-describing.** They carry the full timestamp, query slug, agent index (`consolidated` for the consolidator), harness, provider, and model, so a report still says what it is when copied out of the tree. The agent index keeps names unique when a provider/model is configured more than once (e.g. to get several independent analyses from one model) and sits before the harness, so filenames sort in agent order with more than one harness. Provider and model are sanitized like the slug but keep their case.
 - **Metadata is YAML front matter written by the orchestrator**, never by the model: it gives tools structured provenance, stays readable in the terminal, and is how reports are identified, so nothing parses filenames (a consolidation's findings file, meant to be pasted elsewhere, has identifying lines in place of front matter instead). Timestamps are unquoted ISO 8601, so they parse directly as `Time` objects. Beyond the `provider` and `model` every report needs to be recognized, `--consolidate` needs the analysts' `prompt_file`, `config_file`, `run_stamp`, and `query`, and their `agent_index` to tell which configured agents have no report.
-- **Measurements go in `run.json`, not front matter.** Front matter identifies a document; a run's duration and token usage are data about the run, wanted for analysis across many runs, and most tools can't read front matter without tripping over the Markdown after it. So they go in one JSON file per run dir, readable by any language's standard library or `jq`; the byline table still shows a report's own duration and usage to its readers.
+- **Measurements go in `run.json`, not front matter.** Front matter identifies a document; an agent's duration and token usage are data about the agent, wanted for analysis across many runs, and most tools can't read front matter without tripping over the Markdown after it. So they go in one JSON file per run dir, readable by any language's standard library or `jq`; the byline table still shows a report's own duration and usage to its readers.
 
 The optional consolidator (a top-level `consolidator:` entry in the
 config, with a harness, provider, and model like an agent's; §5) runs
-after all agents finish, as one more run, under its own entry's harness,
+after all agents finish, as one more agent, under its own entry's harness,
 with the tools and scaffolding an analyst gets under that harness. Its
 prompt is `lib/agent_council/templates/consolidate_prompt.md` followed
 by the original prompt, every analyst report labeled with its source,
@@ -310,9 +310,9 @@ agent-council reads pi's JSONL event stream (`--mode json`) rather than scraping
 
 Parsing extracts only that; there is no generic Pi protocol library.
 
-The parser and the pi CLI invocation for runs live in `AgentCouncil::Harnesses::PiHarness`
+The parser and the pi CLI invocation for agents live in `AgentCouncil::Harnesses::PiHarness`
 (`lib/agent_council/harnesses/pi_harness.rb`), the single home of pi-specific
-behavior for runs (the separate `pi-models` helper also talks to pi); see §4
+behavior for agents (the separate `pi-models` helper also talks to pi); see §4
 for how the orchestration finds it.
 
 ### Claude Code
@@ -320,13 +320,13 @@ for how the orchestration finds it.
 agent-council reads Claude Code's `stream-json` output. The stream's final `result` event carries everything needed, so parsing is simpler than pi's:
 
 - the report is its `result` text;
-- the run failed if there is no `result` event, `is_error` is true, or the text is blank. Every failure observed (not logged in, an unknown model, output over the token limit, the turn limit) exited 1 with `is_error` true, but `subtype` was `success` for all but the turn limit (`error_max_turns`), and a cut-off output reported no `max_tokens` stop reason, so neither is checked;
+- the agent failed if there is no `result` event, `is_error` is true, or the text is blank. Every failure observed (not logged in, an unknown model, output over the token limit, the turn limit) exited 1 with `is_error` true, but `subtype` was `success` for all but the turn limit (`error_max_turns`), and a cut-off output reported no `max_tokens` stop reason, so neither is checked;
 - the failure's reason is the `result` event's `errors`, if any (e.g. "Reached maximum number of turns (1)", with an empty `result`), otherwise its `result` text (e.g. "Not logged in · Please run /login"). Stderr was empty in all but one case, so unlike pi's, a nonzero exit is explained from the stream, with stderr only as a fallback;
-- usage is read from the `result` event alone, which totals the whole run; the per-message `assistant` events carry partial snapshots that undercount output (in a recorded run, 16 output tokens where the `result` event gave 184). So a run that ends without a `result` event, as when its `claude` is killed, reports no usage rather than a misleading partial count, unlike a pi run, whose completed messages each report their full usage. It maps `input_tokens`, `output_tokens`, `cache_read_input_tokens`, and `cache_creation_input_tokens` to `input`, `output`, `cache_read`, and `cache_write` (as with pi, `input` excludes cache reads and writes), and `total_cost_usd` to `cost`.
+- usage is read from the `result` event alone, which totals the agent's whole session; the per-message `assistant` events carry partial snapshots that undercount output (in one recorded case, 16 output tokens where the `result` event gave 184). So an agent that ends without a `result` event, as when its `claude` is killed, reports no usage rather than a misleading partial count, unlike a pi agent, whose completed messages each report their full usage. It maps `input_tokens`, `output_tokens`, `cache_read_input_tokens`, and `cache_creation_input_tokens` to `input`, `output`, `cache_read`, and `cache_write` (as with pi, `input` excludes cache reads and writes), and `total_cost_usd` to `cost`.
 
-So `exit_detail`, which explains a nonzero exit, reads the stream first for Claude Code and stderr for pi. The parser and the invocation live in `AgentCouncil::Harnesses::ClaudeCodeHarness` (`lib/agent_council/harnesses/claude_code_harness.rb`). The specs read streams recorded from real runs (`spec/fixtures/claude_code/`), trimmed to a few event types and fields, with local paths, tool call IDs, and commit hashes replaced by placeholders; the spec's header says how each was recorded.
+So `exit_detail`, which explains a nonzero exit, reads the stream first for Claude Code and stderr for pi. The parser and the invocation live in `AgentCouncil::Harnesses::ClaudeCodeHarness` (`lib/agent_council/harnesses/claude_code_harness.rb`). The specs read streams recorded from real `claude` invocations (`spec/fixtures/claude_code/`), trimmed to a few event types and fields, with local paths, tool call IDs, and commit hashes replaced by placeholders; the spec's header says how each was recorded.
 
-Not yet observed: a run that hits a usage limit, and one billed to an API key.
+Not yet observed: an agent that hits a usage limit, and one billed to an API key.
 
 ---
 
@@ -357,7 +357,7 @@ Failure handling is simple. If a harness invocation fails, agent-council:
 
 - prints a useful error;
 - writes no report for it;
-- lets the other model runs finish.
+- lets the other agents finish.
 
 One failed model doesn't discard successful results from others. The
 README's [What you get](README.md#what-you-get) section shows how
@@ -438,7 +438,7 @@ New gems are added only if they solve a meaningful problem that would otherwise 
 
 ## 18. Status and Future Work
 
-agent-council is at an early stage (0.x), so it does only what its core job needs. Features we hope to add include support for more harnesses (such as Codex) and telling a Claude Code run's billing source (subscription or API key) apart in `run.json` (§11). A missing feature is usually just not built yet.
+agent-council is at an early stage (0.x), so it does only what its core job needs. Features we hope to add include support for more harnesses (such as Codex) and telling a Claude Code agent's billing source (subscription or API key) apart in `run.json` (§11). A missing feature is usually just not built yet.
 
 `REVIEW_NOTES.md` separately tracks review findings that were considered and don't need to be re-raised: accepted risks and non-issues.
 

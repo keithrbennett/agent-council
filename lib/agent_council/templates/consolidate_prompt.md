@@ -6,7 +6,7 @@ prompt"), followed by formatting instructions for its report. Their reports foll
 from" its source label (`#<agent number> <provider> / <model>`), with a
 "Harness:" line below it. Agents that produced no report are listed last,
 under "Agents without a report", each with its harness and the reason
-shown there (its failure, when known, and any warnings about its run).
+shown there (its failure, when known, and any warnings about that agent).
 
 Produce a consolidated report in two parts, with exactly these sections in
 this order. The first part is the findings; the second describes the

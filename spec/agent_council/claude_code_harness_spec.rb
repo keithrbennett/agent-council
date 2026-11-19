@@ -3,7 +3,7 @@
 # Focused tests for the Claude Code-specific behavior in
 # lib/agent_council/harnesses/claude_code_harness.rb (no model calls). The
 # streams in spec/fixtures/claude_code were recorded from real
-# `claude -p --output-format stream-json --verbose` runs (Claude Code
+# `claude -p --output-format stream-json --verbose` invocations (Claude Code
 # 2.1.325), trimmed to a few event types and fields, with local paths
 # replaced by /repo and /tmp/scratch, tool call IDs renumbered, and commit
 # hashes zeroed. denied.jsonl was recorded with this harness's argv in a
@@ -76,7 +76,7 @@ RSpec.describe AgentCouncil::Harnesses::ClaudeCodeHarness do
     end
   end
 
-  describe 'a successful run' do
+  describe 'a successful agent' do
     let(:stream) { fixture('success') }
 
     it "reads the result event's text as the final response" do
@@ -88,12 +88,12 @@ RSpec.describe AgentCouncil::Harnesses::ClaudeCodeHarness do
       expect(described_class.warnings(stream)).to eq([])
     end
 
-    it "reads the run's usage and cost from the result event" do
+    it "reads the agent's usage and cost from the result event" do
       expect(described_class.usage(stream)).to eq('input' => 4, 'output' => 161, 'cache_read' => 16_151,
         'cache_write' => 2224, 'cost' => 0.000687)
     end
 
-    it 'reads usage without a cost when the run has none' do
+    it 'reads usage without a cost when the agent has none' do
       usage = { 'input_tokens' => 5, 'output_tokens' => 7 }
       expect(described_class.usage(result_stream('usage' => usage, 'total_cost_usd' => 0)))
         .to eq('input' => 5, 'output' => 7, 'cache_read' => 0, 'cache_write' => 0)
@@ -106,7 +106,7 @@ RSpec.describe AgentCouncil::Harnesses::ClaudeCodeHarness do
     end
   end
 
-  describe 'failed runs' do
+  describe 'failed agents' do
     # Every failure recorded exited 1; exit_detail is what reports them.
     {
       'not_logged_in' => 'Not logged in · Please run /login',
@@ -114,7 +114,7 @@ RSpec.describe AgentCouncil::Harnesses::ClaudeCodeHarness do
       'max_turns'     => 'Reached maximum number of turns (1)',
       'output_limit'  => /\AAPI Error: Claude's response exceeded the 100 output token maximum/,
     }.each do |name, reason|
-      it "explains a #{name.tr('_', ' ')} run from its stream" do
+      it "explains a #{name.tr('_', ' ')} failure from its stream" do
         stream = fixture(name)
         expect(described_class.error_message(stream)).to match(reason)
         expect(described_class.exit_detail(stream, '')).to match(reason)
@@ -127,11 +127,11 @@ RSpec.describe AgentCouncil::Harnesses::ClaudeCodeHarness do
         .to start_with("There's an issue")
     end
 
-    it 'still reads the usage of a failed run that reached the model' do
+    it 'still reads the usage of a failed agent that reached the model' do
       expect(described_class.usage(fixture('max_turns'))).to include('output' => 184)
     end
 
-    it 'reports no usage for a run that never reached a model' do
+    it 'reports no usage for an agent that never reached a model' do
       expect(described_class.usage(fixture('not_logged_in'))).to be_nil
     end
 
@@ -148,7 +148,7 @@ RSpec.describe AgentCouncil::Harnesses::ClaudeCodeHarness do
     it 'falls back to stderr when a failed result event gives no reason' do
       stream = result_stream('is_error' => true, 'result' => ' ', 'errors' => [])
       expect(described_class.exit_detail(stream, "real cause\n")).to eq('real cause')
-      expect(described_class.exit_detail(stream, '')).to eq('the run failed and gave no reason')
+      expect(described_class.exit_detail(stream, '')).to eq('the agent failed and gave no reason')
     end
 
     it "prefers stderr to the stream's other problems, which it falls back to without stderr" do
@@ -180,7 +180,7 @@ RSpec.describe AgentCouncil::Harnesses::ClaudeCodeHarness do
 
     it 'gives a reason for an error that states none' do
       stream = result_stream('is_error' => true, 'result' => ' ', 'errors' => [])
-      expect(described_class.error_message(stream)).to eq('the run failed and gave no reason')
+      expect(described_class.error_message(stream)).to eq('the agent failed and gave no reason')
     end
 
     it 'joins several errors' do
@@ -190,7 +190,7 @@ RSpec.describe AgentCouncil::Harnesses::ClaudeCodeHarness do
   end
 
   describe '.warnings' do
-    it 'warns of the tool calls Claude Code refused in a run that succeeded' do
+    it 'warns of the tool calls Claude Code refused for an agent that succeeded' do
       stream = fixture('denied')
       expect(described_class.error_message(stream)).to be_nil
       expect(described_class.warnings(stream))

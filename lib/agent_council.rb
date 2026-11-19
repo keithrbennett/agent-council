@@ -142,18 +142,18 @@ module AgentCouncil
 
   # Returns [label, ok, detail, usage, warnings]; never raises. detail is
   # the report's filename on success, the error otherwise. usage is the
-  # run's token usage (see Harnesses), or nil; failed runs report it too,
+  # agent's token usage (see Harnesses), or nil; failed agents report it too,
   # since their tokens were still spent. warnings: the harness's warnings
-  # about the run (see run_warnings), failed or not, since what the harness
+  # about the agent (see run_warnings), failed or not, since what the harness
   # kept the agent from doing may be why it failed; empty if the harness
   # never ran. Returned, not printed, since this runs in a worker thread.
   # index: the agent's 1-based position in the config's agent list, used to
   # disambiguate repeated provider/model entries in the filename and label;
   # filename: overrides the output name; meta: becomes YAML front matter,
-  # which identifies the report; what was measured about its run (duration
+  # which identifies the report; what was measured about the agent (duration
   # and usage) goes in run.json instead (see write_run_file);
   # header: markdown prepended to the report body (or a callable receiving
-  # the run's fields, 'duration' (HH:MM:SS), 'usage', and any 'warnings',
+  # the agent's fields, 'duration' (HH:MM:SS), 'usage', and any 'warnings',
   # and returning it). If the response begins
   # with an H1 of its own, it is dropped: the header leads the body (and
   # carries the title, in consolidated reports).
@@ -184,7 +184,7 @@ module AgentCouncil
     stdout, stderr = [stdout, stderr].map { |output| String.new(output, encoding: ENCODING) }
     # Invalid bytes become U+FFFD, so they can't make the harness's parsing
     # raise: for stderr, a failure would go unexplained; for stdout, a
-    # failure's reason or a run's warnings would be lost.
+    # failure's reason or an agent's warnings would be lost.
     stdout, stderr = [stdout, stderr].map(&:scrub)
     duration = format_duration(elapsed)
     usage = harness.usage(stdout)
@@ -200,7 +200,7 @@ module AgentCouncil
     error = harness.error_message(stdout)
     if error
       summary = failure_reason(error)
-      return [label, false, "#{harness::NAME} exited 0 but the run failed: #{summary}", usage, warnings]
+      return [label, false, "#{harness::NAME} exited 0 but the agent failed: #{summary}", usage, warnings]
     end
 
     text = harness.final_response(stdout)
@@ -235,10 +235,10 @@ module AgentCouncil
     FileUtils.rm_rf(scratch_dir) if scratch_dir
   end
 
-  # The harness's warnings about a run: what the harness kept the agent
+  # The harness's warnings about an agent: what the harness kept it
   # from doing (see ClaudeCodeHarness.warnings), which a report may lack,
-  # or which may be why the run failed. Advisory only: failing to read them
-  # must not fail a run whose report is saved, so that becomes a warning
+  # or which may be why the agent failed. Advisory only: failing to read them
+  # must not fail an agent whose report is saved, so that becomes a warning
   # too.
   # Each is a plain_line, so wherever it goes (console, report, run.json,
   # and so anything that prints run.json's values) it can't carry a
@@ -247,7 +247,7 @@ module AgentCouncil
     # An Array, by the harness contract; nil tolerated.
     Array(harness.warnings(stdout)).map { |warning| plain_line(warning) }
   rescue => e
-    [plain_line("could not read the run's warnings (#{e.class}: #{e.message})")]
+    [plain_line("could not read the agent's warnings (#{e.class}: #{e.message})")]
   end
 
   # A harness's reason for a failure, as run_agent reports it: a
@@ -261,7 +261,7 @@ module AgentCouncil
     reason.length > 300 ? "#{reason[0, 300]}..." : reason
   end
 
-  # Lines showing a run's warnings under its progress line or result table.
+  # Lines showing an agent's warnings under its progress line or result table.
   module_function def warning_lines(warnings)
     Array(warnings).map { |warning| "      Warning: #{plain_line(warning)}" }
   end
@@ -514,7 +514,7 @@ module AgentCouncil
     File.rename(temp, path)
     [findings_name, filename]
   rescue => e
-    # A failed split must not fail the consolidation, whose model run is
+    # A failed split must not fail the consolidation, whose model call is
     # already paid for and whose report is intact. Without an unsplit name
     # (a consolidator entry that can't name a file, which validation rules
     # out), there is nothing to fall back to, so the error is raised as is.
@@ -542,9 +542,9 @@ module AgentCouncil
     [filename, nil]
   end
 
-  # Markdown table of the report's main front-matter fields and its run's
+  # Markdown table of the report's main front-matter fields and the agent's
   # duration and usage, leading the body (under the title, in consolidated
-  # reports, followed by sources_table). agent: the run's config entry.
+  # reports, followed by sources_table). agent: the agent's config entry.
   module_function def byline_table(meta, agent)
     fields = {
       'role'            => meta['role'],
@@ -575,7 +575,7 @@ module AgentCouncil
   end
 
   # Markdown table of a consolidated report's sources, one row per label in
-  # sources, with its run's duration and usage from source_runs (label =>
+  # sources, with that agent's duration and usage from source_runs (label =>
   # run.json entry); - where unknown. Input counts cached input too.
   module_function def sources_table(sources, source_runs)
     rows = sources.map do |label|
@@ -722,16 +722,16 @@ module AgentCouncil
     costs.all?(Numeric) ? total.merge('cost' => costs.sum.round(6)) : total
   end
 
-  # The run dir's machine-readable record of its agents' runs.
+  # The run dir's machine-readable record of its analysts and consolidations.
   RUN_FILENAME = 'run.json'
 
   # A run.json entry for an agent's run_agent result and its elapsed
   # seconds: its report's path under dir (the run dir's reviews_dir for
   # analysts) on success, its error on failure. The harness is per entry,
-  # not per run, so a run can mix harnesses. meta_report: for a
+  # so a run can mix harnesses. meta_report: for a
   # consolidation whose report was split (its detail is the findings file's
   # name), the other file, which carries the front matter. warnings: the
-  # run's warnings (see run_agent), recorded only if there are any.
+  # agent's warnings (see run_agent), recorded only if there are any.
   module_function def run_entry(agent, ok, detail, elapsed, usage, index: nil, dir: nil, meta_report: nil,
     warnings: nil)
     entry = { 'agent_index' => index, 'harness' => Harnesses.name_of(agent), 'provider' => agent['provider'],
@@ -743,7 +743,7 @@ module AgentCouncil
   end
 
   # Writes the run dir's run.json: every analyst's and consolidation's
-  # entry (see run_entry), their total usage, and how many runs it covers
+  # entry (see run_entry), their total usage, and how many entries it covers
   # (those that reported usage). Replaced atomically, so a
   # reader or a Ctrl-C never sees it half written. A failure to write it is
   # only warned about: the reports are what matter.
@@ -805,7 +805,7 @@ module AgentCouncil
     errors.empty? ? lines : [*lines, '', '  Errors:', *errors]
   end
 
-  # "; <total usage>" for a summary line, noting how many of the runs it
+  # "; <total usage>" for a summary line, noting how many of the agents it
   # covers when some reported no usage; "" when none reported any.
   module_function def usage_summary(usages)
     total = format_usage(sum_usage(usages))
@@ -1365,7 +1365,8 @@ module AgentCouncil
       entry = run_entry(consolidator, ok, detail, elapsed, usage, meta_report: meta_name, warnings: warnings)
       write_run_file(run_dir, analysts, consolidations + [entry])
     else
-      warn "No readable #{RUN_FILENAME} in #{relative_path(run_dir)}; not recording this consolidation's run"
+      warn "No readable #{RUN_FILENAME} in #{relative_path(run_dir)}, " \
+        "so this consolidation won't be recorded in one"
     end
     puts_consolidation_status(ok)
     exit(ok ? 0 : 1)
@@ -1383,21 +1384,21 @@ module AgentCouncil
       File.basename(name) == name
   end
 
-  # A failed run's reason as the consolidator is told it: its error, then
-  # any warnings about the run, since they may be why it failed.
+  # A failed agent's reason as the consolidator is told it: its error, then
+  # any warnings about the agent, since they may be why it failed.
   module_function def failure_with_warnings(detail, warnings)
     [detail, *Array(warnings).map { |warning| "warning: #{warning}" }].join('; ')
   end
 
   # What --consolidate tells the consolidator about an agent without a
-  # report when run.json doesn't record that its run failed.
+  # report when run.json doesn't record that it failed.
   MISSING_REPORT_REASON =
     'reason not recorded (it may have failed, been interrupted, or had its report removed)'
 
   # For --consolidate: the config copy's agents that have no report, as
   # [label, reason, harness] triples, as a run tells its consolidator. The
   # reason is the error and warnings run.json records for the agent's
-  # failed run (analyst_runs: its analyst entries); else it isn't known,
+  # failure (analyst_runs: its analyst entries); else it isn't known,
   # and needn't be a failure: the run may have been interrupted, or a
   # report removed. An agent the config copy gives an unknown harness is
   # still listed: it needs no harness to be labeled, and the config may
@@ -1415,7 +1416,7 @@ module AgentCouncil
     end
   end
 
-  # The reason run.json records for a failed run of agent (the config
+  # The reason run.json records for the failure of agent (the config
   # entry at 1-based index), with its warnings, or nil if none is recorded.
   module_function def recorded_failure(agent, index, analyst_runs)
     run = Array(analyst_runs).find do |entry|

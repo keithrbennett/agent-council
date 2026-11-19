@@ -34,7 +34,7 @@ module AgentCouncil
           listing files; inspecting git history and status; inspecting
           dependency and configuration information.
         - If you need scratch space for temporary artifacts, use $TMPDIR: it
-          is a disposable directory unique to your run.
+          is a disposable directory unique to you.
         - Deliver your complete analysis as your final message text. Do not
           write the report to a file; the orchestrator captures your final
           message directly.

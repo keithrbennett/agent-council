@@ -13,7 +13,7 @@
 - Costs are now described as estimates (for pi agents, from pi's price
   table), not what you're billed. A new README section, "How far to
   trust the cost", says why they can be far off: subscription pricing,
-  price tables, stopped runs recording no usage, and token counting.
+  price tables, stopped agents recording no usage, and token counting.
 - A README section, "Claude Code's sandbox", covers Claude Code's own
   Bash sandbox, which Claude Code's settings turn on, and which the
   analyzed repository's settings can turn on or off: it leaves the
@@ -46,16 +46,16 @@
   agents in the same config: each entry's `harness` value names its
   harness, `pi` or `claude`, and an unknown name is rejected at startup
   (with `--consolidate`, only the consolidator's, since no analysts
-  run). A Claude Code entry's `provider` only labels the run. Runs bill
-  however `claude` does at your terminal, to a subscription login or an
-  API key; agent-council sets nothing for billing. Of Claude Code's
+  run). A Claude Code entry's `provider` only labels the agent. Claude
+  Code agents bill however `claude` does at your terminal, to a
+  subscription login or an API key; agent-council sets nothing for billing. Of Claude Code's
   built-in tools, agents get only `Read`, `Grep`, `Glob`, and `Bash`;
   they get no MCP servers, and they load `CLAUDE.md`, settings, hooks,
   plugins, and auto memory as an interactive session would, including
   the analyzed repository's own hooks. A tool call Claude Code refuses
   (e.g. under a `permissions.deny` rule) is reported as a warning, also
   shown in the report's metadata table (where the consolidator sees it)
-  and recorded in `run.json`; the report is kept, and a run that fails
+  and recorded in `run.json`; the report is kept, and an agent that fails
   anyway still gets the warning. Only configs that use Claude Code need
   the `claude` CLI.
 - **Breaking:** every agent and consolidator entry must give `harness`,

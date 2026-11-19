@@ -275,7 +275,7 @@ RSpec.describe 'agent-council end to end' do
     expect(text).to include('| usage | 1.2k in (200 cached) / 200 out, $0.02 |')
   end
 
-  it 'writes every run, failed ones included, and the total usage to run.json' do
+  it 'writes every agent, failed ones included, and the total usage to run.json' do
     write_config(%w[done fails], consolidator: 'done')
 
     expect(run_council.exitstatus).to eq(1), output_report
@@ -412,7 +412,7 @@ RSpec.describe 'agent-council end to end' do
     expect(meta).to include("| warnings | #{warning.delete_prefix('Warning: ')} |")
   end
 
-  it "reports a failed run's warnings, to the console, run.json, and the consolidator" do
+  it "reports a failed agent's warnings, to the console, run.json, and the consolidator" do
     write_fake_claude
     agents = [{ 'harness' => 'pi', 'provider' => 'done', 'model' => 'm1' },
       { 'harness' => 'claude', 'provider' => 'anthropic', 'model' => 'stuck' }]
@@ -535,7 +535,8 @@ RSpec.describe 'agent-council end to end' do
       File.delete(run_path)
       File.delete(*reports('*consolidated*.md'))
       expect(run_council(args: ['--consolidate', run_dir]).exitstatus).to eq(0), output_report
-      expect(err).to include("No readable run.json in #{run_dir}")
+      expect(err).to include("No readable run.json in #{run_dir}, " \
+        "so this consolidation won't be recorded in one")
       expect(File).not_to exist(run_path)
       expect(reports('*consolidated*.md').size).to eq(1)
     end

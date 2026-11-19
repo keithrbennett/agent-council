@@ -107,8 +107,8 @@ agent-council can help with any question about a set of readable files
   fixed ports, Docker).
 - **It has a text answer.** Only each agent's final message is saved as
   its report. Agents are told not to change the project and to keep
-  temporary files in a scratch directory, which is deleted after the
-  run. Actions such as posting or deploying would happen once per agent.
+  temporary files in a scratch directory, which is deleted when the
+  agent finishes. Actions such as posting or deploying would happen once per agent.
 - **It gains from several independent answers and a synthesis of
   them.** Open-ended questions ("what's wrong with this?", "what should
   we do?") gain the most; one with an obvious answer gains nothing.
@@ -289,7 +289,7 @@ Edit the config to choose the ensemble. The config is the optional second
 argument; if omitted, `./agent-council.yml` in the current directory is used
 (parent directories are not searched), else `~/.agent-council.yml` in your
 home directory. It is an error if neither exists. Each entry becomes one
-run of the harness it names (see
+agent, which runs under the harness it names (see
 [Choosing a harness](#choosing-a-harness)) with that
 model and provider (see
 [How it works](#how-it-works-and-what-the-agents-are-told) for the full commands), so no Ruby changes
@@ -338,7 +338,7 @@ finish. That model receives:
 - the original prompt;
 - the analyst reports in `reviews/`, each labeled with its source model;
 - a list of the agents without a report, each with its harness and its
-  failure reason, followed by any warnings about its run;
+  failure reason, followed by any warnings about that agent;
 - the instructions in `lib/agent_council/templates/consolidate_prompt.md`
   in the gem's directory (`$AC_HOME`; see
   [Finding the installed documentation and examples](#finding-the-installed-documentation-and-examples))
@@ -371,7 +371,7 @@ consolidator:
 
 - **Models.** `model` is any model name or alias `claude --model`
   accepts. Claude Code takes no provider, so `provider` only labels the
-  run: `anthropic`, or e.g. `bedrock` if your `claude` is set up to use
+  agent: `anthropic`, or e.g. `bedrock` if your `claude` is set up to use
   it.
 - **Billing.** agent-council leaves authentication and billing to Claude
   Code: an agent bills however `claude` would at your terminal, to your
@@ -397,7 +397,7 @@ consolidator:
   consolidator's, under its result table), shown in the report's
   metadata table (so the consolidator sees an analyst's too), and
   recorded in `run.json`, since the report may lack what the call would
-  have found. If the run fails anyway (say, it runs out of turns after
+  have found. If the agent fails anyway (say, it runs out of turns after
   repeated refusals), the warning still follows its failure reason, on
   the console, in `run.json`, and in what the consolidator is told about
   it, since the refusals may be why it failed.
@@ -660,7 +660,7 @@ any suffix). Exit status is 0 only if the consolidation succeeded.
   written, can't be consolidated.
 - **Failure reasons come from `run.json`.** The consolidator is told
   each configured agent without a report, with the error and warnings
-  `run.json` records for its failed run; for an agent with no such
+  `run.json` records for it when it failed; for an agent with no such
   entry (an interrupted run, a removed report, or no readable
   `run.json`), with a note that the reason wasn't recorded.
 
@@ -734,7 +734,7 @@ agent-council-reports/
       codebase-review.md   # prompt copy
       analyst_format.md    # report-format addendum copy
       consolidated.yml     # config copy
-      run.json             # every agent run's outcome, duration, and token usage
+      run.json             # every agent's outcome, duration, and token usage
       reviews/             # analyst reports
         2026-09-02-16-21-43_codebase-review_01_pi_opencode-go_glm-5.3.md
         2026-09-02-16-21-43_codebase-review_02_pi_opencode-go_kimi-k3.md
@@ -782,7 +782,7 @@ agent-council-reports/
   of runs.
 - Each report file, except a consolidated report's `*_findings.md`, begins with a small **YAML front matter** block,
   written by the orchestrator (never by the model), identifying the
-  report (what was measured about its run is in `run.json`, below):
+  report (what was measured about the agent that wrote it is in `run.json`, below):
   - in every report: `role` (`analyst` or `consolidator`), `timestamp`
     (unquoted ISO 8601), `query` (the query slug), `harness`, `provider`, `model`,
     `prompt_file` and `config_file` (the names of
@@ -796,30 +796,31 @@ agent-council-reports/
     consolidation ran; with `--consolidate`, possibly long after
     `timestamp`, the run's start).
 
-- The run dir's **`run.json`** records every agent run, for tools and
-  for analysis across many runs: `analysts` and `consolidations`, one
-  entry per run with its `agent_index` (analysts only), `harness`,
+- The run dir's **`run.json`** records every analyst and consolidation, for tools
+  and for analysis across many runs: `analysts` and `consolidations`,
+  one entry for each analyst and each consolidation (`--consolidate`'s
+  included), with its `agent_index` (analysts only), `harness`,
   `provider`, `model`, `ok`, `duration_seconds`, `usage`, and `report` (its
   path in the run dir; for a split consolidation, the `*_findings.md` file)
   or `error`. A split consolidation also has `meta_report`, the `*_meta.md`
   file, which has the front matter. Any entry the harness warned about
-  (such as a Claude Code run with refused tool calls) also has
+  (such as a Claude Code agent with refused tool calls) also has
   `warnings`, a list of messages. The file also has `total_usage`, the
   entries' summed usage, whose `cost` is included only if every summed
   entry's cost is known; and `total_usage_runs`, how many entries reported
-  usage (and so are in the total). Failed runs are included, since their
-  tokens were spent, but a Claude Code run that ends without its final
+  usage (and so are in the total). Failed agents are included, since their
+  tokens were spent, but a Claude Code agent that ends without its final
   `result` event (e.g. because its `claude` was killed) reports no usage,
-  since only that event gives the run's totals.
+  since only that event gives the agent's totals.
   It is written once the reviews finish and updated after each
   consolidation, including each `--consolidate`; a `--consolidate` of a
   run dir without a readable `run.json` warns and writes none.
 
-  `usage` is the model's token usage, summed over every request of the
-  run, as reported by the harness: `input` (excluding cached input),
+  `usage` is the model's token usage, summed over every request the
+  agent made, as reported by the harness: `input` (excluding cached input),
   `cache_read`, `cache_write`, and `output` token counts, plus `cost` in
-  US dollars when the harness could price the run (pi uses its own price
-  table, so models missing from it have no cost; Claude Code prices runs
+  US dollars when the harness could price the usage (pi uses its own price
+  table, so models missing from it have no cost; Claude Code prices usage
   at Anthropic's API list prices), recorded as the harness reports it,
   only rounded to six decimal places. It is an estimate, not what you're
   billed; see [How far to trust the cost](#how-far-to-trust-the-cost).
@@ -831,8 +832,8 @@ agent-council-reports/
   not by filename parsing, so `.md` files in `reviews/` without
   `provider` and `model` front matter are ignored.
 - Below the front matter, the orchestrator adds a metadata table
-  summarizing its main fields, its run's duration and token usage, and
-  any warnings about the run, such as tool calls Claude Code refused
+  summarizing its main fields, the agent's duration and token usage, and
+  any warnings about the agent, such as tool calls Claude Code refused
   (for consolidated reports, under a `# Consolidated Report` title and a
   `### Prompt:` line, and followed by a `### Sources` table giving each
   source's duration, input (cached included), cached input, output, and
@@ -845,14 +846,14 @@ agent-council-reports/
   before it goes to the `*_findings.md` file under a `# Consolidated Findings`
   title, a few lines identifying the run (its stamp and query, the prompt
   file, the consolidator and time, and any warnings about the
-  consolidator's run), and a legend of the agents (number,
+  consolidator), and a legend of the agents (number,
   harness, provider, model). If
   the marker is missing, repeated, inside a code fence, or not followed by
   the `Agent Consultants` heading, or the report no longer starts with the
   header written to it, the report is left unsplit, under the unsuffixed
   name, and a warning says why.
-- The copied prompt, config, and report-format addendum keep an analyst
-  run's inputs recoverable after the fact. The harness and
+- The copied prompt, config, and report-format addendum keep an analyst's
+  inputs recoverable after the fact. The harness and
   agent-council versions, the scaffolding text appended to the harness's
   system prompt, and the
   consolidation template are not recorded.
@@ -882,12 +883,12 @@ ls agent-council-reports/*/*/reviews/*codebase-review*
 While the agents run, a `Review Progress:` section prints one line per
 agent as it finishes: `✓` or `✗`, its duration, its label (e.g.
 `#2 openai / gpt-6.1-sol`) and, for a failure, the reason on the line
-below; any warnings about a run (such as tool calls Claude Code
+below; any warnings about an agent (such as tool calls Claude Code
 refused) follow as indented `Warning:` lines, under its progress line or,
 for the consolidator, under its result row. When all reviews finish, a `Reviews` table shows which models
 succeeded, how long each took (`HH:MM:SS`) and their token usage in
 `In`, `Cached`, `Out`, and `Cost` columns (`In` counts cached input too;
-`-` when unknown; failed runs show what they used; `Cost` is an estimate,
+`-` when unknown; failed agents show what they used; `Cost` is an estimate,
 see [How far to trust the cost](#how-far-to-trust-the-cost)), with the failures'
 reasons listed below it under `Errors:`. A
 `--- Reviews complete (N/M succeeded; <total usage>) ---` line follows,
@@ -920,16 +921,16 @@ direction:
   a plan-based pi provider), the estimate is what the usage would cost
   at pay-per-token prices. What you actually pay for a run may be
   nothing extra, while the run uses up your plan's limits.
-- **Price tables.** pi prices runs from its own price table, which may
+- **Price tables.** pi prices usage from its own price table, which may
   not match what your provider charges (discounts, price changes, or
   routing to a differently priced upstream), and a model missing from
-  it gets no cost at all. Claude Code prices runs at Anthropic's API
+  it gets no cost at all. Claude Code prices usage at Anthropic's API
   list prices.
-- **Stopped runs.** An agent stopped by Ctrl-C (or another signal)
+- **Stopped agents.** An agent stopped by Ctrl-C (or another signal)
   records no usage, though its provider still bills for what it used,
   and a run stopped before every analyst finished writes no `run.json`
   at all. A runaway agent stopped by hand, the most expensive kind of
-  run, is therefore missing from the totals entirely.
+  agent, is therefore missing from the totals entirely.
 - **Token counts.** Providers count tokens somewhat differently
   (reasoning tokens, for example), so compare counts, and the costs
   built on them, across providers only roughly.
@@ -953,7 +954,7 @@ usage page.
 - Under pi, each agent runs as
   `pi -p --mode json --no-session --no-mcp --tools read,grep,find,ls,bash
    --provider P --model M --append-system-prompt <scaffolding>`.
-  - `--no-session` keeps runs independent: no conversation state leaks
+  - `--no-session` keeps agents independent: no conversation state leaks
     between ensemble members.
   - `--no-mcp` turns off pi's built-in MCP support, so the MCP servers
     configured for pi don't start and agents have no MCP tools. (An
@@ -963,7 +964,7 @@ usage page.
     inspection, ...), while file-editing tools and unlisted extension and
     custom tools are unavailable.
   - Otherwise pi behaves normally: it loads context files such as
-    `AGENTS.md` and `CLAUDE.md` as in any pi run, and the analyzed repo's
+    `AGENTS.md` and `CLAUDE.md` as in any pi session, and the analyzed repo's
     `.pi` project resources only if pi already trusts the project
     (agent-council passes no `--approve`). See
     [pi's documentation][pi-docs] for what loads from where.
@@ -977,7 +978,7 @@ usage page.
    --tools Read,Grep,Glob,Bash --allowedTools Read,Grep,Glob,Bash
    --permission-mode manual --strict-mcp-config --model M
    --append-system-prompt <scaffolding>`.
-  - `--no-session-persistence` keeps runs independent: no session is
+  - `--no-session-persistence` keeps agents independent: no session is
     saved, to be resumed or to show up in your session list.
   - `--tools` limits the built-in tools to these four: `Bash` remains for
     investigation, while `Edit`, `Write`, and the rest are unavailable.
@@ -996,7 +997,7 @@ usage page.
     `MEMORY.md` index, with the instruction to keep it up to date).
     (`--bare`, which would skip them, also permits only API-key
     authentication, so it isn't used.)
-  - The final response is the stream's `result` event; a run that fails
+  - The final response is the stream's `result` event; an agent that fails
     (not logged in, an unknown model, the output cut off) is reported
     with the reason Claude Code gives. [`DESIGN.md`](DESIGN.md) §13 has
     the details.
@@ -1015,8 +1016,8 @@ usage page.
   `scaffold_text` in `lib/agent_council/harnesses/scaffold.rb`;
   [`DESIGN.md`](DESIGN.md) §10 explains the rules.
 - Each agent gets its own disposable temp directory, as its `TMPDIR`,
-  which the scaffolding tells it to use for scratch space, deleted after
-  the run (under Claude Code's sandbox, `TMPDIR` is a directory Claude
+  which the scaffolding tells it to use for scratch space, deleted when
+  the agent finishes (under Claude Code's sandbox, `TMPDIR` is a directory Claude
   Code makes inside it; see [Claude Code's
   sandbox](#claude-codes-sandbox)). After Ctrl-C, a directory can be
   left behind if a second signal stops agent-council at once, or if

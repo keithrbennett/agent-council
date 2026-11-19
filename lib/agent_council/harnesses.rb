@@ -14,17 +14,17 @@
 # goes into report filenames unsanitized, so it must be one
 # AgentCouncil.sanitize leaves unchanged (the specs check this).
 #
-# exit_detail (stdout, stderr) says why a run that exited nonzero failed;
+# exit_detail (stdout, stderr) says why an agent that exited nonzero failed;
 # the caller puts it, and error_message's reason, on one line cut to 300
 # characters (AgentCouncil.failure_reason), so a harness returns the
 # reason whole. warnings returns an Array of messages (empty for none)
-# about a run, failed or not; the caller prints and records them all, so a
+# about an agent, failed or not; the caller prints and records them all, so a
 # harness keeps them few and short.
 #
-# usage returns the run's token usage as AgentCouncil records it, summed
-# over the whole run: integer 'input' (excluding cached input), 'output',
+# usage returns the agent's token usage as AgentCouncil records it, summed
+# over all its requests: integer 'input' (excluding cached input), 'output',
 # 'cache_read', and 'cache_write', plus 'cost' in US dollars when the
-# harness priced the run; or nil when the harness reports no usage.
+# harness priced the usage; or nil when the harness reports no usage.
 
 require_relative 'harnesses/pi_harness'
 require_relative 'harnesses/claude_code_harness'

@@ -195,7 +195,7 @@ RSpec.describe AgentCouncil::Harnesses::PiHarness do
       expect(described_class.error_message(stream)).to include('length')
     end
 
-    it 'does not fail a run whose earlier turn was cut off but later recovered' do
+    it 'does not fail an agent whose earlier turn was cut off but later recovered' do
       stream = <<~JSONL
         {"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"cut o"}],"stopReason":"length"}}
         {"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"complete report"}],"stopReason":"stop"}}

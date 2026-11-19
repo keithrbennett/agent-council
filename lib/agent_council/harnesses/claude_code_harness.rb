@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
 # AgentCouncil::Harnesses::ClaudeCodeHarness — all knowledge specific to
-# the Claude Code harness: how to invoke the claude CLI for one model run,
+# the Claude Code harness: how to invoke the claude CLI for one agent,
 # with its tool allowlist and the shared read-only scaffolding, and how to
 # read its stream-json output afterward.
 #
 # AgentCouncil is harness-agnostic and finds this module through
 # AgentCouncil::Harnesses (lib/agent_council/harnesses.rb), by its NAME.
-# Authentication and billing are left to Claude Code: a run bills however
+# Authentication and billing are left to Claude Code: an agent bills however
 # claude would at the user's terminal.
 
 require 'json'
@@ -23,9 +23,9 @@ module AgentCouncil
       # only the scaffolding text asks the model to use it read-only.
       TOOLS = 'Read,Grep,Glob,Bash'
 
-      # Invocation for one model run. The substantive prompt is not part of
+      # Invocation for one agent. The substantive prompt is not part of
       # argv; it is piped to stdin. provider is not passed: Claude Code
-      # takes none, so an entry's provider only labels the run (e.g.
+      # takes none, so an entry's provider only labels the agent (e.g.
       # bedrock, for a claude set up to use it).
       module_function def argv(_provider, model)
         [
@@ -59,8 +59,8 @@ module AgentCouncil
         end
       end
 
-      # The run's result event: the last one, which ends the stream. nil if
-      # there is none, e.g. for a run that was killed.
+      # The agent's result event: the last one, which ends the stream. nil if
+      # there is none, e.g. for an agent that was killed.
       module_function def result_event(jsonl)
         events(jsonl).reverse_each.detect { |event| event['type'] == 'result' }
       end
@@ -74,7 +74,7 @@ module AgentCouncil
         end
       end
 
-      # The final response: the result event's text, for a run that didn't
+      # The final response: the result event's text, for an agent that didn't
       # fail.
       module_function def final_response(jsonl)
         result = result_event(jsonl)
@@ -91,11 +91,11 @@ module AgentCouncil
                      'cache_write' => 'cache_creation_input_tokens' }.freeze
 
       # Token usage as AgentCouncil expects it (see Harnesses), from the
-      # result event alone: it totals the whole run, while the assistant
+      # result event alone: it totals all the agent's requests, while the assistant
       # events' usage is per-message snapshots that undercount output. nil
-      # when the stream has no result event (as for a run whose claude was
+      # when the stream has no result event (as for an agent whose claude was
       # killed: no usage beats an undercount) or reports no usage (as when
-      # the run never reached a model).
+      # the agent never reached a model).
       module_function def usage(jsonl)
         result = result_event(jsonl)
         usage = result && result['usage']
@@ -112,7 +112,7 @@ module AgentCouncil
         value.is_a?(Numeric) && value.positive? ? value : 0
       end
 
-      # Why the run produced no usable report, or nil. A failed run has a
+      # Why the agent produced no usable report, or nil. A failed agent has a
       # result event with is_error true (its subtype is usually still
       # "success", so it isn't checked); one that isn't flagged but has no
       # text is reported as such, since the report is that text. The reason
@@ -122,13 +122,13 @@ module AgentCouncil
       module_function def error_message(jsonl)
         result = result_event(jsonl)
         return 'the stream has no result event' unless result
-        return error_reason(result) || 'the run failed and gave no reason' if result['is_error'] == true
+        return error_reason(result) || 'the agent failed and gave no reason' if result['is_error'] == true
 
         text = result['result']
         'the result event has no text' unless text.is_a?(String) && !text.strip.empty?
       end
 
-      # The reason a failed run's result event gives, or nil if it gives none.
+      # The reason a failed agent's result event gives, or nil if it gives none.
       module_function def error_reason(result)
         errors = Array(result['errors']).grep(String).map(&:strip).reject(&:empty?)
         return errors.join('; ') unless errors.empty?
@@ -137,7 +137,7 @@ module AgentCouncil
         text if text.is_a?(String) && !text.strip.empty?
       end
 
-      # Why a run that exited nonzero failed. Claude Code explains a failure
+      # Why an agent that exited nonzero failed. Claude Code explains a failure
       # in a result event with is_error true, and its stderr is then
       # usually empty, so that reason, if it gives one, comes first.
       # Otherwise stderr is likelier to say why (e.g. for a crash) than
@@ -155,11 +155,11 @@ module AgentCouncil
         (error_message(stdout) if result) || 'no error output'
       end
 
-      # Warnings about a run, succeeded or not: the tool calls Claude Code
-      # refused, which -p mode can't ask about. The run usually still
+      # Warnings about an agent, succeeded or not: the tool calls Claude Code
+      # refused, which -p mode can't ask about. The agent usually still
       # succeeds (the model saw the refusal and answered without that
       # call), but its report may be missing what the call would have
-      # found; a run that fails (say, out of turns) may have failed
+      # found; an agent that fails (say, out of turns) may have failed
       # because of them.
       module_function def warnings(jsonl)
         result = result_event(jsonl)
@@ -174,7 +174,7 @@ module AgentCouncil
         ["Claude Code refused #{denials.size} tool call#{'s' unless denials.size == 1}: #{listed.join('; ')}"]
       end
 
-      # Distinct refused calls named in a warning, so a run refused many
+      # Distinct refused calls named in a warning, so an agent refused many
       # times still gets a warning of a readable length.
       MAX_LISTED_CALLS = 5
 

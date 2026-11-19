@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # AgentCouncil::Harnesses::PiHarness — all knowledge specific to the pi
-# coding-agent harness: how to invoke the pi CLI for one model run, with
+# coding-agent harness: how to invoke the pi CLI for one agent, with
 # its tool allowlist and the shared read-only scaffolding, and how to read
 # pi's JSONL event stream afterward.
 #
@@ -22,7 +22,7 @@ module AgentCouncil
       # scaffolding text asks the model to use it read-only.
       TOOLS = 'read,grep,find,ls,bash'
 
-      # Invocation for one model run. The substantive prompt is not part of argv;
+      # Invocation for one agent. The substantive prompt is not part of argv;
       # it is piped to stdin (byte-identical for every analyst; the
       # consolidator gets its own).
       module_function def argv(provider, model)
@@ -30,7 +30,7 @@ module AgentCouncil
           NAME,
           '-p',               # non-interactive: process prompt and exit
           '--mode', 'json',   # JSONL event stream on stdout
-          '--no-session',     # ephemeral: no session state between runs
+          '--no-session',     # ephemeral: no session state between agents
           '--no-mcp',         # built-in MCP off: configured servers don't start
           '--tools', TOOLS,
           '--provider', provider,
@@ -94,7 +94,7 @@ module AgentCouncil
       # Token usage summed over all assistant messages (each is a separate
       # model request), as AgentCouncil expects it: integer 'input', 'output',
       # 'cache_read', and 'cache_write', plus 'cost' in US dollars when pi
-      # priced the run. nil when the stream reports no usage, as some
+      # priced the usage. nil when the stream reports no usage, as some
       # providers don't.
       module_function def usage(jsonl)
         usages = assistant_messages(jsonl).map { |m| m['usage'] }.grep(Hash)
@@ -114,7 +114,7 @@ module AgentCouncil
       # instead; this catches one that is missing or blank.
       UNUSABLE_STOP_REASONS = %w[length aborted error].freeze
 
-      # Why the run produced no usable report, or nil. Pi exits 0 even when the
+      # Why the agent produced no usable report, or nil. Pi exits 0 even when the
       # provider rejects the request or the output hits its token limit, so this
       # is how such failures are surfaced. Two messages are checked: the final
       # one (an error in an earlier turn that a later turn recovered from is not
@@ -133,12 +133,12 @@ module AgentCouncil
         message && "stopped early (stopReason: #{message['stopReason']})"
       end
 
-      # Why a run that exited nonzero failed: pi explains it on stderr.
+      # Why an agent that exited nonzero failed: pi explains it on stderr.
       module_function def exit_detail(_stdout, stderr)
         stderr.lines.map(&:strip).reject(&:empty?).first || 'no error output'
       end
 
-      # Warnings about a run that succeeded; pi's stream has none to give.
+      # Warnings about an agent that succeeded; pi's stream has none to give.
       module_function def warnings(_jsonl)
         []
       end

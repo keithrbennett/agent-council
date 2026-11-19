@@ -234,7 +234,7 @@ RSpec.describe AgentCouncil do
 
         stub_capture3(stream, instance_double(Process::Status, success?: true))
         _label, _ok, detail = described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', index: 1)
-        expect(detail).to eq('claude exited 0 but the run failed: bad [2J model')
+        expect(detail).to eq('claude exited 0 but the agent failed: bad [2J model')
       end
 
       it 'still reads warnings when the stream has an invalid byte' do
@@ -257,7 +257,7 @@ RSpec.describe AgentCouncil do
       end
 
       # Returned, not printed: run_agent runs in a worker thread.
-      it 'keeps the report of a run with refused tool calls, returning a warning of them' do
+      it 'keeps the report of an agent with refused tool calls, returning a warning of them' do
         stub_capture3(claude_fixture('denied'), instance_double(Process::Status, success?: true))
         _label, ok, filename, _usage, warnings = nil
         expect do
@@ -289,7 +289,7 @@ RSpec.describe AgentCouncil do
         expect(warnings).to eq([])
       end
 
-      it "returns a failed run's warnings, since they may be why it failed" do
+      it "returns a failed agent's warnings, since they may be why it failed" do
         denial = { 'tool_name' => 'Bash', 'tool_input' => { 'command' => 'git diff' } }
         stream = "#{JSON.generate('type' => 'result', 'is_error' => true,
           'errors' => ['Reached maximum number of turns (3)'], 'permission_denials' => [denial] * 3)}\n"
@@ -301,7 +301,7 @@ RSpec.describe AgentCouncil do
         expect(warnings).to eq(['Claude Code refused 3 tool calls: Bash (git diff)'])
       end
 
-      it 'returns no warnings for a failed run with nothing refused' do
+      it 'returns no warnings for a failed agent with nothing refused' do
         stub_capture3(claude_fixture('not_logged_in'), instance_double(Process::Status, success?: false,
           exitstatus: 1))
         result = described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', index: 1)
@@ -309,14 +309,14 @@ RSpec.describe AgentCouncil do
         expect(result.last).to eq([])
       end
 
-      it 'keeps a saved run a success when its warnings cannot be read' do
+      it 'keeps an agent whose report is saved a success when its warnings cannot be read' do
         stub_capture3(claude_fixture('success'), instance_double(Process::Status, success?: true))
         allow(AgentCouncil::Harnesses::ClaudeCodeHarness).to receive(:warnings)
           .and_raise(TypeError, "bad\e[2J\nx")
         _label, ok, _filename, _usage, warnings =
           described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', index: 1)
         expect(ok).to be(true)
-        expect(warnings).to eq(["could not read the run's warnings (TypeError: bad [2J x)"])
+        expect(warnings).to eq(["could not read the agent's warnings (TypeError: bad [2J x)"])
       end
     end
 
@@ -359,7 +359,7 @@ RSpec.describe AgentCouncil do
       expect(File.dirname(envs.first['TMPDIR'])).to eq(File.realpath(Dir.tmpdir)).or eq(Dir.tmpdir)
     end
 
-    it 'deletes the scratch dir after a successful run' do
+    it 'deletes the scratch dir after a successful agent' do
       stub_capture3('', instance_double(Process::Status, success?: true))
       allow(pi_harness).to receive_messages(error_message: nil, final_response: 'answer')
 
@@ -412,7 +412,7 @@ RSpec.describe AgentCouncil do
       expect(returned).to eq(usage)
     end
 
-    it 'returns the usage of a failed run too' do
+    it 'returns the usage of a failed agent too' do
       stub_capture3('', instance_double(Process::Status, success?: false, exitstatus: 1))
       allow(pi_harness).to receive(:usage).and_return({ 'input' => 5, 'output' => 6 })
 
@@ -453,7 +453,7 @@ RSpec.describe AgentCouncil do
       expect(detail).to eq("IOError: #{'x' * 291}...")
     end
 
-    it 'deletes the scratch dir after a failed run' do
+    it 'deletes the scratch dir after a failed agent' do
       stub_capture3('', instance_double(Process::Status, success?: false, exitstatus: 1))
 
       _label, ok, detail = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
@@ -486,7 +486,7 @@ RSpec.describe AgentCouncil do
       _label, ok, detail = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
 
       expect(ok).to be(false)
-      expect(detail).to include('the run failed', 'length')
+      expect(detail).to include('the agent failed', 'length')
       expect(Dir.children(run_dir)).to be_empty
     end
 
@@ -1413,14 +1413,14 @@ RSpec.describe AgentCouncil do
   describe '.run_entry' do
     let(:agent) { { 'provider' => 'p', 'model' => 'm' } }
 
-    it "records a run's warnings, only when there are some" do
+    it "records an agent's warnings, only when there are some" do
       entry = ->(**opts) { described_class.run_entry(agent, true, 'r.md', 1.0, nil, **opts) }
       expect(entry.call(warnings: ['refused'])['warnings']).to eq(['refused'])
       expect(entry.call(warnings: [])).not_to have_key('warnings')
       expect(entry.call).not_to have_key('warnings')
     end
 
-    it "names a successful run's report under dir, with its duration in seconds" do
+    it "names a successful agent's report under dir, with its duration in seconds" do
       entry = described_class.run_entry(agent, true, 'a.md', 61.26, { 'input' => 1 },
         index: 2, dir: 'reviews')
       expect(entry).to eq('agent_index' => 2, 'harness' => 'pi', 'provider' => 'p', 'model' => 'm',
@@ -1442,7 +1442,7 @@ RSpec.describe AgentCouncil do
         .not_to include('meta_report')
     end
 
-    it "gives a failed run's error, and null for unknown usage" do
+    it "gives a failed agent's error, and null for unknown usage" do
       expect(described_class.run_entry(agent, false, 'boom', 2, nil))
         .to eq('harness' => 'pi', 'provider' => 'p', 'model' => 'm', 'ok' => false, 'error' => 'boom',
           'duration_seconds' => 2, 'usage' => nil)
@@ -1523,11 +1523,11 @@ RSpec.describe AgentCouncil do
       expect(described_class.usage_summary([usage, usage])).to eq('; 2 in / 4 out')
     end
 
-    it 'notes how many runs the total covers when some reported no usage' do
+    it 'notes how many agents the total covers when some reported no usage' do
       expect(described_class.usage_summary([usage, nil, usage])).to eq('; 2 in / 4 out (from 2 of 3 agents)')
     end
 
-    it 'is empty when no run reported usage' do
+    it 'is empty when no agent reported usage' do
       expect(described_class.usage_summary([nil, nil])).to eq('')
     end
   end
@@ -2163,7 +2163,7 @@ RSpec.describe AgentCouncil do
       expect(described_class.missing_agents(config, reports).first[1]).to include('reason not recorded')
     end
 
-    it "gives an agent's harness, and the error and warnings run.json records for its failed run" do
+    it "gives an agent's harness, and the error and warnings run.json records for its failure" do
       claude = { 'harness' => 'claude', 'provider' => 'anthropic', 'model' => 'm' }
       config = { 'agents' => [{ 'provider' => 'zai', 'model' => 'glm-5.3' }, claude] }
       runs = [{ 'agent_index' => 2, 'harness' => 'claude', 'provider' => 'anthropic', 'model' => 'm',
@@ -2174,7 +2174,7 @@ RSpec.describe AgentCouncil do
       )
     end
 
-    it "ignores a run.json entry that isn't the configured agent's failed run" do
+    it "ignores a run.json entry that isn't the configured agent's failure" do
       config = { 'agents' => [{ 'provider' => 'zai', 'model' => 'glm-5.3' }] }
       run = { 'agent_index' => 1, 'provider' => 'zai', 'model' => 'glm-5.3', 'ok' => false,
               'error' => 'boom' }

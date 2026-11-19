@@ -85,7 +85,7 @@ Pull requests should:
 - Pass the tests and RuboCop checks.
 - Update documentation and examples when behavior changes.
 - Explain how the change was tested and validated.
-- Clearly distinguish testing with stubs from testing with real harness runs.
+- Clearly distinguish testing with stubs from testing with real harnesses.
 
 ---
 
@@ -111,7 +111,7 @@ The tests make no model calls. For changes affecting how a harness is invoked or
 In the pull request, identify:
 
 - The harness versions (pi, Claude Code) and Ruby implementations and versions tested (CI covers several Ruby and JRuby versions).
-- Whether testing included real harness runs, and with which harnesses and providers.
+- Whether testing used real harnesses, and with which harnesses and providers.
 - Any relevant behavior that could not be tested.
 
 ---

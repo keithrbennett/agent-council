@@ -2,7 +2,7 @@
 
 Your response will be saved as a standalone Markdown report. A metadata
 table (role, agent, query, harness, provider, model, timestamp, duration,
-usage, and any warnings about the run) is prepended to it
+usage, and any warnings) is prepended to it
 automatically, so:
 
 - Do not add a document title or any top-level (`#`) heading.
