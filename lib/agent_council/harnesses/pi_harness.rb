@@ -22,6 +22,11 @@ module AgentCouncil
       # scaffolding text asks the model to use it read-only.
       TOOLS = 'read,grep,find,ls,bash'
 
+      # Nothing to do once per run (see Harnesses).
+      module_function def prepare
+        nil
+      end
+
       # Invocation for one agent. The substantive prompt is not part of argv;
       # it is piped to stdin (byte-identical for every analyst; the
       # consolidator gets its own).

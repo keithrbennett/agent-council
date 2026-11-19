@@ -1,5 +1,29 @@
 # Release Notes
 
+## 0.3.0 (unreleased)
+
+- A third harness: an entry with `harness: codex` runs under the OpenAI
+  Codex CLI (`codex exec`, tested with 0.167.0), billed however your
+  `codex` login is (a ChatGPT plan or an API key). See "Choosing a
+  harness" in the README.
+  - Codex agents run as an interactive session would: your Codex config
+    applies, its `sandbox_mode` included, and so do the project's
+    `AGENTS.md` files. `codex exec` never asks for approval, whatever
+    your `approval_policy`, so a command that would need it is refused. Under Codex's default `read-only`
+    sandbox they get no scratch space; under `workspace-write` they can
+    also write the analyzed repository (see "Codex's sandbox" in the
+    README).
+  - Unlike pi and Claude Code agents, Codex agents keep Codex's whole
+    toolset, file editing and subagents included, since Codex can't
+    withhold tools.
+  - MCP is off: the bundled apps connectors are disabled, and every MCP
+    server your Codex config or the project's defines is turned off by
+    name. The servers are listed once per run with `codex mcp list`; if
+    that fails, the run stops before any agent starts.
+  - Codex reports no cost, so a Codex agent's cost is blank, and a run's
+    total shows no cost when a Codex agent reported usage.
+  - `mixed-harness.yml` gains a Codex analyst.
+
 ## 0.2.0 (2026-11-19)
 
 - `--gem-dir` prints the root directory of the agent-council application,

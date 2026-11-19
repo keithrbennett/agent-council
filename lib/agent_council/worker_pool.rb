@@ -14,8 +14,8 @@ module AgentCouncil
   # whose rescue calls #shutdown: it sends every agent SIGTERM, waits up to
   # the grace period for the workers to finish, and SIGKILLs agents still
   # running. The commands an agent's shell tool started run in process
-  # groups of their own, which these signals don't reach; pi and Claude
-  # Code stop them on SIGTERM, but an agent that is SIGKILLed can't, so
+  # groups of their own, which these signals don't reach; pi, Claude
+  # Code, and Codex stop them on SIGTERM, but an agent that is SIGKILLed can't, so
   # they may keep running. A second trapped signal other
   # than HUP SIGKILLs them at once. Any HUP after the first signal is
   # ignored: a closing terminal can deliver two at once (one forwarded by the

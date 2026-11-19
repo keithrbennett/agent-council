@@ -109,7 +109,8 @@ saved.
 - Measuring one model's consistency by configuring it several times.
 - Comparing providers serving the same model, on latency, price, and
   reliability.
-- Comparing harnesses running the same model (pi and Claude Code), on
+- Comparing harnesses running the same model (say, pi and Claude Code,
+  or pi and Codex), on
   speed, cost, and what they find.
 - Finding out which listed models your plan actually covers.
 

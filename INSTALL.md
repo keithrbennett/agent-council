@@ -3,14 +3,14 @@
 This guide is for developers comfortable with the command line who have
 never used Ruby. It takes you from a bare machine to a working
 `agent-council` command. Already have Ruby 3.3+ (or JRuby 10+) and
-`pi` (or Claude Code)? Just run `gem install agent-council`; see the
+a harness CLI (`pi`, Claude Code, or Codex)? Just run `gem install agent-council`; see the
 [README](README.md#quick-start).
 
 ## 1. Prepare your system
 
 - **macOS and Linux:** any terminal works. Linux needs `curl` installed.
 - **Windows:** native Windows is **not supported**. Everything, including
-  Ruby, the harness CLIs you use (Pi, Claude Code, or both), and
+  Ruby, the harness CLIs you use (Pi, Claude Code, Codex, or any mix), and
   agent-council, must be installed and run inside
   [WSL](https://learn.microsoft.com/windows/wsl/install) with Ubuntu. In
   an administrator PowerShell, run `wsl --install -d Ubuntu`, restart if
@@ -74,7 +74,7 @@ For other install methods and details, see the
 [Mise documentation](https://mise.jdx.dev/getting-started.html) and its
 [Ruby page](https://mise.jdx.dev/lang/ruby.html).
 
-## 3. Install a harness: Pi, Claude Code, or both
+## 3. Install a harness: Pi, Claude Code, Codex, or several
 
 agent-council drives AI models through a coding-agent harness, which
 each config entry names. Most samples use the
@@ -88,8 +88,10 @@ inside WSL.
 Agents can also run under [Claude Code](https://code.claude.com/docs)
 (see the README's [Choosing a harness](README.md#choosing-a-harness)).
 For those, install the `claude` CLI and log in (under WSL, inside WSL).
-A config needs Pi only if some agent, or the consolidator, runs under it
-(`harness: pi`).
+Likewise for [Codex](https://developers.openai.com/codex/cli): install
+the `codex` CLI and log in. A config needs each harness only if some
+agent, or the consolidator, runs under it (`harness: pi`, `claude`, or
+`codex`).
 
 ## 4. Install agent-council
 

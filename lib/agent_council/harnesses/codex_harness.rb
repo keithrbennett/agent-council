@@ -1,0 +1,250 @@
+# frozen_string_literal: true
+
+# AgentCouncil::Harnesses::CodexHarness — all knowledge specific to the
+# OpenAI Codex CLI harness: how to invoke `codex exec` for one agent,
+# with the shared scaffolding, and how to read
+# its --json event stream afterward.
+#
+# AgentCouncil is harness-agnostic and finds this module through
+# AgentCouncil::Harnesses (lib/agent_council/harnesses.rb), by its NAME.
+# Authentication and billing are left to Codex: an agent bills however
+# codex would at the user's terminal (ChatGPT plan or API key).
+
+require 'json'
+require 'open3'
+require_relative 'scaffold'
+
+module AgentCouncil
+  module Harnesses
+    module CodexHarness
+      NAME = 'codex'
+
+      # Lists the MCP servers to turn off (see mcp_overrides), once per run,
+      # before any agent runs: nil, or why the run can't go on. Failing
+      # closed: an agent run without the list would have its MCP servers on.
+      module_function def prepare
+        @mcp_server_names = nil
+        @mcp_server_names = list_mcp_servers
+        nil
+      rescue McpListError => e
+        "codex: can't list Codex's MCP servers to turn them off: #{shorten(e.message.gsub(/\s+/, ' '), 300)}"
+      end
+
+      # Invocation for one agent. The substantive prompt is not part of
+      # argv; it is piped to stdin ('-'). provider is not passed: like
+      # Claude Code's, an entry's provider only labels the agent, and Codex
+      # uses the model_provider its own config names.
+      #
+      # No --sandbox or approval flags: the user's sandbox_mode applies, as
+      # in an interactive session, along with the rest of their config.toml
+      # and the repository's AGENTS.md; only MCP is turned off (see
+      # mcp_overrides). Their approval_policy doesn't: codex exec never
+      # asks, so a command that needs approval is refused. Under workspace-write,
+      # Codex lets commands write $TMPDIR, which the scaffolding sends
+      # agents to; under read-only nothing is writable.
+      #
+      # developer_instructions replaces any the user's config sets; Codex
+      # has no way to append to it.
+      module_function def argv(_provider, model)
+        [
+          NAME, 'exec',
+          '--json',                  # JSONL event stream on stdout
+          '--ephemeral',             # no session files saved
+          '--skip-git-repo-check',   # run anywhere, as pi and claude agents do
+          '--color', 'never',
+          *mcp_overrides,
+          '--model', model,
+          '-c', "developer_instructions=#{toml_string(Harnesses.scaffold_text)}",
+          '-' # read the prompt from stdin
+        ]
+      end
+
+      # Arguments turning off all MCP: the bundled apps connectors (GitHub
+      # and others, which `codex mcp list` doesn't show) with --disable
+      # apps, and each server Codex's config (the user's and the
+      # repository's) defines, by name, in one -c table. Codex merges a -c
+      # table into its config rather than replacing it, so mcp_servers={}
+      # turns off nothing, and a dotted -c path can't name a server whose
+      # name needs quoting; a table can, and keeps each server's transport.
+      # Raises if prepare hasn't listed the servers.
+      module_function def mcp_overrides
+        names = @mcp_server_names or raise "#{name}.prepare must run before argv"
+        table = names.map { |server| "#{toml_key(server)}={enabled=false}" }
+        ['--disable', 'apps', *(['-c', "mcp_servers={#{table.join(',')}}"] unless names.empty?)]
+      end
+
+      # Why the MCP servers couldn't be listed.
+      class McpListError < StandardError; end
+
+      # The names of the MCP servers `codex mcp list --json` reports.
+      # McpListError if it fails, or gives anything but a JSON array of
+      # servers each with a string name: a server it couldn't name would
+      # stay on. Its output is read as UTF-8 whatever the locale, as agents'
+      # output is (see AgentCouncil.run_agent).
+      module_function def list_mcp_servers
+        out, err, status = Open3.capture3(NAME, 'mcp', 'list', '--json')
+        out, err = [out, err].map { |output| String.new(output, encoding: Encoding::UTF_8).scrub }
+        detail = err.lines.map(&:strip).reject(&:empty?).last
+        raise McpListError, detail || "exited with status #{status.exitstatus}" unless status.success?
+
+        servers = JSON.parse(out)
+        raise McpListError, 'its output is not a JSON array' unless servers.is_a?(Array)
+
+        servers.map do |server|
+          name = server['name'] if server.is_a?(Hash)
+          name.is_a?(String) ? name : raise(McpListError,
+            "it lists a server with no name: #{JSON.generate(server)}")
+        end
+      rescue SystemCallError => e
+        raise McpListError, e.message
+      rescue JSON::ParserError
+        raise McpListError, 'its output is not JSON'
+      end
+
+      # A TOML key: bare if it may be, otherwise a quoted string.
+      module_function def toml_key(name)
+        name.match?(/\A[A-Za-z0-9_-]+\z/) ? name : toml_string(name)
+      end
+
+      # A TOML basic string (JSON's string escapes are valid TOML ones), so
+      # -c reads the value as the string itself, not as TOML to parse.
+      module_function def toml_string(text)
+        JSON.generate(text)
+      end
+
+      # --- event stream reading ---
+
+      # The events of a --json stream, in order. Unparseable lines and
+      # non-objects are skipped.
+      module_function def events(jsonl)
+        jsonl.each_line.filter_map do |line|
+          event =
+            begin
+              JSON.parse(line)
+            rescue JSON::ParserError
+              nil
+            end
+          event if event.is_a?(Hash)
+        end
+      end
+
+      # The completed items of the given type, in order.
+      module_function def completed_items(jsonl, type)
+        events(jsonl).filter_map do |event|
+          item = event['item'] if event['type'] == 'item.completed'
+          item if item.is_a?(Hash) && item['type'] == type
+        end
+      end
+
+      # The agent's messages (its text between and after tool calls), in order.
+      module_function def assistant_messages(jsonl)
+        completed_items(jsonl, 'agent_message')
+      end
+
+      # The event that ended the agent's turn: turn.completed or
+      # turn.failed. nil if there is none, e.g. for an agent that was killed.
+      module_function def turn_end(jsonl)
+        events(jsonl).reverse_each.detect { |event| %w[turn.completed turn.failed].include?(event['type']) }
+      end
+
+      # The final response: the last agent message with text, for an agent
+      # whose turn completed. Earlier messages narrate its tool use.
+      module_function def final_response(jsonl)
+        return nil unless turn_end(jsonl)&.fetch('type') == 'turn.completed'
+
+        message = assistant_messages(jsonl).reverse_each.detect { |m| text_of(m) }
+        message && text_of(message)
+      end
+
+      # A message's text, or nil if it has none.
+      module_function def text_of(item)
+        text = item['text']
+        text if text.is_a?(String) && !text.strip.empty?
+      end
+
+      # Token usage as AgentCouncil expects it (see Harnesses), from the
+      # turn.completed event, which totals the turn's requests. Codex's
+      # input_tokens is all input, OpenAI's convention, so the cached reads
+      # and writes it reports are subtracted from it; reasoning tokens are
+      # part of output_tokens. Codex prices nothing, so there is no 'cost'.
+      # nil when the turn didn't complete or reports no usage.
+      module_function def usage(jsonl)
+        turn = turn_end(jsonl)
+        usage = turn['usage'] if turn && turn['type'] == 'turn.completed'
+        return nil unless usage.is_a?(Hash)
+
+        cache_read = count(usage['cached_input_tokens'])
+        cache_write = count(usage['cache_write_input_tokens'])
+        totals = { 'input'       => [count(usage['input_tokens']) - cache_read - cache_write, 0].max,
+                   'output'      => count(usage['output_tokens']),
+                   'cache_read'  => cache_read,
+                   'cache_write' => cache_write }
+        totals.values.all?(&:zero?) ? nil : totals
+      end
+
+      module_function def count(value)
+        value.is_a?(Numeric) && value.positive? ? value : 0
+      end
+
+      # Why the agent produced no usable report, or nil. A failed turn ends
+      # with turn.failed, whose error says why (e.g. a model the account
+      # can't use); a completed one with no text is reported as such.
+      module_function def error_message(jsonl)
+        turn = turn_end(jsonl)
+        return 'the stream has no turn.completed or turn.failed event' unless turn
+        return failure_reason(jsonl) || 'the turn failed and gave no reason' if turn['type'] == 'turn.failed'
+
+        'the agent gave no final message' unless final_response(jsonl)
+      end
+
+      # The reason a failed turn gives: its turn.failed error message, else
+      # the last top-level error event's. nil if neither gives one.
+      module_function def failure_reason(jsonl)
+        all = events(jsonl)
+        failed = all.reverse_each.detect { |event| event['type'] == 'turn.failed' }
+        error = failed['error'] if failed
+        reason = error['message'] if error.is_a?(Hash)
+        return reason.strip if reason.is_a?(String) && !reason.strip.empty?
+
+        nonblank(all.filter_map { |event| event['message'] if event['type'] == 'error' }).last
+      end
+
+      # Why an agent that exited nonzero failed. Codex explains a failed
+      # turn in the stream, with stderr usually empty, so that comes first;
+      # then stderr (e.g. for a bad flag or a crash).
+      module_function def exit_detail(stdout, stderr)
+        reason = failure_reason(stdout)
+        return reason if reason
+
+        stderr.lines.map(&:strip).reject(&:empty?).first || 'no error output'
+      end
+
+      # Warnings about an agent, failed or not: the error items Codex
+      # reports without failing the turn (e.g. "Model metadata for `x` not
+      # found"), which may explain a weak report. One warning, listing at
+      # most MAX_LISTED_ERRORS distinct messages, each cut to
+      # MAX_ERROR_LENGTH characters, so it stays short.
+      module_function def warnings(jsonl)
+        messages = nonblank(completed_items(jsonl, 'error').map { |item| item['message'] }).uniq
+        return [] if messages.empty?
+
+        listed = messages.first(MAX_LISTED_ERRORS).map { |message| shorten(message, MAX_ERROR_LENGTH) }
+        listed << "and #{messages.size - listed.size} more" if messages.size > listed.size
+        ["Codex reported #{messages.size == 1 ? 'an error' : 'errors'}: #{listed.join('; ')}"]
+      end
+
+      MAX_LISTED_ERRORS = 5
+      MAX_ERROR_LENGTH = 200
+
+      # text, cut to max characters with "..." if longer.
+      module_function def shorten(text, max)
+        text.length > max ? "#{text[0, max]}..." : text
+      end
+
+      # The values that are nonblank strings, stripped.
+      module_function def nonblank(values)
+        values.grep(String).map(&:strip).reject(&:empty?)
+      end
+    end
+  end
+end

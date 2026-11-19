@@ -135,7 +135,7 @@ module AgentCouncil
   # CLAUDE_CODE_TMPDIR, the base under which Claude Code's sandbox makes
   # the writable TMPDIR it gives commands. Without the latter, a user's
   # own CLAUDE_CODE_TMPDIR would put that dir outside the scratch dir,
-  # shared and never cleaned up. pi ignores it.
+  # shared and never cleaned up. pi and Codex ignore it.
   module_function def agent_env(scratch_dir)
     { 'TMPDIR' => scratch_dir, 'CLAUDE_CODE_TMPDIR' => scratch_dir }
   end
@@ -236,8 +236,9 @@ module AgentCouncil
   end
 
   # The harness's warnings about an agent: what the harness kept it
-  # from doing (see ClaudeCodeHarness.warnings), which a report may lack,
-  # or which may be why the agent failed. Advisory only: failing to read them
+  # from doing, or errors it hit without failing (see
+  # ClaudeCodeHarness.warnings and CodexHarness.warnings), which a report
+  # may lack, or which may be why the agent failed. Advisory only: failing to read them
   # must not fail an agent whose report is saved, so that becomes a warning
   # too.
   # Each is a plain_line, so wherever it goes (console, report, run.json,
@@ -1158,7 +1159,7 @@ module AgentCouncil
     end
 
     # A consolidator of false, like nil, means none, as in the check above.
-    abort_unless_harnesses_installed(consolidator ? [*agents, consolidator] : agents)
+    abort_unless_harnesses_ready(consolidator ? [*agents, consolidator] : agents)
 
     # One run dir per invocation, day-bucketed so the reports dir stays
     # navigable at volume: <reports dir>/<yyyy-mm-dd>/<hh-mm-ss>/. The dir name is pure time
@@ -1330,7 +1331,7 @@ module AgentCouncil
     prompt = File.read(prompt_path, encoding: ENCODING)
     abort "Prompt copy is empty: #{prompt_path}" if prompt.empty?
 
-    abort_unless_harnesses_installed([consolidator])
+    abort_unless_harnesses_ready([consolidator])
 
     # In the same key order as a normal run's front matter.
     meta = fields.slice('role', 'timestamp', 'query', 'prompt_file', 'config_file', 'config_source',
@@ -1431,17 +1432,21 @@ module AgentCouncil
 
   # Checked up front, before any run dir is created or model called: the
   # executable of every harness the config entries use (validated ones, so
-  # each harness is known).
-  module_function def abort_unless_harnesses_installed(entries)
-    names = entries.map { |entry| Harnesses.module_for(entry)::NAME }.uniq
-    missing = names.reject { |name| executable_on_path?(name) }
-    return if missing.empty?
+  # each harness is known), then each harness's prepare (see Harnesses),
+  # once per run, before any agent runs.
+  module_function def abort_unless_harnesses_ready(entries)
+    harnesses = entries.map { |entry| Harnesses.module_for(entry) }.uniq
+    missing = harnesses.map { |harness| harness::NAME }.reject { |name| executable_on_path?(name) }
+    unless missing.empty?
+      lines = missing.map { |name| "#{name} executable not found; is `#{name}` installed and on your PATH?" }
+      abort <<~MESSAGE
+        #{lines.join("\n")}
+        See "Prerequisites" in #{File.join(PROJECT_ROOT, 'README.md')}
+      MESSAGE
+    end
 
-    lines = missing.map { |name| "#{name} executable not found; is `#{name}` installed and on your PATH?" }
-    abort <<~MESSAGE
-      #{lines.join("\n")}
-      See "Prerequisites" in #{File.join(PROJECT_ROOT, 'README.md')}
-    MESSAGE
+    errors = harnesses.filter_map { |harness| harness.prepare }
+    abort errors.join("\n") unless errors.empty?
   end
 
   # After Ctrl-C (or another signal WorkerPool#trap_signals traps):

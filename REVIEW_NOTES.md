@@ -29,6 +29,22 @@ Leaving out project settings instead, with `--setting-sources` or
 was not adopted: unlike safe mode, either would also drop the project's
 own permission rules, and neither is tested.
 
+## Accepted risk: Codex agents keep Codex's whole toolset
+
+pi and Claude Code agents get a fixed allowlist of read and shell tools,
+but Codex agents keep all of Codex's built-in tools, `apply_patch` (file
+editing) and the subagent tools (`spawn_agent` and others) included.
+codex-cli 0.167.0 has no option that withholds them:
+`--disable multi_agent`, `-c features.multi_agent=false`, and
+`-c include_apply_patch_tool=false` each left them in the rendered
+prompt (`codex debug prompt-input`). What Codex agents can write is
+whatever the user's `sandbox_mode` allows, which agent-council doesn't
+override, as an interactive session wouldn't (`read-only`, Codex's
+default, allows nothing; `workspace-write` allows the analyzed
+repository). The README's "Choosing a harness" and "Safety and privacy"
+sections state it. If Codex gains a way to withhold tools, use it and
+remove this entry.
+
 ## Accepted risk: --consolidate leaves out provider-less agents of c60b7f8 runs
 
 c60b7f8 (unreleased) let a Claude Code entry omit `provider`, filling in

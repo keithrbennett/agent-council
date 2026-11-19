@@ -44,8 +44,8 @@ A limit is easy to write; a good default is not:
   how often, how accurately, and what it counts. If that differs, the
   same cap would mean different things for different agents in one
   config, which would be confusing at best and misleading at worst.
-  Even if pi and Claude Code agreed today, supporting another harness
-  later could bring in the difference.
+  Even if the harnesses agreed today, supporting another harness later
+  could bring in the difference.
 - **Sleep shouldn't count, but may.** Nothing runs while the computer
   sleeps, so time asleep shouldn't count toward a limit; counting it
   can stop an agent that was making progress as soon as the computer

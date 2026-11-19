@@ -4,11 +4,11 @@
 
 The long-term goal is to collect genuinely different viewpoints on the same question from multiple harness/model instances, and, because every instance gets the identical task, to compare those instances against each other on speed, token usage, cost, and quality.
 
-This repository is the first step: it varies the models and, per agent, the harness, which is Pi (for any provider's models) or Claude Code (for Anthropic's). More harnesses may follow (§18).
+This repository is the first step: it varies the models and, per agent, the harness, which is Pi (for any provider's models), Claude Code (for Anthropic's), or Codex (for OpenAI's). More harnesses may follow (§18).
 
 It is packaged as a gem for easy installation, but it is intentionally not a general-purpose framework.
 
-agent-council is a small Ruby CLI that runs the **same prompt** through several AI harness/provider/model combinations, under the Pi or Claude Code coding-agent harness, and saves each final response to a deterministic Markdown file.
+agent-council is a small Ruby CLI that runs the **same prompt** through several AI harness/provider/model combinations, under the Pi, Claude Code, or Codex coding-agent harness, and saves each final response to a deterministic Markdown file.
 
 The objective is utility, not completeness. Given a config (§5), one command:
 
@@ -62,7 +62,7 @@ For example:
 
 ## 4. Architecture
 
-There are two harnesses, pi and Claude Code, and the orchestration is harness-agnostic: it looks up each agent's harness module by its config entry's `harness` key (§5) in `AgentCouncil::Harnesses::BY_NAME` (`lib/agent_council/harnesses.rb`), so another harness is another such module, added there. Every config entry names its harness (§5); reports and `run.json` entries always record theirs, and one that gives none (hand-edited, or older than 0.1.0, when every agent ran under pi) is read as pi's. Each module is a plain namespace with the same functions (`NAME`, `argv`, `usage`, `error_message`, `exit_detail`, `warnings`, `final_response`, `assistant_messages`); `NAME` is both the config value and the executable that `argv` runs, which the startup check looks for on `PATH`, and goes into filenames unsanitized, so it must be filename-safe. Claude Code takes no provider argument, so a Claude Code entry's provider only labels the agent. The scaffolding text (§10) is shared.
+There are three harnesses, pi, Claude Code, and Codex, and the orchestration is harness-agnostic: it looks up each agent's harness module by its config entry's `harness` key (§5) in `AgentCouncil::Harnesses::BY_NAME` (`lib/agent_council/harnesses.rb`), so another harness is another such module, added there. Every config entry names its harness (§5); reports and `run.json` entries always record theirs, and one that gives none (hand-edited, or older than 0.1.0, when every agent ran under pi) is read as pi's. Each module is a plain namespace with the same functions (`NAME`, `prepare`, `argv`, `usage`, `error_message`, `exit_detail`, `warnings`, `final_response`, `assistant_messages`); `NAME` is both the config value and the executable that `argv` runs, which the startup check looks for on `PATH`, and goes into filenames unsanitized, so it must be filename-safe. `prepare` does what a harness needs once per run before `argv` can be called; the startup check calls it for each harness the run uses, in the main thread before any agent starts, and aborts the run with the error it returns, if any (Codex's lists the MCP servers to turn off, §11; pi's and Claude Code's do nothing). Claude Code and Codex take no provider argument, so their entries' provider only labels the agent. The scaffolding text (§10) is shared.
 
 **Labels.** The short labels (`#1 provider / model`) don't show the harness. They appear in progress lines, result tables, the consolidation prompt, and a consolidated report's `### Sources` table and `sources` front matter. The startup agent list, each report's byline table, and the findings file's legend (`#1 pi / provider / model`) do show it. Short labels don't need the harness to stay unique: the only ones used as lookup keys are the analysts', which match reports to their `run.json` entries and to the configured agents, and each carries its agent number. Nor does the consolidator need it in the labels, since each report it reads states its harness in its byline (§12). So they stay as they are, and a mixed run's output reads the same as before.
 
@@ -74,7 +74,7 @@ Ruby CLI
    +-- Pi + model A
    +-- Pi + model B
    +-- Claude Code + model C
-   +-- Claude Code + model D
+   +-- Codex + model D
 ```
 
 ---
@@ -113,9 +113,9 @@ consolidator:              # optional; synthesizes the agents' reports (§12)
   model: MODEL_ID_HERE
 ```
 
-Every entry gives `harness`, `provider`, and `model`, each a nonblank string; there are no defaults, and no `defaults:` section supplying them (one was considered and rejected). A default harness or provider would go stale as harnesses change (pi is the right default only as long as it is), and a `defaults:` section's provider would apply across harnesses whose providers differ. `harness` is `pi` or `claude`; an unknown one is rejected at startup (with `--consolidate`, only the consolidator's, since no analysts run). A `claude` entry's provider is not passed to Claude Code (§4) and only labels the agent (e.g. `bedrock`, for a `claude` set up to use it). A config error lists every bad entry, each named by its key (`'agents' entry #2`, `'consolidator'`) with every problem it has, so one edit fixes them all; when an entry gives no harness, a line saying what every entry needs follows, and, if no entry gives one (as in a 0.1.0 config, which ran everything under pi), a hint to add `harness: pi`. A run made by 0.1.0, when every entry ran under pi, has a config copy without `harness`; `--consolidate` rejects its consolidator like any other entry, with a hint to add `harness: pi`, while its reports and `run.json` are still read as pi's.
+Every entry gives `harness`, `provider`, and `model`, each a nonblank string; there are no defaults, and no `defaults:` section supplying them (one was considered and rejected). A default harness or provider would go stale as harnesses change (pi is the right default only as long as it is), and a `defaults:` section's provider would apply across harnesses whose providers differ. `harness` is `pi`, `claude`, or `codex`; an unknown one is rejected at startup (with `--consolidate`, only the consolidator's, since no analysts run). A `claude` entry's provider is not passed to Claude Code (§4) and only labels the agent (e.g. `bedrock`, for a `claude` set up to use it); likewise a `codex` entry's, since Codex uses the `model_provider` its config names. A config error lists every bad entry, each named by its key (`'agents' entry #2`, `'consolidator'`) with every problem it has, so one edit fixes them all; when an entry gives no harness, a line saying what every entry needs follows, and, if no entry gives one (as in a 0.1.0 config, which ran everything under pi), a hint to add `harness: pi`. A run made by 0.1.0, when every entry ran under pi, has a config copy without `harness`; `--consolidate` rejects its consolidator like any other entry, with a hint to add `harness: pi`, while its reports and `run.json` are still read as pi's.
 
-Exact provider and model identifiers must be verified against the installed harness: `pi --list-models` for pi, and the names and aliases `claude --model` accepts for Claude Code.
+Exact provider and model identifiers must be verified against the installed harness: `pi --list-models` for pi, the names and aliases `claude --model` accepts for Claude Code, and the names `codex --model` accepts for Codex.
 
 They belong in configuration because available models and names change frequently.
 
@@ -153,7 +153,7 @@ Agents run concurrently, one Ruby thread per agent, each driving one harness pro
 `AgentCouncil::WorkerPool` (`lib/agent_council/worker_pool.rb`) also handles signals, keeping the main thread free to take them. The README's [Stopping a run](README.md#stopping-a-run) section describes what Ctrl-C and the other signals do; the reasons behind that behavior are:
 
 - **Each agent leads its own process group**, so the terminal's signals reach only agent-council, which then stops the agents itself, in an orderly way, and Ctrl-Z suspends agent-council without suspending the agents under it.
-- **Agents get SIGTERM and a shared grace period before being killed**, so the harness can stop the commands it started (pi and Claude Code do; checked for Claude Code 2.1.325: a command its Bash tool was running, in the foreground or with `run_in_background`, ran in a process group of its own, which agent-council's SIGTERM to the agent's group doesn't reach, and ended when `claude` got SIGTERM); a second signal skips the wait for a user who doesn't want to.
+- **Agents get SIGTERM and a shared grace period before being killed**, so the harness can stop the commands it started (pi, Claude Code, and Codex do; checked for Codex 0.167.0: a running `sleep` was gone after `codex` got SIGTERM; checked for Claude Code 2.1.325: a command its Bash tool was running, in the foreground or with `run_in_background`, ran in a process group of its own, which agent-council's SIGTERM to the agent's group doesn't reach, and ended when `claude` got SIGTERM); a second signal skips the wait for a user who doesn't want to.
 - **agent-council then dies by the signal** rather than exiting normally, so a shell (e.g. one running it in a loop) sees it was killed and stops too. SIGQUIT exits 131 instead, since a core dump is no use here.
 - **Extra SIGHUPs are ignored**, since a closing terminal can send them in pairs, and **signals agent-council was started ignoring stay ignored**, so `nohup` works.
 - **SIGQUIT isn't trapped under JRuby**, where the JVM reserves it for thread dumps.
@@ -194,12 +194,12 @@ The harness is started with an argv array, not through a shell.
 
 Agents are analyzers, not modifiers.
 
-The scaffolding appended to each agent's system prompt (`Harnesses.scaffold_text` in `lib/agent_council/harnesses/scaffold.rb`, shared by every harness) states the rules agents get, and the README's [How it works](README.md#how-it-works-and-what-the-agents-are-told) section summarizes them. They are instructions, not enforced restrictions: each harness's tool limit (pi's `--tools` allowlist, which activates only the tools it lists; Claude Code's `--tools`) and its MCP setting (§11) are the only restrictions agent-council enforces (Claude Code's own sandbox can also restrict Claude Code agents if Claude Code's settings enable it, and the analyzed repository's settings can enable or disable it; §11), and the shell tool remains a full shell running as the user (see the README's [Safety and privacy](README.md#safety-and-privacy)). A shell is kept because investigation (`git log`, dependency inspection, running a documented command) is much of what makes an analysis useful.
+The scaffolding appended to each agent's system prompt (`Harnesses.scaffold_text` in `lib/agent_council/harnesses/scaffold.rb`, shared by every harness) states the rules agents get, and the README's [How it works](README.md#how-it-works-and-what-the-agents-are-told) section summarizes them. They are instructions, not enforced restrictions: each harness's tool limit (pi's `--tools` allowlist, which activates only the tools it lists; Claude Code's `--tools`; Codex has none, §11) and its MCP setting (§11) are the only restrictions agent-council enforces (Claude Code's own sandbox can also restrict Claude Code agents if Claude Code's settings enable it, and the analyzed repository's settings can enable or disable it; Codex's sandbox restricts Codex agents as the user's Codex config sets it; §11), and the shell tool remains a full shell running as the user (see the README's [Safety and privacy](README.md#safety-and-privacy)). A shell is kept because investigation (`git log`, dependency inspection, running a documented command) is much of what makes an analysis useful.
 
 The rules follow from agents running concurrently in the user's own working tree:
 
 - **No modifying project files, git state, software, or configuration, and no persistent services**, since the agents analyze the user's real repository and environment, not a copy. If testing a proposed change would need a modified file, the agent should describe the experiment instead (this follows from the rule; the scaffolding doesn't state it separately).
-- **Each agent gets its own disposable scratch directory** (its `TMPDIR`, which the scaffolding names rather than giving a path: under Claude Code's sandbox the dir itself is read-only and `TMPDIR` is a writable dir inside it, §11), so agents that need temporary files don't collide with each other or leave files in the project.
+- **Each agent gets its own disposable scratch directory** (its `TMPDIR`, which the scaffolding names rather than giving a path: under Claude Code's sandbox the dir itself is read-only and `TMPDIR` is a writable dir inside it, §11; under Codex's `read-only` sandbox nothing is writable, `TMPDIR` included, so Codex agents then have no scratch space), so agents that need temporary files don't collide with each other or leave files in the project.
 - **No test suites, builds, coverage tools, application servers, or database tasks unless the prompt permits them**, since such commands can collide through shared resources a per-agent scratch directory doesn't isolate: shared databases, Redis, fixed ports, Docker resources, hard-coded temporary paths, or other process-global state. Running tests and reproducing defects can make an analysis much stronger, so a prompt may lift the rule (as `examples/prompts/review-latest-commit-prompt.md` does for tests and linters); agents then still skip commands needing shared services. Where a command is not permitted but would help, the agent describes what it would run and why.
 
 ---
@@ -262,9 +262,36 @@ The flags were checked with Claude Code 2.1.325, and again with 2.1.327 (and, fo
 
 **Billing.** agent-council leaves authentication and billing entirely to Claude Code: it passes no option and sets no environment variable for them (the only variables it sets for an agent are `TMPDIR` and `CLAUDE_CODE_TMPDIR`, both to its scratch dir, §10). An agent bills however `claude` would at the user's terminal: a subscription login, or an API key if one is configured. One caveat, which the README gives: interactive Claude Code asks before using an `ANTHROPIC_API_KEY` found in the environment, but `-p` mode doesn't ask, so a key exported for another tool may bill council runs to the API. Subscription runs also share the user's usage limits with their interactive work; a limit hit while an agent is working is expected to end it as an ordinary agent failure, but that hasn't been observed (§13). The reported cost is recorded unadjusted (only rounded to six decimal places); like other subscription providers' figures it is notional (the stream gives its `costBasis` as `list`). Telling billing sources apart in `run.json` is not built (§18); the sources for it are the `init` event's `apiKeySource` (`none` for a login), `claude auth status --json` (`subscriptionType`, e.g. `pro`), and the stream's `rate_limit_event`s, which give the plan's utilization of its 5-hour and weekly windows.
 
-### No MCP, in either harness
+### Codex
 
-Agents get no MCP servers, so neither harness offers MCP tools (their built-in tools differ, as listed above), and no agent can reach a server that writes (posting to chat, commenting on an issue), which a council would do once per agent. Pi is passed `--no-mcp` (above), which turns off its built-in MCP support (an extension providing its own is unaffected) and in a test kept a project's server from starting; before that, its `--tools` allowlist already kept agents from calling MCP tools, but pi still started the user's servers. There is no setting to turn MCP on. If one is wanted later, it goes in the config, not on the command line, and names the servers to allow rather than switching all of them on, since enabling means per-harness work: pi's allowlist would have to name the MCP tools, and Claude Code would need them in `--allowedTools`.
+**Invocation.** One `codex exec` process per agent, the prompt on stdin, started from an argv array (§9):
+
+```text
+codex exec --json --ephemeral --skip-git-repo-check --color never
+           --disable apps -c mcp_servers={NAME={enabled=false},...}
+           --model MODEL
+           -c developer_instructions=SCAFFOLDING
+           -
+```
+
+Checked with codex-cli 0.167.0:
+
+- `-c developer_instructions=...` adds the scaffolding to the system prompt (checked: an instruction given this way was followed). It replaces any `developer_instructions` the user's config sets; Codex has no option that appends.
+- `--skip-git-repo-check` is needed outside a git repository Codex trusts: without it Codex refuses ("Not inside a trusted directory"), while pi and Claude Code agents run anywhere.
+- Codex's `read-only` and `workspace-write` sandboxes also block network access unless the user's config allows it (checked with `codex sandbox`: `curl` couldn't resolve a host under either, and worked unsandboxed).
+- No `--sandbox` or approval option is passed: the user's `sandbox_mode` applies, as in an interactive session (§11's premise). The user's `approval_policy` doesn't: `codex exec` never asks, so a command that needs approval is refused (checked: an agent told `approval_policy="on-request"` reported `never`, and `"untrusted"` made `codex exec` exit with "no longer supported"). Under `read-only`, Codex's default, commands can write nothing, `$TMPDIR` included (checked: "read-only file system"), so agents get no scratch space although the scaffolding offers it; under `workspace-write`, `$TMPDIR` is writable (checked), and so is the analyzed repository. Forcing `read-only` was tried and dropped: it overrode the user's setting, and the scaffolding would have needed a variant without scratch space.
+- No tool is withheld: this Codex version has no option for it. Codex agents keep `apply_patch` (file editing) and the subagent tools (`spawn_agent` and others); `--disable multi_agent`, `-c features.multi_agent=false`, and `-c include_apply_patch_tool=false` each left them in the rendered prompt (`codex debug prompt-input`). The README says so.
+- MCP is off; see below.
+
+**Context.** Codex behaves as in an interactive session started in the analyzed repository: it loads the user's `config.toml`, skills, plugins, and hooks it trusts, and the project's `AGENTS.md` files (and its `.codex` config, if the user trusts the project; checked: skill instructions appear in the rendered prompt). `--ignore-user-config` is not used.
+
+**Billing.** agent-council leaves authentication and billing to Codex: a ChatGPT login or an API key, however `codex` would bill at the user's terminal. The entry's provider only labels the agent; Codex uses the `model_provider` its config names.
+
+### No MCP, in any harness
+
+Agents get no MCP servers, so no harness offers MCP tools (their built-in tools differ, as listed above), and no agent can reach a server that writes (posting to chat, commenting on an issue), which a council would do once per agent. Pi is passed `--no-mcp` (above), which turns off its built-in MCP support (an extension providing its own is unaffected) and in a test kept a project's server from starting; before that, its `--tools` allowlist already kept agents from calling MCP tools, but pi still started the user's servers. There is no setting to turn MCP on. If one is wanted later, it goes in the config, not on the command line, and names the servers to allow rather than switching all of them on, since enabling means per-harness work: pi's allowlist would have to name the MCP tools, and Claude Code would need them in `--allowedTools`.
+
+Codex has no single switch. A `-c mcp_servers={}` override turns nothing off, since Codex merges a `-c` table into its config rather than replacing it (checked). Each server is turned off by name instead, with `enabled=false`, all in one `-c mcp_servers={...}` table: a dotted path such as `mcp_servers."my server".enabled=false` makes Codex read a new server with no transport and fail (checked), while the table form handles names that need quoting and keeps each server's transport (checked with `codex mcp list --json`). The names come from `codex mcp list --json`, which covers the user's and the project's config; `CodexHarness.prepare` runs it once per run, before any agent starts, and fails closed: if the listing fails, or lists a server without a name, the run aborts, and `argv` raises if `prepare` hasn't run. `--disable apps` turns off the bundled apps connectors (GitHub and others), which the listing doesn't show (checked: with both, the rendered prompt has no MCP tools).
 
 ---
 
@@ -324,9 +351,22 @@ agent-council reads Claude Code's `stream-json` output. The stream's final `resu
 - the failure's reason is the `result` event's `errors`, if any (e.g. "Reached maximum number of turns (1)", with an empty `result`), otherwise its `result` text (e.g. "Not logged in · Please run /login"). Stderr was empty in all but one case, so unlike pi's, a nonzero exit is explained from the stream, with stderr only as a fallback;
 - usage is read from the `result` event alone, which totals the agent's whole session; the per-message `assistant` events carry partial snapshots that undercount output (in one recorded case, 16 output tokens where the `result` event gave 184). So an agent that ends without a `result` event, as when its `claude` is killed, reports no usage rather than a misleading partial count, unlike a pi agent, whose completed messages each report their full usage. It maps `input_tokens`, `output_tokens`, `cache_read_input_tokens`, and `cache_creation_input_tokens` to `input`, `output`, `cache_read`, and `cache_write` (as with pi, `input` excludes cache reads and writes), and `total_cost_usd` to `cost`.
 
-So `exit_detail`, which explains a nonzero exit, reads the stream first for Claude Code and stderr for pi. The parser and the invocation live in `AgentCouncil::Harnesses::ClaudeCodeHarness` (`lib/agent_council/harnesses/claude_code_harness.rb`). The specs read streams recorded from real `claude` invocations (`spec/fixtures/claude_code/`), trimmed to a few event types and fields, with local paths, tool call IDs, and commit hashes replaced by placeholders; the spec's header says how each was recorded.
+So `exit_detail`, which explains a nonzero exit, reads the stream first for Claude Code (and Codex, below) and stderr for pi. The parser and the invocation live in `AgentCouncil::Harnesses::ClaudeCodeHarness` (`lib/agent_council/harnesses/claude_code_harness.rb`). The specs read streams recorded from real `claude` invocations (`spec/fixtures/claude_code/`), trimmed to a few event types and fields, with local paths, tool call IDs, and commit hashes replaced by placeholders; the spec's header says how each was recorded.
 
-Not yet observed: an agent that hits a usage limit, and one billed to an API key.
+Not yet observed for Claude Code: an agent that hits a usage limit, and one billed to an API key.
+
+### Codex
+
+agent-council reads `codex exec --json`'s event stream:
+
+- the report is the text of the last `agent_message` item with text, in a turn that ended in `turn.completed` (earlier agent messages narrate tool use; a trailing blank one, not observed, would not hide the report, as for pi);
+- the agent failed if there is no `turn.completed` or `turn.failed` event, the turn ended in `turn.failed`, or the completed turn has no message text. An unsupported model exited 1 with `turn.failed` whose `error.message` gave the reason, and an empty stderr; so, as for Claude Code, a nonzero exit is explained from the stream (`turn.failed`, else the last top-level `error` event), with stderr as a fallback;
+- `error` items that don't fail the turn (e.g. "Model metadata for `x` not found") become one warning listing at most five distinct messages, each cut to 200 characters;
+- usage comes from `turn.completed`. Codex's `input_tokens` counts all input, as OpenAI's API does, so `cached_input_tokens` and `cache_write_input_tokens` are subtracted from it for `input` (as with pi, `input` excludes cache reads and writes); reasoning tokens are part of `output_tokens`. Codex prices nothing, so there is no `cost`, and a run's total cost is omitted when a Codex agent reported usage (an agent with no usage, e.g. one that failed, is left out of the total). A ChatGPT login always reported 0 cache writes, so the subtraction of writes is untested against real output.
+
+The parser and the invocation live in `AgentCouncil::Harnesses::CodexHarness` (`lib/agent_council/harnesses/codex_harness.rb`). The specs read streams recorded from real `codex` invocations (`spec/fixtures/codex/`), with the thread ID zeroed and command items replaced by placeholders.
+
+Not yet observed for Codex: an agent that hits a usage limit, and one billed to an API key.
 
 ---
 
@@ -394,6 +434,7 @@ lib/
       scaffold.rb        # the read-only scaffolding every harness appends
       pi_harness.rb      # pi-specific behavior (AgentCouncil::Harnesses::PiHarness)
       claude_code_harness.rb  # Claude Code-specific behavior (ClaudeCodeHarness)
+      codex_harness.rb   # Codex-specific behavior (CodexHarness)
     templates/           # runtime data files (resolved via __dir__, shipped in the gem)
       consolidate_prompt.md  # instructions template for the consolidator
       analyst_format.md      # report-format addendum for analysts
@@ -438,7 +479,7 @@ New gems are added only if they solve a meaningful problem that would otherwise 
 
 ## 18. Status and Future Work
 
-agent-council is at an early stage (0.x), so it does only what its core job needs. Features we hope to add include support for more harnesses (such as Codex) and telling a Claude Code agent's billing source (subscription or API key) apart in `run.json` (§11). A missing feature is usually just not built yet.
+agent-council is at an early stage (0.x), so it does only what its core job needs. Features we hope to add include support for more harnesses and telling a Claude Code agent's billing source (subscription or API key) apart in `run.json` (§11). A missing feature is usually just not built yet.
 
 `REVIEW_NOTES.md` separately tracks review findings that were considered and don't need to be re-raised: accepted risks and non-issues.
 

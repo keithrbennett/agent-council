@@ -8,6 +8,8 @@
 #   lib/agent_council/harnesses/pi_harness.rb  pi-specific behavior (AgentCouncil::Harnesses::PiHarness)
 #   lib/agent_council/harnesses/claude_code_harness.rb
 #                                              Claude Code-specific behavior (ClaudeCodeHarness)
+#   lib/agent_council/harnesses/codex_harness.rb
+#                                              Codex-specific behavior (CodexHarness)
 #
 # Usage, options, and AGENT_COUNCIL_OPTS: agent-council -h, and the README.
 

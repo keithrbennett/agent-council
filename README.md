@@ -9,8 +9,10 @@ cost, and quality.
 agent-council runs the **same analytical prompt** through each agent,
 under the coding-agent harness each one names: the
 [Pi](https://github.com/earendil-works/pi) harness, for any provider's
-models, or [Claude Code](https://code.claude.com/docs), for Anthropic's,
-billed however your `claude` login is. The agents can use any mix of
+models; [Claude Code](https://code.claude.com/docs), for Anthropic's,
+billed however your `claude` login is; or
+[Codex](https://developers.openai.com/codex/cli), for OpenAI's, billed
+however your `codex` login is. The agents can use any mix of
 harnesses, providers, and models, including the same model more than
 once, or under each harness.
 
@@ -89,8 +91,8 @@ next month's models.
 
 Because the harness is chosen per agent, a comparison can also pit the
 same model against itself under different harnesses. The project is at
-an early stage; support for more harnesses, such as Codex, is among the
-[planned features](DESIGN.md#18-status-and-future-work). See
+an early stage; see its
+[planned features](DESIGN.md#18-status-and-future-work), and
 [`DESIGN.md`](DESIGN.md) for the rationale.
 
 ## What makes a good fit
@@ -136,8 +138,8 @@ in detail.
    [`pi` CLI](https://github.com/earendil-works/pi) (`pi --version`). See
    [Prerequisites](#prerequisites), or [INSTALL.md](INSTALL.md) if you
    need to install Ruby too. These steps run every agent under pi; to
-   run agents under Claude Code as well, or instead (then without pi),
-   see [Choosing a harness](#choosing-a-harness).
+   run agents under Claude Code or Codex as well, or instead (then
+   without pi), see [Choosing a harness](#choosing-a-harness).
 2. **Set up credentials for at least one provider in pi** (see
    [pi's documentation][pi-docs]), then list the models available to pi
    (a listed model can still be one your plan doesn't include). Two
@@ -219,9 +221,13 @@ consolidator, see
   - for Claude Code: the [`claude` CLI](https://code.claude.com/docs)
     (`claude --version`; tested with 2.1.325 and 2.1.327, and earlier versions may
     lack flags agent-council passes),
-    logged in or set up with an API key.
+    logged in or set up with an API key;
+  - for Codex: the [`codex` CLI](https://developers.openai.com/codex/cli)
+    (`codex --version`; tested with 0.167.0, and earlier versions may
+    lack flags agent-council passes), logged in with a ChatGPT plan or
+    an API key.
 
-  agent-council runs the `pi` and `claude` executables found on its
+  agent-council runs the `pi`, `claude`, and `codex` executables found on its
   `PATH`, not your shell's aliases or functions of those names. If yours
   add something, such as an environment variable or a directory on
   `PATH`, set it in the environment you run agent-council from (for
@@ -233,8 +239,8 @@ consolidator, see
   ([INSTALL.md](INSTALL.md) has the steps). Windows drives are reachable
   at `/mnt/c/...`, but file access there is much slower than in the Linux
   filesystem (e.g. `~/projects`). Set up pi's provider credentials (and
-  log in to Claude Code) inside WSL too; WSL doesn't share them with
-  Windows.
+  log in to Claude Code or Codex) inside WSL too; WSL doesn't share them
+  with Windows.
 
 ## Installation
 
@@ -319,15 +325,15 @@ agent, and the consolidator, needs nonblank string `harness`,
 `provider`, and `model` values (quote any value YAML would read as
 something else, such as a number, a date, or `yes`). None has a default;
 a 0.1.0 config needs `harness: pi` added to each entry. `harness` names
-the harness the entry runs under, `pi` or `claude`; an unknown name is
+the harness the entry runs under, `pi`, `claude`, or `codex`; an unknown name is
 rejected at startup (with `--consolidate`, only the consolidator's,
 since no analysts run). Other keys are ignored. A config error lists
 every bad entry, named as in `'agents' entry #2` or `'consolidator'`,
 with every problem it has.
 
 More samples are in [`examples/configs/`](examples/configs/), which is
-included in the installed gem; `mixed-harness.yml` mixes pi and Claude
-Code agents. For scripts and agents,
+included in the installed gem; `mixed-harness.yml` mixes pi, Claude
+Code, and Codex agents. For scripts and agents,
 [`pi-models`](#occasional-utility-pi-models) lists the models in
 machine-readable forms.
 
@@ -401,6 +407,46 @@ consolidator:
   repeated refusals), the warning still follows its failure reason, on
   the console, in `run.json`, and in what the consolidator is told about
   it, since the refusals may be why it failed.
+
+An entry with `harness: codex` runs under
+[Codex](https://developers.openai.com/codex/cli) (`codex exec`):
+
+```yaml
+agents:
+  - harness: codex
+    provider: openai
+    model: gpt-5.6-terra
+```
+
+- **Models.** `model` is any model name `codex --model` accepts. As with
+  Claude Code, `provider` only labels the agent: Codex uses the
+  `model_provider` its own config names.
+- **Billing.** agent-council leaves authentication and billing to Codex:
+  an agent bills however `codex` would at your terminal, to your ChatGPT
+  plan if you are logged in with one, or to an API key. Codex reports
+  tokens but no price, so a Codex agent's cost is blank, and the run's
+  total shows no cost when a Codex agent reported usage.
+- **Context and sandbox.** Each agent runs as an interactive session
+  started in your project would: your Codex `config.toml` applies,
+  including its `sandbox_mode`, and so do the project's `AGENTS.md`
+  files. Your `approval_policy` doesn't: `codex exec` never asks for
+  approval, so a command that would need it is refused (checked:
+  `on-request` became `never`, and `untrusted` makes Codex exit with an
+  error). agent-council passes no sandbox option, so
+  what an agent can write is whatever your `sandbox_mode` allows (see
+  [Codex's sandbox](#codexs-sandbox)). The read-only rules are
+  given as `developer_instructions`, which replaces any your config sets.
+- **Tools.** Unlike pi and Claude Code agents, which get only a fixed
+  set of read and shell tools, Codex agents keep Codex's whole built-in
+  toolset, including its file-editing tool (`apply_patch`) and its
+  subagents: this Codex version has no way to withhold them. MCP is off
+  (see [How it works](#how-it-works-and-what-the-agents-are-told)).
+- **Outside a git repository.** Codex normally refuses to run outside one
+  it trusts; agent-council passes `--skip-git-repo-check`, so Codex agents
+  run wherever pi and Claude Code agents do.
+- **Warnings.** Errors Codex reports without failing the agent (such as
+  missing metadata for a model name) are printed as one warning, recorded
+  the same way as Claude Code's refused calls.
 
 ## Running
 
@@ -591,8 +637,8 @@ one with an unclosed quote, makes every command fail, `-h`, `-v`,
 Ctrl-C (or SIGTERM, SIGHUP, or SIGQUIT) stops the run, keeping reports
 already written:
 
-- Running agents, the consolidator included, get SIGTERM (pi and Claude
-  Code then also stop the commands they started) and a shared 5 seconds to exit before
+- Running agents, the consolidator included, get SIGTERM (pi, Claude
+  Code, and Codex then also stop the commands they started) and a shared 5 seconds to exit before
   they are killed. A killed agent can't stop the commands it started, so
   those may keep running.
 - A second SIGINT, SIGTERM, or SIGQUIT kills them at once; further SIGHUPs
@@ -767,7 +813,7 @@ agent-council-reports/
   `<agent-number>`, and, if the report was split, ends in `_findings` or `_meta` before `.md`); `<hh-mm-ss>` includes the run dir's suffix, if any,
   and `<provider>` and `<model>` are sanitized like the query slug below,
   but keep their case. `<harness>` is the agent's (or consolidator's)
-  `harness` config value, `pi` or `claude` (see
+  `harness` config value, `pi`, `claude`, or `codex` (see
   [Choosing a harness](#choosing-a-harness)).
   `<agent-number>` is the agent's 1-based position in the config's
   `agents` list (`01`, `02`, ...), so every report has a unique name even
@@ -821,7 +867,8 @@ agent-council-reports/
   `cache_read`, `cache_write`, and `output` token counts, plus `cost` in
   US dollars when the harness could price the usage (pi uses its own price
   table, so models missing from it have no cost; Claude Code prices usage
-  at Anthropic's API list prices), recorded as the harness reports it,
+  at Anthropic's API list prices; Codex prices nothing, so a Codex
+  agent has no cost), recorded as the harness reports it,
   only rounded to six decimal places. It is an estimate, not what you're
   billed; see [How far to trust the cost](#how-far-to-trust-the-cost).
   `usage` is `null` when the provider reports no usage.
@@ -917,15 +964,16 @@ Every cost agent-council shows or records is the harness's estimate
 from per-token prices, not a bill, and it can be far off in either
 direction:
 
-- **Subscriptions.** On a subscription or plan (a Claude Code login, or
-  a plan-based pi provider), the estimate is what the usage would cost
+- **Subscriptions.** On a subscription or plan (a Claude Code login, a
+  Codex ChatGPT login, or a plan-based pi provider), the estimate is what the usage would cost
   at pay-per-token prices. What you actually pay for a run may be
   nothing extra, while the run uses up your plan's limits.
 - **Price tables.** pi prices usage from its own price table, which may
   not match what your provider charges (discounts, price changes, or
   routing to a differently priced upstream), and a model missing from
   it gets no cost at all. Claude Code prices usage at Anthropic's API
-  list prices.
+  list prices. Codex prices nothing, so Codex agents have no cost, and
+  a run's total cost is left out when one of them reported usage.
 - **Stopped agents.** An agent stopped by Ctrl-C (or another signal)
   records no usage, though its provider still bills for what it used,
   and a run stopped before every analyst finished writes no `run.json`
@@ -1001,6 +1049,28 @@ usage page.
     (not logged in, an unknown model, the output cut off) is reported
     with the reason Claude Code gives. [`DESIGN.md`](DESIGN.md) §13 has
     the details.
+- Under Codex, each agent runs as
+  `codex exec --json --ephemeral --skip-git-repo-check --color never
+   --disable apps -c mcp_servers={...} --model M
+   -c developer_instructions=<scaffolding> -`.
+  - `--ephemeral` keeps agents independent: no session files are saved.
+  - `--disable apps` turns off Codex's bundled app connectors (GitHub and
+    others), and `-c mcp_servers={...}` turns off, by name, each MCP
+    server your Codex config or the project's defines, so agents have no
+    MCP tools. agent-council lists the servers once per run, before any
+    agent starts, with `codex mcp list --json`; if that fails, the run
+    stops with codex's error rather than run agents with servers on.
+  - No sandbox or approval option is passed (`codex exec` never asks for
+    approval, whatever your `approval_policy`), and no tool is withheld:
+    Codex behaves as an interactive session started in the analyzed repo
+    would, with your `config.toml` (its `sandbox_mode` included) and the
+    project's `AGENTS.md` files. See [Codex's sandbox](#codexs-sandbox).
+  - The scaffolding is passed as `developer_instructions`, replacing any
+    your config sets.
+  - The final response is the last agent message with text in a completed turn; an
+    agent whose turn fails (say, a model your account can't use) is
+    reported with the reason Codex gives. [`DESIGN.md`](DESIGN.md) §13
+    has the details.
 - The tool limits and the MCP settings above are the only restrictions
   agent-council enforces (see [Safety and
   privacy](#safety-and-privacy)). A fixed scaffolding text appended to
@@ -1019,7 +1089,8 @@ usage page.
   which the scaffolding tells it to use for scratch space, deleted when
   the agent finishes (under Claude Code's sandbox, `TMPDIR` is a directory Claude
   Code makes inside it; see [Claude Code's
-  sandbox](#claude-codes-sandbox)). After Ctrl-C, a directory can be
+  sandbox](#claude-codes-sandbox); under Codex's `read-only` sandbox it
+  isn't writable; see [Codex's sandbox](#codexs-sandbox)). After Ctrl-C, a directory can be
   left behind if a second signal stops agent-council at once, or if
   cleanup after a killed agent doesn't finish in time.
 
@@ -1029,21 +1100,27 @@ agent-council does not sandbox the agents (Claude Code's own sandbox,
 off by default, restricts Claude Code agents' commands if Claude
 Code's settings enable it, and the analyzed repository's settings can
 enable or disable it; see
-[Claude Code's sandbox](#claude-codes-sandbox)).
+[Claude Code's sandbox](#claude-codes-sandbox); Codex's, whatever your
+Codex config's `sandbox_mode` sets, restricts Codex agents; see
+[Codex's sandbox](#codexs-sandbox)).
 Before running it, know that:
 
 - **Agents have a shell.** Each agent, the consolidator included, gets a
-  shell tool (pi's `bash`, or Claude Code's `Bash`), running as you, in
+  shell tool (pi's `bash`, Claude Code's `Bash`, or Codex's), running as you, in
   the directory you run from, with your environment (including any API
   keys in it; agent-council only sets `TMPDIR` and `CLAUDE_CODE_TMPDIR`,
   both to the agent's scratch directory), your file permissions, and
   your network access (for Claude Code agents, unless its sandbox
-  restricts writes and network access). Of pi's built-in tools, only
+  restricts writes and network access; for Codex agents, unless your
+  Codex config allows it, its sandbox blocks network access). Of pi's built-in tools, only
   `edit` and `write` (and the Windows-only `powershell`) are withheld;
-  of Claude Code's, all but `Read`, `Grep`, `Glob`, and `Bash`. The
+  of Claude Code's, all but `Read`, `Grep`, `Glob`, and `Bash`; of
+  Codex's, none, so Codex agents also have its file-editing tool, and
+  only Codex's sandbox limits what they can write. The
   read-only rules described above are instructions in the system prompt,
   which a model can ignore or misapply.
-- **Your pi extensions, and your Claude Code hooks and plugins, load.**
+- **Your pi extensions, your Claude Code hooks and plugins, and your
+  Codex skills, plugins, and trusted hooks, load.**
   `--no-mcp` turns off only pi's built-in
   MCP support. Extensions you've installed load for every pi agent, as
   you, and one that provides its own MCP support can still start servers.
@@ -1057,7 +1134,8 @@ Before running it, know that:
 - **The analyzed repository can steer the agents.** Agents read the
   repository's files, and the harness loads the repository's context
   files and settings: pi its context files (such as `AGENTS.md`) and, if
-  the project is trusted, its `.pi` resources; Claude Code its
+  the project is trusted, its `.pi` resources; Codex its `AGENTS.md`
+  files and, if you trust the project, its `.codex` config; Claude Code its
   `CLAUDE.md` files and `.claude` settings, which apply without the
   trust prompt an interactive session would show first (their hooks,
   for one, run commands; checked). So the repository can direct what
@@ -1073,7 +1151,8 @@ Before running it, know that:
 - **Your code goes to every configured provider.** Whatever an agent reads,
   and the output of whatever it runs, is sent to that agent's provider
   (for a Claude Code agent, wherever your `claude` sends it: Anthropic,
-  unless it is set up for another). The
+  unless it is set up for another; for a Codex agent, wherever your
+  `codex` sends it: OpenAI, unless its config names another provider). The
   consolidator's provider receives the prompt and all reports, plus
   anything the consolidator itself reads or runs. Check those providers'
   data policies before analyzing private code.
@@ -1144,6 +1223,24 @@ checked; most apply on any platform, the last two were checked on Linux.
   `TMP`, or `TEMP`, else `/tmp`), which adds about 36 bytes, so keep
   yours short, e.g. `TMPDIR=/tmp agent-council ...`. A
   `CLAUDE_CODE_TMPDIR` of your own doesn't reach agents.
+
+### Codex's sandbox
+
+agent-council passes Codex no `--sandbox` option: your Codex config's
+`sandbox_mode` decides, as in an interactive session, and with it what
+Codex agents' commands can write. Checked with codex-cli 0.167.0:
+
+- **Under `read-only`** (Codex's default), commands can't write anywhere,
+  `$TMPDIR` included ("read-only file system"), so agents have no
+  scratch space although the scaffolding offers it, and must do without.
+- **Under `workspace-write`**, commands can write `$TMPDIR`, and also the
+  working directory, which is the analyzed repository. Only the
+  scaffolding's instructions keep agents from changing it, as for pi
+  agents.
+- **Network access is blocked** under both, unless your config allows
+  it (e.g. `sandbox_workspace_write.network_access`): commands such as
+  `curl` can't reach the network. The model itself is reached by Codex,
+  not through the sandbox.
 
 ## Limitations (deliberate)
 

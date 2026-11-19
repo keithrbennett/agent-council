@@ -23,6 +23,11 @@ module AgentCouncil
       # only the scaffolding text asks the model to use it read-only.
       TOOLS = 'Read,Grep,Glob,Bash'
 
+      # Nothing to do once per run (see Harnesses).
+      module_function def prepare
+        nil
+      end
+
       # Invocation for one agent. The substantive prompt is not part of
       # argv; it is piped to stdin. provider is not passed: Claude Code
       # takes none, so an entry's provider only labels the agent (e.g.

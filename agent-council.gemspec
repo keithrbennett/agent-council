@@ -16,7 +16,7 @@ Gem::Specification.new do |spec|
 
   spec.description   = <<~DESCRIPTION.strip
     AgentCouncil runs the same prompt through several AI coding agents on your
-    project, under the pi or Claude Code harness, with any mix of harnesses,
+    project, under the pi, Claude Code, or Codex harness, with any mix of harnesses,
     providers, and models, and saves each agent's final response as a
     Markdown report. A consolidating agent then combines the reports into a
     findings report of consensus findings, unique findings, and
@@ -71,7 +71,7 @@ Gem::Specification.new do |spec|
 
   # No runtime dependencies: the tool itself uses only the Ruby standard
   # library. It does require the external CLI of each harness a config
-  # uses (`pi`, `claude`) at runtime, but those are not Ruby gem
+  # uses (`pi`, `claude`, `codex`) at runtime, but those are not Ruby gem
   # dependencies.
   spec.metadata['rubygems_mfa_required'] = 'true'
 end
