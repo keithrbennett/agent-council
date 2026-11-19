@@ -1169,8 +1169,8 @@ its full path. Sample prompts such as `recommend-model-ensemble-prompt.md`
 expect `pi-models` on your `PATH`; to use them from a checkout, add its
 `exe/` directory (`export PATH="/path/to/agent-council/exe:$PATH"`).
 
-Setup, tests, lint, the pre-commit hook, and the security audit are
-described in [`CONTRIBUTING.md`](https://github.com/keithrbennett/agent-council/blob/main/CONTRIBUTING.md)
+Setup, tests, lint, the pre-commit hook, checking CI status, and the
+security audit are described in [`CONTRIBUTING.md`](https://github.com/keithrbennett/agent-council/blob/main/CONTRIBUTING.md)
 in the source repository. Before submitting a pull request, open an
 issue and wait for explicit approval; `CONTRIBUTING.md` describes the
 process.

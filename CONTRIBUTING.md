@@ -118,6 +118,10 @@ In the pull request, identify:
 
 ## Maintenance
 
+### CI status
+
+`bundle exec rake ci` shows the latest run of each GitHub Actions workflow for `HEAD`'s commit, one line per workflow and event (such as `Security (push)` and `Security (schedule)`), and prints the logs of any failed jobs, or the run's URL when `gh` shows none (as for a cancelled run, or with an old `gh`). It shows the newest run of each, not just the newest run overall, because a quick Security pass, or a later scheduled one, would otherwise hide a failure. It exits 0 only if every run finished and passed (`success`, `neutral`, or `skipped`); a run still in progress, a cancelled one, one awaiting approval, or a commit with no runs exits nonzero. The workflows run for the head commit of each push or pull request to `main` (and Security also weekly and on demand), so a commit that never was one has no runs, and a just-pushed commit may have none for a minute. `spec/rake_ci_spec.rb` tests it against a fake `gh`. It needs the [GitHub CLI](https://cli.github.com/), logged in with `gh auth login`; any GitHub account can read this public repository's runs. `gh` reads the runs of the repository your checkout's remote points to; in a clone of a fork, set `GH_REPO=keithrbennett/agent-council` to see a pull request's runs.
+
 ### Security audit
 
 `bundle exec rake security` runs bundler-audit (the bundle's gems) and ruby-audit (the Ruby and RubyGems versions). CI runs it on pushes and pull requests to `main`, on demand, and weekly to catch new advisories. GitHub disables scheduled workflows in public repositories after 60 days without activity; re-enable the Security workflow from the Actions tab.
