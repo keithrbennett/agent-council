@@ -45,19 +45,19 @@
 - Agents and the consolidator can run under Claude Code, alongside pi
   agents in the same config: each entry's `harness` value names its
   harness, `pi` or `claude`, and an unknown name is rejected at startup
-  (with `--consolidate`, only the consolidator's, since no analysts
-  run). A Claude Code entry's `provider` only labels the agent. Claude
-  Code agents bill however `claude` does at your terminal, to a
-  subscription login or an API key; agent-council sets nothing for billing. Of Claude Code's
-  built-in tools, agents get only `Read`, `Grep`, `Glob`, and `Bash`;
-  they get no MCP servers, and they load `CLAUDE.md`, settings, hooks,
-  plugins, and auto memory as an interactive session would, including
-  the analyzed repository's own hooks. A tool call Claude Code refuses
-  (e.g. under a `permissions.deny` rule) is reported as a warning, also
-  shown in the report's metadata table (where the consolidator sees it)
-  and recorded in `run.json`; the report is kept, and an agent that fails
-  anyway still gets the warning. Only configs that use Claude Code need
-  the `claude` CLI.
+  (with `--consolidate`, only the consolidator's, since no analysts run).
+  A Claude Code entry's `provider` only labels the agent. Claude Code
+  agents bill however `claude` does at your terminal, to a subscription
+  login or an API key; agent-council sets nothing for billing. Of Claude
+  Code's built-in tools, agents get only `Read`, `Grep`, `Glob`, and
+  `Bash`; they get no MCP servers, and they load `CLAUDE.md`, settings,
+  hooks, plugins, and auto memory as an interactive session would,
+  including the analyzed repository's own hooks. A tool call Claude Code
+  refuses (e.g. under a `permissions.deny` rule) is reported as a warning,
+  also shown in the report's metadata table (where the consolidator sees
+  it) and recorded in `run.json`; the report is kept, and an agent that
+  fails anyway still gets the warning. Only configs that use Claude Code
+  need the `claude` CLI.
 - **Breaking:** every agent and consolidator entry must give `harness`,
   `provider`, and `model`; there are no defaults. To update a 0.1.0
   config, add `harness: pi` to each entry. To `--consolidate` a run made
@@ -72,6 +72,19 @@
   `Working Dir:` line giving the working directory, which the relative
   paths after it are shown against. The labels after it are realigned to
   match.
+- `RUNAWAY_AGENTS.md` is added. agent-council has no time limit, and
+  this explains why there isn't a built-in one yet and how to limit a
+  whole run with the `timeout` command (with a shell function that
+  wraps it), including its pitfalls: Ctrl-C needs `--foreground`, a
+  limit that runs out too soon throws away work, and whether time asleep
+  counts depends on the `timeout` you have.
+- The README shows a sample run's console output, in a new "What a run
+  prints" section.
+- The review-latest-commit sample prompt has agents begin their report
+  with the full hash and subject of the commit reviewed.
+- The docs and messages use "run" only for a whole agent-council run,
+  and "agent" for one agent's part in it; e.g. a failure now reads
+  "… exited 0 but the agent failed". `run.json` is unchanged.
 
 ## 0.1.0 (2026-11-09)
 
