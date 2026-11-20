@@ -1,6 +1,6 @@
 # Release Notes
 
-## 0.3.0 (unreleased)
+## 0.3.0 (2026-11-20)
 
 - **Check before upgrading: agents now get your MCP servers.** Agents in
   every harness get the MCP servers you've configured for it, as an
