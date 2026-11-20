@@ -42,6 +42,15 @@ module AgentCouncil
         ]
       end
 
+      # Variables for the agent's process beyond TMPDIR: the scratch dir as
+      # CLAUDE_CODE_TMPDIR, the base under which Claude Code's sandbox makes
+      # the writable TMPDIR it gives commands. Without it, a user's own
+      # CLAUDE_CODE_TMPDIR would put that dir outside the scratch dir,
+      # shared and never cleaned up.
+      module_function def env(scratch_dir)
+        { 'CLAUDE_CODE_TMPDIR' => scratch_dir }
+      end
+
       # --- event stream reading ---
 
       # The events of a stream-json stream, in order. Unparseable lines and

@@ -27,6 +27,9 @@ solution would be appropriate.
   context, but they are local to this checkout, so judge the changes
   against tracked files.
 - Do not report preexisting issues unless the changes introduce or worsen them.
+- If the repository has a `REVIEW_NOTES.md`, don't report issues it
+  records as accepted risks or non-issues, unless the changes make one
+  worse or its reasoning no longer holds.
 - You may suggest improvements to the commit message, particularly if the
   commit has not been pushed.
 

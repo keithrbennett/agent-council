@@ -1,5 +1,29 @@
 # Release Notes
 
+## 0.4.0 (unreleased)
+
+- A fourth harness: an entry with `harness: opencode` runs under the
+  OpenCode CLI (`opencode run`, tested with 1.19.6), with the provider
+  and model the entry names and the credentials `opencode auth login`
+  saved. Like pi, it reaches many providers, so a council can compare a
+  model under both. See "Choosing a harness" in the README.
+  - OpenCode agents run as an interactive session would: your OpenCode
+    config, plugins, and MCP servers apply, and so do the project's
+    `AGENTS.md` files and `opencode.json`. Through
+    `OPENCODE_CONFIG_CONTENT`, agent-council adds the read-only rules as
+    an `instructions` file, denies the edit permission (a default your
+    config or the project's can override), lets agents go on after a
+    refused tool call, and turns off snapshots; `OPENCODE_DB` keeps each
+    agent's session out of your history.
+  - Token usage and cost (OpenCode's estimate) are recorded, but
+    subagents' usage is missing from them.
+  - On Ctrl-C, OpenCode agents don't stop the commands they started
+    within the grace period, so those may keep running.
+- The review-latest-commit sample prompt tells agents not to report
+  what the repository's `REVIEW_NOTES.md`, if it has one, records as an
+  accepted risk or non-issue, unless the changes make it worse or its
+  reasoning no longer holds.
+
 ## 0.3.0 (2026-11-20)
 
 - **Check before upgrading: agents now get your MCP servers.** Agents in

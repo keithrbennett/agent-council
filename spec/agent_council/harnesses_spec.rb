@@ -3,6 +3,7 @@
 # Tests for lib/agent_council/harnesses.rb: harness lookup by name and the
 # scaffolding every harness shares (no model calls). Run with: rspec
 require 'spec_helper'
+require 'tmpdir'
 
 RSpec.describe AgentCouncil::Harnesses do
   describe '.name_of' do
@@ -35,9 +36,23 @@ RSpec.describe AgentCouncil::Harnesses do
 
   # What AgentCouncil calls on every harness (see harnesses.rb).
   it 'gives every harness the whole interface' do
-    interface = %i[argv usage error_message exit_detail warnings final_response assistant_messages]
+    interface = %i[argv env usage error_message exit_detail warnings final_response
+      assistant_messages]
     described_class::BY_NAME.each_value do |harness|
       expect(harness).to respond_to(*interface)
+    end
+  end
+
+  # spawn takes String names and values.
+  it 'gives every harness an env that spawn accepts' do
+    Dir.mktmpdir do |dir|
+      described_class::BY_NAME.each_value do |harness|
+        env = harness.env(dir)
+        expect(env).to be_a(Hash)
+        expect(env).to all(satisfy { |name, value|
+          name.is_a?(String) && value.is_a?(String)
+        })
+      end
     end
   end
 

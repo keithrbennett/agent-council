@@ -131,13 +131,10 @@ module AgentCouncil
   end
 
   # The variables set for an agent's process: the scratch dir as its
-  # TMPDIR, which the scaffolding tells agents to use, and as
-  # CLAUDE_CODE_TMPDIR, the base under which Claude Code's sandbox makes
-  # the writable TMPDIR it gives commands. Without the latter, a user's
-  # own CLAUDE_CODE_TMPDIR would put that dir outside the scratch dir,
-  # shared and never cleaned up. pi and Codex ignore it.
-  module_function def agent_env(scratch_dir)
-    { 'TMPDIR' => scratch_dir, 'CLAUDE_CODE_TMPDIR' => scratch_dir }
+  # TMPDIR, which the scaffolding tells agents to use, and whatever its
+  # harness adds (see Harnesses).
+  module_function def agent_env(scratch_dir, harness)
+    harness.env(scratch_dir).merge('TMPDIR' => scratch_dir)
   end
 
   # Returns [label, ok, detail, usage, warnings]; never raises. detail is
@@ -177,7 +174,7 @@ module AgentCouncil
     scratch_dir = Dir.mktmpdir('agent-council-')
     argv = harness.argv(provider, model)
     (stdout, stderr, status), elapsed = timed do
-      (pool || Open3).capture3(agent_env(scratch_dir), *argv, stdin_data: prompt)
+      (pool || Open3).capture3(agent_env(scratch_dir, harness), *argv, stdin_data: prompt)
     end
     # Harness output is UTF-8. WorkerPool#capture3 already returns it as such,
     # but Open3.capture3 (used without a pool) returns the locale's encoding.
@@ -237,10 +234,10 @@ module AgentCouncil
 
   # The harness's warnings about an agent: what the harness kept it
   # from doing, or errors it hit without failing (see
-  # ClaudeCodeHarness.warnings and CodexHarness.warnings), which a report
-  # may lack, or which may be why the agent failed. Advisory only: failing to read them
-  # must not fail an agent whose report is saved, so that becomes a warning
-  # too.
+  # ClaudeCodeHarness.warnings, CodexHarness.warnings, and
+  # OpenCodeHarness.warnings), which a report may lack, or which may be
+  # why the agent failed. Advisory only: failing to read them must not
+  # fail an agent whose report is saved, so that becomes a warning too.
   # Each is a plain_line, so wherever it goes (console, report, run.json,
   # and so anything that prints run.json's values) it can't carry a
   # terminal escape from a command the model wrote.

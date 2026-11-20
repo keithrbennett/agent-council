@@ -1,8 +1,9 @@
-# Sample mixed-harness ensemble: Claude Code and Codex analysts alongside pi
-# analysts, with a Claude Code consolidator. Claude Code and Codex entries run
-# under your own `claude` and `codex` setups and bill however they do (see
-# "Choosing a harness" in the README); pi entries need credentials for their
-# providers (see `pi --list-models`). Replace any provider or model you don't
+# Sample mixed-harness ensemble: Claude Code, Codex, and OpenCode analysts
+# alongside pi analysts, with a Claude Code consolidator. Claude Code and Codex
+# entries run under your own `claude` and `codex` setups and bill however they
+# do (see "Choosing a harness" in the README); pi and OpenCode entries need
+# credentials for their providers (see `pi --list-models` and
+# `opencode models`). Replace any provider or model you don't
 # have.
 agents:
   - harness: claude
@@ -17,10 +18,16 @@ agents:
   - harness: pi
     provider: openrouter
     model: z-ai/glm-5.3-flash
-  # The same model under the other harness, to compare harnesses:
+  - harness: opencode
+    provider: opencode-go
+    model: glm-5.3
+  # The same models under another harness, to compare harnesses:
   - harness: pi
     provider: anthropic
     model: claude-opus-5-5
+  - harness: pi
+    provider: opencode-go
+    model: glm-5.3
 
 consolidator:
   harness: claude

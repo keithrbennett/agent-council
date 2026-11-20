@@ -40,7 +40,7 @@ Before opening an issue:
 - Check whether an existing issue already addresses the subject.
 - Include clear reproduction steps when reporting a problem.
 - Describe the expected and actual behavior.
-- Include your agent-council version (`agent-council -v`), the version of each harness involved (`pi --version`, `claude --version`, `codex --version`), Ruby version (`ruby -v`), and operating system (and whether you are running under WSL).
+- Include your agent-council version (`agent-council -v`), the version of each harness involved (`pi --version`, `claude --version`, `codex --version`, `opencode --version`), Ruby version (`ruby -v`), and operating system (and whether you are running under WSL).
 - Name the providers and models involved, if the problem concerns particular ones.
 - Include relevant agent-council output, while removing API keys and other sensitive information.
 
@@ -110,7 +110,7 @@ The tests make no model calls. For changes affecting how a harness is invoked or
 
 In the pull request, identify:
 
-- The harness versions (pi, Claude Code, Codex) and Ruby implementations and versions tested (CI covers several Ruby and JRuby versions).
+- The harness versions (pi, Claude Code, Codex, OpenCode) and Ruby implementations and versions tested (CI covers several Ruby and JRuby versions).
 - Whether testing used real harnesses, and with which harnesses and providers.
 - Any relevant behavior that could not be tested.
 

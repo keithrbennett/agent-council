@@ -47,6 +47,11 @@ module AgentCouncil
         ]
       end
 
+      # Variables for the agent's process beyond TMPDIR: none.
+      module_function def env(_scratch_dir)
+        {}
+      end
+
       # --- event stream reading ---
 
       # The assistant message from a single pi JSONL line, or nil if the line

@@ -4,8 +4,8 @@
 # a config entry gives in its 'harness' key. What they share, the read-only
 # scaffolding, is in harnesses/scaffold.rb.
 #
-# Each harness is a plain module shaped like PiHarness (NAME, argv, usage,
-# error_message, exit_detail, warnings, final_response,
+# Each harness is a plain module shaped like PiHarness (NAME, argv, env,
+# usage, error_message, exit_detail, warnings, final_response,
 # assistant_messages), not an adapter framework; AgentCouncil looks one up
 # per agent with module_for. NAME is both the config value and the
 # executable argv runs, which the startup check looks for on PATH. The
@@ -13,6 +13,11 @@
 # scratch dir, so a harness must pass TMPDIR through to its tools. It also
 # goes into report filenames unsanitized, so it must be one
 # AgentCouncil.sanitize leaves unchanged (the specs check this).
+#
+# env (scratch_dir) returns the variables the agent's process needs beyond
+# TMPDIR, which run_agent sets (empty for none): String names, each with a
+# String value. It may write files into scratch_dir, which is removed after
+# the agent finishes.
 #
 # exit_detail (stdout, stderr) says why an agent that exited nonzero failed;
 # the caller puts it, and error_message's reason, on one line cut to 300
@@ -29,10 +34,13 @@
 require_relative 'harnesses/pi_harness'
 require_relative 'harnesses/claude_code_harness'
 require_relative 'harnesses/codex_harness'
+require_relative 'harnesses/opencode_harness'
 
 module AgentCouncil
   module Harnesses
-    BY_NAME = [PiHarness, ClaudeCodeHarness, CodexHarness].to_h { |harness| [harness::NAME, harness] }.freeze
+    BY_NAME = [PiHarness, ClaudeCodeHarness, CodexHarness, OpenCodeHarness].to_h do |harness|
+      [harness::NAME, harness]
+    end.freeze
 
     # The harness of a report or run.json entry without a 'harness' key:
     # agent-council writes one in each, so these are hand-edited or older
