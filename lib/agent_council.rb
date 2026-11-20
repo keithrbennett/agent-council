@@ -723,6 +723,14 @@ module AgentCouncil
     costs.all?(Numeric) ? total.merge('cost' => costs.sum.round(6)) : total
   end
 
+  # The summed cost of the usages whose cost is known, and how many those
+  # are, for when sum_usage leaves the cost out because some are unknown
+  # (e.g. a Codex agent's, which Codex doesn't price). [nil, 0] if none is.
+  module_function def known_cost(usages)
+    costs = usages.grep(Hash).map { |u| u['cost'] }.grep(Numeric)
+    [costs.empty? ? nil : costs.sum.round(6), costs.size]
+  end
+
   # The run dir's machine-readable record of its analysts and consolidations.
   RUN_FILENAME = 'run.json'
 
@@ -744,14 +752,17 @@ module AgentCouncil
   end
 
   # Writes the run dir's run.json: every analyst's and consolidation's
-  # entry (see run_entry), their total usage, and how many entries it covers
-  # (those that reported usage). Replaced atomically, so a
+  # entry (see run_entry), their total usage, how many entries it covers
+  # (those that reported usage), and the summed cost of the entries whose
+  # cost is known, with how many they are (see known_cost). Replaced atomically, so a
   # reader or a Ctrl-C never sees it half written. A failure to write it is
   # only warned about: the reports are what matter.
   module_function def write_run_file(run_dir, analysts, consolidations)
     usages = (analysts + consolidations).map { |entry| entry['usage'] }
+    cost, cost_runs = known_cost(usages)
     data = { 'analysts' => analysts, 'consolidations' => consolidations,
-      'total_usage' => sum_usage(usages), 'total_usage_runs' => usages.grep(Hash).size }
+      'total_usage' => sum_usage(usages), 'total_usage_runs' => usages.grep(Hash).size,
+      'known_cost' => cost, 'known_cost_runs' => cost_runs }
     path = File.join(run_dir, RUN_FILENAME)
     temp = "#{path}.#{Process.pid}.tmp"
     File.write(temp, "#{JSON.pretty_generate(data)}\n")
@@ -807,13 +818,20 @@ module AgentCouncil
   end
 
   # "; <total usage>" for a summary line, noting how many of the agents it
-  # covers when some reported no usage; "" when none reported any.
+  # covers when some reported no usage; "" when none reported any. When
+  # only some agents' cost is known, the total leaves the cost out, so the
+  # known agents' cost follows, with how many they are.
   module_function def usage_summary(usages)
-    total = format_usage(sum_usage(usages))
+    sum = sum_usage(usages)
+    total = format_usage(sum)
     return '' unless total
 
     reported = usages.grep(Hash).size
-    "; #{total}#{" (from #{reported} of #{usages.size} agents)" if reported < usages.size}"
+    text = "; #{total}#{" (from #{reported} of #{usages.size} agents)" if reported < usages.size}"
+    cost, cost_runs = known_cost(usages)
+    return text if sum.key?('cost') || cost.nil? || !cost.positive?
+
+    "#{text}; #{format_cost(cost)} for the #{cost_runs} of #{usages.size} agents with a known cost"
   end
 
   # East Asian wide and fullwidth characters (CJK, Hangul, fullwidth forms,

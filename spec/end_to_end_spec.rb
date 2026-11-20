@@ -298,7 +298,9 @@ RSpec.describe 'agent-council end to end' do
       ],
       'total_usage'      => stored.merge('input' => 2000, 'output' => 400, 'cache_read' => 400,
         'cost' => 0.04),
-      'total_usage_runs' => 2
+      'total_usage_runs' => 2,
+      'known_cost'       => 0.04,
+      'known_cost_runs'  => 2
     )
   end
 
@@ -485,6 +487,7 @@ RSpec.describe 'agent-council end to end' do
     run = JSON.parse(File.read(reports('run.json').first))
     expect(run['analysts'].first['usage'])
       .to eq('input' => 1000, 'output' => 200, 'cache_read' => 200, 'cache_write' => 0)
+    expect(run.values_at('known_cost', 'known_cost_runs')).to eq([nil, 0])
   end
 
   it 'writes the run dir under --output-dir when given' do

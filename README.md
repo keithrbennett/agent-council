@@ -433,7 +433,9 @@ agents:
   an agent bills however `codex` would at your terminal, to your ChatGPT
   plan if you are logged in with one, or to an API key. Codex reports
   tokens but no price, so a Codex agent's cost is blank, and the run's
-  total shows no cost when a Codex agent reported usage.
+  total has no cost; the console summary gives the other analysts'
+  known cost, labeled as such, and `run.json` records it as
+  `known_cost`.
 - **Context and sandbox.** Each agent runs as an interactive session
   started in your project would: your Codex `config.toml` applies,
   including its `sandbox_mode`, and so do the project's `AGENTS.md`
@@ -869,8 +871,15 @@ agent-council-reports/
   (such as a Claude Code agent with refused tool calls) also has
   `warnings`, a list of messages. The file also has `total_usage`, the
   entries' summed usage, whose `cost` is included only if every summed
-  entry's cost is known; and `total_usage_runs`, how many entries reported
-  usage (and so are in the total). Failed agents are included, since their
+  entry's cost is known; `total_usage_runs`, how many entries reported
+  usage (and so are in the total); and, always, `known_cost` and
+  `known_cost_runs`, the summed cost of the entries whose cost is known
+  and how many they are (`null` and 0 when none is), which differs from
+  `total_usage`'s `cost` in a run that mixes priced agents with ones
+  such as Codex agents, which have no cost. The console summary gives
+  the analysts' known cost the same way, as "$1.00 for the 2 of 3
+  agents with a known cost"; `known_cost` also covers consolidations.
+  Failed agents are included, since their
   tokens were spent, but a Claude Code agent that ends without its final
   `result` event (e.g. because its `claude` was killed) reports no usage,
   since only that event gives the agent's totals.
@@ -957,8 +966,9 @@ see [How far to trust the cost](#how-far-to-trust-the-cost)), with the failures'
 reasons listed below it under `Errors:`. A
 `--- Reviews complete (N/M succeeded; <total usage>) ---` line follows,
 e.g. `2.1M in (2.0M cached) / 32.7k out, $0.18`. The total's cost is
-shown only when every counted analyst's cost is known, and the total
-notes `(from K of M agents)` when some reported no usage (as some
+shown only when every counted analyst's cost is known; otherwise the
+cost of the analysts whose cost is known follows, e.g. `; $0.12 for the 2 of 3 agents with
+a known cost`. The total notes `(from K of M agents)` when some reported no usage (as some
 providers don't). With a consolidator,
 the `Consolidation Report (in <run dir>):` heading (with
 `--consolidate`, `(in <run dir>, from N review(s)):`) then prints while it
@@ -990,7 +1000,9 @@ direction:
   routing to a differently priced upstream), and a model missing from
   it gets no cost at all. Claude Code prices usage at Anthropic's API
   list prices. Codex prices nothing, so Codex agents have no cost, and
-  a run's total cost is left out when one of them reported usage.
+  a run's total then has no cost; the console summary and `run.json`'s
+  `known_cost` give only the other agents' cost, and say how many those
+  are.
 - **Stopped agents.** An agent stopped by Ctrl-C (or another signal)
   records no usage, though its provider still bills for what it used,
   and a run stopped before every analyst finished writes no `run.json`

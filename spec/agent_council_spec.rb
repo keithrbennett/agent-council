@@ -1464,6 +1464,18 @@ RSpec.describe AgentCouncil do
       expect(data['total_usage']).to eq('input' => 11, 'output' => 22, 'cache_read' => 0, 'cache_write' => 0)
       expect(described_class.read_run_file(run_dir)).to eq([analysts, consolidations])
       expect(Dir.children(run_dir)).to eq(['run.json']) # no temp file left
+      expect(data.values_at('known_cost', 'known_cost_runs')).to eq([nil, 0])
+    end
+
+    it 'records the known cost of a run that mixes priced and unpriced entries' do
+      analysts = [{ 'ok' => true, 'usage' => { 'input' => 1, 'output' => 2, 'cost' => 0.5 } },
+        { 'ok' => true, 'usage' => { 'input' => 1, 'output' => 2 } }]
+      consolidations = [{ 'ok' => true, 'usage' => { 'input' => 1, 'output' => 2, 'cost' => 0.25 } }]
+      described_class.write_run_file(run_dir, analysts, consolidations)
+
+      data = JSON.parse(File.read(File.join(run_dir, 'run.json')))
+      expect(data['total_usage']).not_to have_key('cost')
+      expect(data.values_at('known_cost', 'known_cost_runs')).to eq([0.75, 2])
     end
 
     it 'warns, rather than raises, when it cannot write the file' do
@@ -1529,6 +1541,13 @@ RSpec.describe AgentCouncil do
 
     it 'is empty when no agent reported usage' do
       expect(described_class.usage_summary([nil, nil])).to eq('')
+    end
+
+    it 'gives the known cost when some agents have none, as Codex agents do' do
+      priced = { 'input' => 1, 'output' => 2, 'cost' => 0.5 }
+      unpriced = { 'input' => 1, 'output' => 2 }
+      expect(described_class.usage_summary([priced, unpriced, priced]))
+        .to eq('; 3 in / 6 out; $1.00 for the 2 of 3 agents with a known cost')
     end
   end
 

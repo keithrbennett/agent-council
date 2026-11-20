@@ -21,7 +21,8 @@
     approves the tool in advance (e.g. `default_tools_approval_mode =
     "approve"` on the server). Refused and failed MCP calls are warnings.
   - Codex reports no cost, so a Codex agent's cost is blank, and a run's
-    total shows no cost when a Codex agent reported usage.
+    total cost (`total_usage`'s `cost` in `run.json`) is left out when a
+    Codex agent reported usage; see the known-cost item below.
   - `mixed-harness.yml` gains a Codex analyst.
 - Agents in every harness now get the MCP servers you've configured for
   it, as an interactive session would, instead of none: pi is no longer
@@ -39,6 +40,10 @@
   `codemode` script's `models.classify` calls. `codemode` gives scripts
   pi's `models` API, which can call any model pi has credentials for;
   see "pi agents can call other models" in the README's Safety section.
+- A run that mixes agents with and without a known cost (such as Codex
+  agents, which have none) now shows the known agents' cost in the
+  console summary ("$1.00 for the 2 of 3 agents with a known cost"),
+  and `run.json` records it as `known_cost` and `known_cost_runs`.
 - The scaffolding gains a rule: agents must not act outside the machine
   (post, comment, send messages, or change remote data) with any tool,
   MCP tools included.
