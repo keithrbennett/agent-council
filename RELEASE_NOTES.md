@@ -2,6 +2,27 @@
 
 ## 0.3.0 (unreleased)
 
+- **Check before upgrading: agents now get your MCP servers.** Agents in
+  every harness get the MCP servers you've configured for it, as an
+  interactive session would, instead of none: pi is no longer run with
+  `--no-mcp`, and Claude Code no longer with `--strict-mcp-config`. A
+  server that writes (posting, commenting, changing tickets) is
+  available to every pi agent, held back only by the read-only
+  instructions, which now forbid acting outside the machine; Claude
+  Code agents run only the MCP tools your settings or the analyzed
+  project's allow, and Codex agents only those your config approves,
+  since neither can ask. Every agent starts every server it loads, so
+  one that acts on startup acts once per agent. Before a run, remove or
+  disable servers you don't want agents to have. See "Agents get your
+  MCP servers" in the README's Safety section, which also lists which
+  servers load (including pi extensions', Claude Code and Codex
+  plugins', and Codex's apps connectors) and where to turn each off.
+  - pi's tool allowlist gains `codemode` (how pi exposes MCP tools by
+    default), `mcp__*` (for servers with direct exposure), `tool_search`
+    (for servers with deferred exposure), and pi's MCP resource tools.
+    `pi-models` still passes `--no-mcp`.
+  - Claude Code agents' refused MCP calls are warnings, as other
+    refused calls already were.
 - A third harness: an entry with `harness: codex` runs under the OpenAI
   Codex CLI (`codex exec`, tested with 0.167.0), billed however your
   `codex` login is (a ChatGPT plan or an API key). See "Choosing a
@@ -10,45 +31,40 @@
     applies, its `sandbox_mode` included, and so do the project's
     `AGENTS.md` files. `codex exec` never asks for approval, whatever
     your `approval_policy`, so a command that would need it is refused.
-    Under Codex's default `read-only` sandbox they get no scratch space; under `workspace-write` they can
-    also write the analyzed repository (see "Codex's sandbox" in the
-    README).
+    Under Codex's default `read-only` sandbox they get no scratch
+    space; under `workspace-write` they can also write the analyzed
+    repository (see "Codex's sandbox" in the README).
   - Unlike pi and Claude Code agents, whose built-in tools are limited,
     Codex agents keep Codex's whole built-in toolset, file editing
     included, since Codex can't withhold tools. Its subagent tools fail
     under the `--ephemeral` agent-council passes, so agents can't fan
     out.
-  - Codex agents get your MCP servers (see below), but `codex exec` never
+  - Codex agents get your MCP servers (see above), but `codex exec` never
     asks for approval, so an MCP tool call is refused unless your config
     approves the tool in advance (e.g. `default_tools_approval_mode =
-    "approve"` on the server). Refused and failed MCP calls are warnings.
+    "approve"` on the server).
+  - Errors Codex reports without failing an agent (such as missing
+    metadata for a model name), and failed MCP calls (such as those
+    refused for want of approval), are printed as warnings and recorded
+    in `run.json`.
   - Codex reports no cost, so a Codex agent's cost is blank, and a run's
     total cost (`total_usage`'s `cost` in `run.json`) is left out when a
     Codex agent reported usage; see the known-cost item below.
   - `mixed-harness.yml` gains a Codex analyst.
-- Agents in every harness now get the MCP servers you've configured for
-  it, as an interactive session would, instead of none: pi is no longer
-  run with `--no-mcp`, and Claude Code no longer with
-  `--strict-mcp-config`. Claude Code agents run only the MCP tools your
-  permission rules allow, since `-p` can't ask; refused calls are
-  warnings, as before. This is a risk to weigh: a server that writes is
-  available to every agent, and one that acts on startup acts once per
-  agent. See "Agents get your MCP servers" in the README's Safety
-  section. `pi-models` still passes `--no-mcp`. pi's tool allowlist gains
-  `codemode` (how pi exposes MCP tools by default), `mcp__*` (for servers
-  with direct exposure), `tool_search` (for servers with deferred
-  exposure), and pi's MCP resource tools.
-- pi agents' usage now includes what their tools report, such as a
-  `codemode` script's `models.classify` calls. `codemode` gives scripts
-  pi's `models` API, which can call any model pi has credentials for;
-  see "pi agents can call other models" in the README's Safety section.
+- `codemode`, which every pi agent now gets, MCP servers or not, gives
+  scripts pi's `models` API (`models.classify`,
+  `models.generateImages`), which can send what a script passes it to
+  any model pi has credentials for, billed to you. pi agents' usage now
+  includes what their tools report, so such calls are counted. See "pi
+  agents can call other models" in the README's Safety section.
 - A run that mixes agents with and without a known cost (such as Codex
-  agents, which have none) now shows the known agents' cost in the
-  console summary ("$1.00 for the 2 of 3 agents with a known cost"),
-  and `run.json` records it as `known_cost` and `known_cost_runs`.
+  agents, which have none) now shows the cost of the analysts whose
+  cost is known in the console summary ("$1.00 for the 2 of 3 agents
+  with a known cost"), and `run.json` records the same for every entry,
+  consolidations included, as `known_cost` and `known_cost_runs`.
 - The scaffolding gains a rule: agents must not act outside the machine
   (post, comment, send messages, or change remote data) with any tool,
-  MCP tools included.
+  MCP tools included. Reading remote information is still allowed.
 
 ## 0.2.0 (2026-11-19)
 
