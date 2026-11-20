@@ -625,7 +625,7 @@ RSpec.describe AgentCouncil do
       File.write('p_prompt.md', 'hi')
       File.write('config.yml', YAML.dump('agents' => [pi_entry]))
       ENV[described_class::ENV_OPTS_VAR] = '--output-dir from-env'
-      allow(described_class).to receive(:abort_unless_harnesses_ready)
+      allow(described_class).to receive(:abort_unless_harnesses_installed)
       allow(described_class).to receive(:run_agent).and_return(['#1 p / m', true, 'report.md', nil, []])
       allow(described_class).to receive(:puts_consolidation_status)
 
@@ -640,7 +640,7 @@ RSpec.describe AgentCouncil do
       File.write('p_prompt.md', 'hi')
       File.write('config.yml', YAML.dump('agents' => [pi_entry]))
       ENV[described_class::ENV_OPTS_VAR] = '--output-dir from-env'
-      allow(described_class).to receive(:abort_unless_harnesses_ready)
+      allow(described_class).to receive(:abort_unless_harnesses_installed)
       allow(described_class).to receive(:run_agent).and_return(['#1 p / m', true, 'report.md', nil, []])
       allow(described_class).to receive(:puts_consolidation_status)
 
@@ -713,7 +713,7 @@ RSpec.describe AgentCouncil do
     it 'aborts with a message, not a backtrace, when the run dir cannot be created' do
       File.write('p_prompt.md', 'hi')
       File.write('config.yml', YAML.dump('agents' => [pi_entry]))
-      allow(described_class).to receive(:abort_unless_harnesses_ready)
+      allow(described_class).to receive(:abort_unless_harnesses_installed)
       allow(described_class).to receive(:claim_run_dir).and_raise(Errno::EACCES, 'out')
       expect { described_class.main(['-o', 'out', 'p_prompt.md', 'config.yml']) }
         .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
@@ -777,9 +777,9 @@ RSpec.describe AgentCouncil do
       agent = { 'harness' => 'pi', 'provider' => 'p', 'model' => 'm' }
       File.write('p_prompt.md', 'hi')
       File.write('config.yml', YAML.dump('agents' => [agent], 'consolidator' => false))
-      allow(described_class).to receive(:abort_unless_harnesses_ready).and_raise(SystemExit)
+      allow(described_class).to receive(:abort_unless_harnesses_installed).and_raise(SystemExit)
       expect { described_class.main(['p_prompt.md', 'config.yml']) }.to raise_error(SystemExit)
-      expect(described_class).to have_received(:abort_unless_harnesses_ready).with([agent])
+      expect(described_class).to have_received(:abort_unless_harnesses_installed).with([agent])
     end
 
     it 'checks the executable of every harness the config uses, naming each missing one' do
@@ -796,25 +796,6 @@ RSpec.describe AgentCouncil do
       expect { described_class.main(['p_prompt.md', 'config.yml']) }
         .to raise_error(SystemExit)
         .and output(/other-harness executable not found.*\npi executable not found/).to_stderr
-    end
-
-    it "prepares each harness once, aborting before any run dir with each one's error" do
-      failing = Module.new.tap { |m| m.const_set(:NAME, 'failing') }
-      allow(failing).to receive(:prepare).and_return('failing: not ready')
-      allow(AgentCouncil::Harnesses::PiHarness).to receive(:prepare).and_call_original
-      stub_const('AgentCouncil::Harnesses::BY_NAME', { 'pi' => AgentCouncil::Harnesses::PiHarness,
-        'failing' => failing })
-      allow(described_class).to receive(:executable_on_path?).and_return(true)
-      entry = { 'harness' => 'failing', 'provider' => 'p', 'model' => 'm' }
-      File.write('p_prompt.md', 'hi')
-      File.write('config.yml', YAML.dump('agents' => [entry, entry.dup],
-        'consolidator' => entry.merge('harness' => 'pi')))
-      expect { described_class.main(['p_prompt.md', 'config.yml']) }
-        .to raise_error(SystemExit)
-        .and output("failing: not ready\n").to_stderr
-      expect(failing).to have_received(:prepare).once
-      expect(AgentCouncil::Harnesses::PiHarness).to have_received(:prepare).once
-      expect(File).not_to exist('agent-council-reports')
     end
 
     it 'aborts naming every bad entry and the keys each lacks, then what every entry needs' do
@@ -1051,9 +1032,9 @@ RSpec.describe AgentCouncil do
     it "checks only the consolidator's harness executable, since no analysts run" do
       write_run(config: consolidator_config.merge('agents' => [{ 'harness' => 'nope', 'provider' => 'p',
         'model' => 'm' }]))
-      allow(described_class).to receive(:abort_unless_harnesses_ready).and_raise(SystemExit)
+      allow(described_class).to receive(:abort_unless_harnesses_installed).and_raise(SystemExit)
       expect { described_class.main(['--consolidate', run_dir]) }.to raise_error(SystemExit)
-      expect(described_class).to have_received(:abort_unless_harnesses_ready)
+      expect(described_class).to have_received(:abort_unless_harnesses_installed)
         .with([consolidator_config['consolidator']])
     end
 

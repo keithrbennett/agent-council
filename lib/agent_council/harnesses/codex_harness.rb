@@ -11,24 +11,12 @@
 # codex would at the user's terminal (ChatGPT plan or API key).
 
 require 'json'
-require 'open3'
 require_relative 'scaffold'
 
 module AgentCouncil
   module Harnesses
     module CodexHarness
       NAME = 'codex'
-
-      # Lists the MCP servers to turn off (see mcp_overrides), once per run,
-      # before any agent runs: nil, or why the run can't go on. Failing
-      # closed: an agent run without the list would have its MCP servers on.
-      module_function def prepare
-        @mcp_server_names = nil
-        @mcp_server_names = list_mcp_servers
-        nil
-      rescue McpListError => e
-        "codex: can't list Codex's MCP servers to turn them off: #{shorten(e.message.gsub(/\s+/, ' '), 300)}"
-      end
 
       # Invocation for one agent. The substantive prompt is not part of
       # argv; it is piped to stdin ('-'). provider is not passed: like
@@ -37,9 +25,9 @@ module AgentCouncil
       #
       # No --sandbox or approval flags: the user's sandbox_mode applies, as
       # in an interactive session, along with the rest of their config.toml
-      # and the repository's AGENTS.md; only MCP is turned off (see
-      # mcp_overrides). Their approval_policy doesn't: codex exec never
-      # asks, so a command that needs approval is refused. Under workspace-write,
+      # (MCP servers and plugins included) and the repository's AGENTS.md.
+      # Their approval_policy doesn't: codex exec never asks, so a command
+      # that needs approval is refused. Under workspace-write,
       # Codex lets commands write $TMPDIR, which the scaffolding sends
       # agents to; under read-only nothing is writable.
       #
@@ -52,58 +40,10 @@ module AgentCouncil
           '--ephemeral',             # no session files saved
           '--skip-git-repo-check',   # run anywhere, as pi and claude agents do
           '--color', 'never',
-          *mcp_overrides,
           '--model', model,
           '-c', "developer_instructions=#{toml_string(Harnesses.scaffold_text)}",
           '-' # read the prompt from stdin
         ]
-      end
-
-      # Arguments turning off all MCP: the bundled apps connectors (GitHub
-      # and others, which `codex mcp list` doesn't show) with --disable
-      # apps, and each server Codex's config (the user's and the
-      # repository's) defines, by name, in one -c table. Codex merges a -c
-      # table into its config rather than replacing it, so mcp_servers={}
-      # turns off nothing, and a dotted -c path can't name a server whose
-      # name needs quoting; a table can, and keeps each server's transport.
-      # Raises if prepare hasn't listed the servers.
-      module_function def mcp_overrides
-        names = @mcp_server_names or raise "#{name}.prepare must run before argv"
-        table = names.map { |server| "#{toml_key(server)}={enabled=false}" }
-        ['--disable', 'apps', *(['-c', "mcp_servers={#{table.join(',')}}"] unless names.empty?)]
-      end
-
-      # Why the MCP servers couldn't be listed.
-      class McpListError < StandardError; end
-
-      # The names of the MCP servers `codex mcp list --json` reports.
-      # McpListError if it fails, or gives anything but a JSON array of
-      # servers each with a string name: a server it couldn't name would
-      # stay on. Its output is read as UTF-8 whatever the locale, as agents'
-      # output is (see AgentCouncil.run_agent).
-      module_function def list_mcp_servers
-        out, err, status = Open3.capture3(NAME, 'mcp', 'list', '--json')
-        out, err = [out, err].map { |output| String.new(output, encoding: Encoding::UTF_8).scrub }
-        detail = err.lines.map(&:strip).reject(&:empty?).last
-        raise McpListError, detail || "exited with status #{status.exitstatus}" unless status.success?
-
-        servers = JSON.parse(out)
-        raise McpListError, 'its output is not a JSON array' unless servers.is_a?(Array)
-
-        servers.map do |server|
-          name = server['name'] if server.is_a?(Hash)
-          name.is_a?(String) ? name : raise(McpListError,
-            "it lists a server with no name: #{JSON.generate(server)}")
-        end
-      rescue SystemCallError => e
-        raise McpListError, e.message
-      rescue JSON::ParserError
-        raise McpListError, 'its output is not JSON'
-      end
-
-      # A TOML key: bare if it may be, otherwise a quoted string.
-      module_function def toml_key(name)
-        name.match?(/\A[A-Za-z0-9_-]+\z/) ? name : toml_string(name)
       end
 
       # A TOML basic string (JSON's string escapes are valid TOML ones), so
@@ -219,18 +159,49 @@ module AgentCouncil
         stderr.lines.map(&:strip).reject(&:empty?).first || 'no error output'
       end
 
-      # Warnings about an agent, failed or not: the error items Codex
-      # reports without failing the turn (e.g. "Model metadata for `x` not
-      # found"), which may explain a weak report. One warning, listing at
-      # most MAX_LISTED_ERRORS distinct messages, each cut to
-      # MAX_ERROR_LENGTH characters, so it stays short.
+      # Warnings about an agent, failed or not, each listing at most
+      # MAX_LISTED_ERRORS distinct entries, each cut to MAX_ERROR_LENGTH
+      # characters, so they stay short:
+      # - the error items Codex reports without failing the turn (e.g.
+      #   "Model metadata for `x` not found"), which may explain a weak
+      #   report;
+      # - the MCP tool calls that failed, such as those refused because
+      #   codex exec never asks for approval ("MCP tool call requires
+      #   approval, but approval policy is never"), whose results the
+      #   report may lack.
       module_function def warnings(jsonl)
-        messages = nonblank(completed_items(jsonl, 'error').map { |item| item['message'] }).uniq
-        return [] if messages.empty?
+        errors = nonblank(completed_items(jsonl, 'error').map { |item| item['message'] }).uniq
+        calls = failed_calls(completed_items(jsonl, 'mcp_tool_call').select do |item|
+          item['status'] == 'failed'
+        end)
+        warnings = []
+        unless errors.empty?
+          warnings << listing("Codex reported #{errors.size == 1 ? 'an error' : 'errors'}",
+            errors)
+        end
+        unless calls.empty?
+          warnings << listing("Codex MCP tool call#{'s' unless calls.size == 1} failed",
+            calls)
+        end
+        warnings
+      end
 
-        listed = messages.first(MAX_LISTED_ERRORS).map { |message| shorten(message, MAX_ERROR_LENGTH) }
-        listed << "and #{messages.size - listed.size} more" if messages.size > listed.size
-        ["Codex reported #{messages.size == 1 ? 'an error' : 'errors'}: #{listed.join('; ')}"]
+      # A warning: label, then entries, at most MAX_LISTED_ERRORS of them.
+      module_function def listing(label, entries)
+        listed = entries.first(MAX_LISTED_ERRORS).map { |entry| shorten(entry, MAX_ERROR_LENGTH) }
+        listed << "and #{entries.size - listed.size} more" if entries.size > listed.size
+        "#{label}: #{listed.join('; ')}"
+      end
+
+      # Failed MCP tool calls as distinct "server.tool (reason)" entries.
+      module_function def failed_calls(calls)
+        calls.map do |call|
+          server, name = nonblank([call['server']]).first, nonblank([call['tool']]).first
+          tool = name ? [server, name].compact.join('.') : 'unknown tool'
+          error = call['error']
+          reason = error['message'] if error.is_a?(Hash)
+          reason.is_a?(String) && !reason.strip.empty? ? "#{tool} (#{reason.strip})" : tool
+        end.uniq
       end
 
       MAX_LISTED_ERRORS = 5

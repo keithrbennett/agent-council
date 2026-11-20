@@ -38,14 +38,23 @@ RSpec.describe AgentCouncil::Harnesses::PiHarness do
       expect(argv[argv.index('--model') + 1]).to eq('glm-5.3')
     end
 
-    # Safety-critical: agents must be analyzers, not modifiers.
-    it 'allowlists read-only tools and withholds edit/write' do
-      tools = argv[argv.index('--tools') + 1].split(',')
-      expect(tools).to contain_exactly('read', 'grep', 'find', 'ls', 'bash')
+    # Safety-critical: agents must be analyzers, not modifiers. The exact
+    # list, so a tool added to it (one that writes, say) fails here. Beyond
+    # the read and shell tools, it gives agents the MCP tools pi gives an
+    # interactive session, however a server exposes them: codemode for the
+    # default exposure, mcp__* for direct exposure, tool_search for
+    # deferred exposure, and the resource tools, which an mcp__ entry would
+    # otherwise filter out. Neither codemode nor tool_search brings
+    # edit/write back.
+    it 'allowlists exactly the read, shell, and MCP tools' do
+      expect(argv[argv.index('--tools') + 1].split(','))
+        .to contain_exactly('read', 'grep', 'find', 'ls', 'bash', 'codemode', 'mcp__*', 'tool_search',
+          'list_mcp_resources', 'list_mcp_resource_templates', 'read_mcp_resource')
     end
 
-    it 'disables MCP, so no MCP servers start' do
-      expect(argv).to include('--no-mcp')
+    # MCP servers load as in an interactive session.
+    it 'leaves MCP to pi config' do
+      expect(argv).not_to include('--no-mcp')
     end
 
     # In a separate process, so nothing else of agent-council is loaded.
@@ -142,6 +151,18 @@ RSpec.describe AgentCouncil::Harnesses::PiHarness do
     it 'ignores malformed usage and counts' do
       usage = described_class.usage(stream('lots', { input: 'many', output: 2, cost: 3 }))
       expect(usage).to eq('input' => 0, 'output' => 2, 'cache_read' => 0, 'cache_write' => 0)
+    end
+
+    # A codemode script's models.classify call reports its usage on the
+    # codemode tool result (seen with pi 1.5.2).
+    it 'counts the usage of tool results' do
+      tool_result = JSON.generate(type: 'message_end',
+        message: { role: 'toolResult', toolName: 'codemode',
+                   usage: { input: 327, output: 32, cost: { total: 0.00001 } } })
+      assistant = stream({ input: 1, output: 2, cost: { total: 0.01 } })
+      usage = described_class.usage([assistant, tool_result].join("\n"))
+      expect(usage).to eq('input' => 328, 'output' => 34, 'cache_read' => 0, 'cache_write' => 0,
+        'cost' => 0.01001)
     end
 
     it 'is nil when the stream reports no usage' do

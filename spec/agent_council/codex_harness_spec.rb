@@ -5,7 +5,8 @@
 # streams in spec/fixtures/codex were recorded from this harness's argv
 # (codex-cli 0.167.0, ChatGPT login), with the thread ID zeroed and
 # command items replaced by a placeholder git log; unsupported_model.jsonl
-# with model no-such-model-xyz. Run with: rspec
+# with model no-such-model-xyz; mcp_refused.jsonl from a call to an MCP
+# tool the config didn't approve. Run with: rspec
 require 'spec_helper'
 require 'json'
 
@@ -18,25 +19,7 @@ RSpec.describe AgentCouncil::Harnesses::CodexHarness do
 
   def message(text) = { 'type' => 'item.completed', 'item' => { 'type' => 'agent_message', 'text' => text } }
 
-  def status(success, exitstatus = success ? 0 : 1)
-    instance_double(Process::Status, success?: success, exitstatus: exitstatus)
-  end
-
-  def stub_mcp_list(out, err = '', success: true)
-    allow(Open3).to receive(:capture3).with('codex', 'mcp', 'list',
-      '--json').and_return([out, err, status(success)])
-  end
-
-  # Clears what prepare stored, so each example starts unprepared.
-  after { described_class.instance_variable_set(:@mcp_server_names, nil) }
-
   describe '.argv' do
-    before do
-      stub_mcp_list(JSON.generate([{ 'name' => 'cov-loupe' }, { 'name' => 'my server' },
-        { 'name' => 'a.b' }]))
-      described_class.prepare
-    end
-
     let(:argv) { described_class.argv('openai', 'gpt-5.6-terra') }
 
     def value_of(flag) = argv[argv.index(flag) + 1]
@@ -65,17 +48,11 @@ RSpec.describe AgentCouncil::Harnesses::CodexHarness do
       expect(argv).not_to include('openai')
     end
 
-    it 'turns off the bundled apps connectors' do
-      expect(value_of('--disable')).to eq('apps')
-    end
-
-    # A dotted -c path can't name a server whose name needs quoting (codex
-    # reads mcp_servers."my server".enabled as a new, transportless server
-    # and fails); one table can, so every server goes in one.
-    it 'turns off every configured MCP server in one -c table, quoting names that need it' do
-      expect(argv.each_cons(2)).to include(
-        ['-c', 'mcp_servers={cov-loupe={enabled=false},"my server"={enabled=false},"a.b"={enabled=false}}']
-      )
+    # MCP servers, plugins, and apps connectors load as in an interactive
+    # session; nothing turns them off.
+    it 'leaves MCP to Codex config' do
+      expect(argv).not_to include('--disable')
+      expect(argv.grep(/\Amcp_servers/)).to be_empty
     end
 
     # The user's config and AGENTS.md must load, as in an interactive session.
@@ -87,62 +64,6 @@ RSpec.describe AgentCouncil::Harnesses::CodexHarness do
       override = argv.grep(/\Adeveloper_instructions=/).first
       value = override.delete_prefix('developer_instructions=')
       expect(JSON.parse(value)).to eq(AgentCouncil::Harnesses.scaffold_text)
-    end
-
-    it 'lists the servers once, in prepare, not per agent' do
-      2.times { described_class.argv('openai', 'm') }
-      expect(Open3).to have_received(:capture3).once
-    end
-  end
-
-  describe '.prepare' do
-    it 'passes no mcp_servers table when Codex has no servers configured' do
-      stub_mcp_list('[]')
-      expect(described_class.prepare).to be_nil
-      argv = described_class.argv('p', 'm')
-      expect(argv.grep(/\Amcp_servers=/)).to be_empty
-      expect(argv.each_cons(2)).to include(%w[--disable apps])
-    end
-
-    # Failing closed: an agent run without the list would have its MCP servers on.
-    it "says why when codex can't list its servers, and leaves argv unusable" do
-      stub_mcp_list('', "WARNING: noise\nError: failed to load config\n", success: false)
-      expect(described_class.prepare).to eq("codex: can't list Codex's MCP servers to turn them off: " \
-                                            'Error: failed to load config')
-      expect { described_class.argv('p', 'm') }.to raise_error(/prepare must run before argv/)
-    end
-
-    it 'puts a long error on one line, cut to 300 characters' do
-      stub_mcp_list('', "Error: #{'y' * 400}\n", success: false)
-      expect(described_class.prepare).to end_with("Error: #{'y' * 293}...")
-    end
-
-    it 'names the exit status when codex fails silently' do
-      stub_mcp_list('', '', success: false)
-      expect(described_class.prepare).to end_with('exited with status 1')
-    end
-
-    it 'fails when codex prints no JSON array, or cannot run' do
-      stub_mcp_list('oops')
-      expect(described_class.prepare).to end_with('its output is not JSON')
-      stub_mcp_list('{}')
-      expect(described_class.prepare).to end_with('its output is not a JSON array')
-      allow(Open3).to receive(:capture3).and_raise(Errno::ENOENT)
-      expect(described_class.prepare).to include('No such file or directory')
-    end
-
-    # Failing closed: a server it couldn't name would stay on.
-    it 'fails on a server entry without a string name' do
-      stub_mcp_list(JSON.generate([{ 'name' => 'a' }, { 'name' => 2 }]))
-      expect(described_class.prepare).to end_with('it lists a server with no name: {"name":2}')
-      stub_mcp_list(JSON.generate(['b']))
-      expect(described_class.prepare).to end_with('it lists a server with no name: "b"')
-    end
-
-    it 'reads the listing as UTF-8 whatever the locale' do
-      stub_mcp_list(JSON.generate([{ 'name' => 'café' }]).dup.force_encoding(Encoding::US_ASCII))
-      expect(described_class.prepare).to be_nil
-      expect(described_class.argv('p', 'm')).to include('mcp_servers={"café"={enabled=false}}')
     end
   end
 
@@ -195,12 +116,57 @@ RSpec.describe AgentCouncil::Harnesses::CodexHarness do
     end
   end
 
+  # Recorded with no approval configured for the server's tools.
+  describe 'an agent whose MCP tool call codex exec refused' do
+    let(:jsonl) { fixture('mcp_refused') }
+
+    it 'warns of the refused call, naming the server, tool, and reason' do
+      reason = 'MCP tool call requires approval, but approval policy is never'
+      expect(described_class.warnings(jsonl))
+        .to eq(["Codex MCP tool call failed: cov-loupe.version (#{reason})"])
+    end
+  end
+
   describe '.warnings' do
     def error_item(text) = { 'type' => 'item.completed', 'item' => { 'type' => 'error', 'message' => text } }
 
     it 'cuts each listed error to 200 characters' do
       expect(described_class.warnings(stream(error_item('x' * 5000))))
         .to eq(["Codex reported an error: #{'x' * 200}..."])
+    end
+
+    def mcp_call(server, tool, status, message = nil)
+      item = { 'type' => 'mcp_tool_call', 'server' => server, 'tool' => tool, 'status' => status,
+               'error' => message && { 'message' => message } }
+      { 'type' => 'item.completed', 'item' => item }
+    end
+
+    def failed_call(server, tool, message = nil) = mcp_call(server, tool, 'failed', message)
+
+    it 'counts repeated failed calls once, for the label too' do
+      jsonl = stream(failed_call('s', 'a', 'no'), failed_call('s', 'a', 'no'))
+      expect(described_class.warnings(jsonl)).to eq(['Codex MCP tool call failed: s.a (no)'])
+    end
+
+    it 'warns of errors and failed MCP calls separately, ignoring calls that succeeded' do
+      ok = mcp_call('s', 'ok', 'completed')
+      jsonl = stream(error_item('e'), failed_call('s', 'a', 'no'), failed_call('s', 'a', 'no'),
+        failed_call('s', 'b'), ok)
+      expect(described_class.warnings(jsonl))
+        .to eq(['Codex reported an error: e', 'Codex MCP tool calls failed: s.a (no); s.b'])
+    end
+
+    it 'lists at most five failed calls, naming an unknown tool and skipping a blank reason' do
+      calls = %w[a b c d e f].map { |tool| failed_call('s', tool, 'r' * 300) }
+      jsonl = stream(*calls, failed_call(nil, nil, '  '))
+      listed = %w[a b c d e].map { |tool| "#{"s.#{tool} (#{'r' * 300})"[0, 200]}..." }
+      expect(described_class.warnings(jsonl))
+        .to eq(["Codex MCP tool calls failed: #{listed.join('; ')}; and 2 more"])
+    end
+
+    it 'names a call missing its server by its tool, and one missing its tool as unknown' do
+      jsonl = stream(failed_call('', 't'), failed_call('s', ' '), failed_call(nil, nil))
+      expect(described_class.warnings(jsonl)).to eq(['Codex MCP tool calls failed: t; unknown tool'])
     end
 
     it 'lists at most five distinct errors in one warning' do

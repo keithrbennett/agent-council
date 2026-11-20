@@ -110,7 +110,8 @@ agent-council can help with any question about a set of readable files
 - **It has a text answer.** Only each agent's final message is saved as
   its report. Agents are told not to change the project and to keep
   temporary files in a scratch directory, which is deleted when the
-  agent finishes. Actions such as posting or deploying would happen once per agent.
+  agent finishes, and not to act outside the machine: posting or
+  deploying, if an agent did it anyway, would happen once per agent.
 - **It gains from several independent answers and a synthesis of
   them.** Open-ended questions ("what's wrong with this?", "what should
   we do?") gain the most; one with an obvious answer gains nothing.
@@ -214,13 +215,14 @@ consolidator, see
 - The harness CLIs your config uses (each run checks for them first):
   - for pi: the
     [`pi` CLI](https://github.com/earendil-works/pi)
-    (`pi --version`), 1.0.4 or later, for `--no-mcp` (tested with pi
-    1.3.0, 1.4.0, and 1.5.2), with credentials for at least one provider
+    (`pi --version`), 1.0.4 or later (`pi-models` runs pi with
+    `--no-mcp`; tested with pi 1.3.0, 1.4.0, and 1.5.2, with agents' MCP
+    access checked with 1.5.2), with credentials for at least one provider
     (several give more diverse viewpoints), configured through pi itself
     (see [pi's documentation][pi-docs]);
   - for Claude Code: the [`claude` CLI](https://code.claude.com/docs)
-    (`claude --version`; tested with 2.1.325 and 2.1.327, and earlier versions may
-    lack flags agent-council passes),
+    (`claude --version`; tested with 2.1.325, 2.1.327, and 2.1.329,
+    and earlier versions may lack flags agent-council passes),
     logged in or set up with an API key;
   - for Codex: the [`codex` CLI](https://developers.openai.com/codex/cli)
     (`codex --version`; tested with 0.167.0, and earlier versions may
@@ -395,10 +397,16 @@ consolidator:
   notes Claude Code has kept for the project, and are told, as an
   interactive session is, that they may add to them. See
   [Safety and privacy](#safety-and-privacy).
-- **Refused tool calls.** Claude Code can still refuse a tool call, for
-  example one that a `permissions.deny` rule in your settings or the
-  project's forbids. The agent then carries on without it; its report is
-  kept, and a warning naming the call (up to five distinct calls, with a
+- **MCP tools need a permission rule.** Your MCP servers load (see
+  [Safety and privacy](#safety-and-privacy)), but `-p` can't ask, and
+  agent-council doesn't add MCP tools to `--allowedTools`, so an agent's
+  MCP tool call is refused unless a `permissions.allow` rule in your
+  settings or the project's allows it (checked). A refused call is
+  reported as described next.
+- **Refused tool calls.** Claude Code can still refuse a tool call: an
+  MCP call no rule allows, or one that a `permissions.deny` rule in your
+  settings or the project's forbids. The agent then carries on without
+  it; its report is kept, and a warning naming the call (up to five distinct calls, with a
   count of the rest) is printed under its progress line (the
   consolidator's, under its result table), shown in the report's
   metadata table (so the consolidator sees an analyst's too), and
@@ -436,17 +444,25 @@ agents:
   what an agent can write is whatever your `sandbox_mode` allows (see
   [Codex's sandbox](#codexs-sandbox)). The read-only rules are
   given as `developer_instructions`, which replaces any your config sets.
-- **Tools.** Unlike pi and Claude Code agents, which get only a fixed
-  set of read and shell tools, Codex agents keep Codex's whole built-in
-  toolset, including its file-editing tool (`apply_patch`) and its
-  subagents: this Codex version has no way to withhold them. MCP is off
-  (see [How it works](#how-it-works-and-what-the-agents-are-told)).
+- **Tools.** Unlike pi and Claude Code agents, whose built-in tools are
+  limited to read and shell tools (plus MCP tools, as described here),
+  Codex agents keep Codex's whole built-in toolset, including its
+  file-editing tool (`apply_patch`) and its subagents: this Codex
+  version has no way to withhold them.
+- **MCP tools need approval in your config.** Your MCP servers load (see
+  [Safety and privacy](#safety-and-privacy)), but `codex exec` never asks
+  for approval, so an agent's MCP tool call is refused unless your config
+  approves the tool in advance, e.g. with
+  `default_tools_approval_mode = "approve"` in a server's
+  `[mcp_servers.<name>]` table (checked). A refused call is printed as a
+  warning, recorded the same way as Claude Code's refused calls.
 - **Outside a git repository.** Codex normally refuses to run outside one
   it trusts; agent-council passes `--skip-git-repo-check`, so Codex agents
   run wherever pi and Claude Code agents do.
 - **Warnings.** Errors Codex reports without failing the agent (such as
-  missing metadata for a model name) are printed as one warning, recorded
-  the same way as Claude Code's refused calls.
+  missing metadata for a model name) are printed as one warning, and
+  failed MCP tool calls (such as those refused for lack of approval) as
+  another, each recorded the same way as Claude Code's refused calls.
 
 ## Running
 
@@ -862,8 +878,9 @@ agent-council-reports/
   consolidation, including each `--consolidate`; a `--consolidate` of a
   run dir without a readable `run.json` warns and writes none.
 
-  `usage` is the model's token usage, summed over every request the
-  agent made, as reported by the harness: `input` (excluding cached input),
+  `usage` is the agent's token usage, summed over every model request
+  it made (for pi, its tools' requests too, such as a `codemode`
+  script's `models.classify` calls), as reported by the harness: `input` (excluding cached input),
   `cache_read`, `cache_write`, and `output` token counts, plus `cost` in
   US dollars when the harness could price the usage (pi uses its own price
   table, so models missing from it have no cost; Claude Code prices usage
@@ -1000,13 +1017,20 @@ usage page.
   consolidator gets its own prompt; see
   [Discovering and configuring models](#discovering-and-configuring-models).)
 - Under pi, each agent runs as
-  `pi -p --mode json --no-session --no-mcp --tools read,grep,find,ls,bash
+  `pi -p --mode json --no-session
+   --tools 'read,grep,find,ls,bash,codemode,mcp__*,tool_search,list_mcp_resources,list_mcp_resource_templates,read_mcp_resource'
    --provider P --model M --append-system-prompt <scaffolding>`.
   - `--no-session` keeps agents independent: no conversation state leaks
     between ensemble members.
-  - `--no-mcp` turns off pi's built-in MCP support, so the MCP servers
-    configured for pi don't start and agents have no MCP tools. (An
-    extension that provides its own MCP support isn't affected.)
+  - The MCP servers configured for pi start as in any pi session, and
+    agents get their tools: `--tools` also lists `codemode`, through
+    which pi exposes MCP tools by default, `mcp__*`, for servers with
+    direct exposure, `tool_search`, for servers with deferred exposure,
+    and pi's MCP resource tools. A `codemode` script can call only the
+    listed tools and MCP tools, plus pi's `models` API, which calls
+    models (its usage is counted in the agent's), and `tool_search`
+    loads only MCP tools (checked with pi 1.5.2: neither reached
+    `write`).
   - `--tools` is an allowlist for pi's built-in, extension, and custom
     tools: `bash` remains for investigation (`git log`, dependency
     inspection, ...), while file-editing tools and unlisted extension and
@@ -1024,7 +1048,7 @@ usage page.
 - Under Claude Code, each agent runs as
   `claude -p --output-format stream-json --verbose --no-session-persistence
    --tools Read,Grep,Glob,Bash --allowedTools Read,Grep,Glob,Bash
-   --permission-mode manual --strict-mcp-config --model M
+   --permission-mode manual --model M
    --append-system-prompt <scaffolding>`.
   - `--no-session-persistence` keeps agents independent: no session is
     saved, to be resumed or to show up in your session list.
@@ -1033,11 +1057,11 @@ usage page.
     `--allowedTools` pre-approves the four, since `-p` mode can't ask
     (a call that needs approval is refused), and `--permission-mode
     manual` keeps your own default mode (such as `plan`) from applying.
-  - `--strict-mcp-config`, with no `--mcp-config`, loads no MCP servers,
-    neither yours nor a plugin's, so agents have no MCP tools. (Where an organization manages Claude
-    Code's MCP servers with a `managed-mcp.json`, Claude Code's own
-    message says it refuses this flag, which would fail every Claude Code
-    agent; that case is untested.)
+  - Your MCP servers load, yours and your plugins' and the project's
+    approved ones, as in an interactive session, but `-p` mode can't ask before a tool runs,
+    so an MCP tool call goes through only if your settings allow it (a
+    `permissions.allow` rule such as `mcp__cov-loupe`); otherwise it is
+    refused and reported as a warning (checked).
   - Otherwise Claude Code behaves as an interactive session started in
     the analyzed repo would: it loads `CLAUDE.md` files (and what they
     import, such as `@AGENTS.md`), your user and the project's settings,
@@ -1051,15 +1075,13 @@ usage page.
     the details.
 - Under Codex, each agent runs as
   `codex exec --json --ephemeral --skip-git-repo-check --color never
-   --disable apps -c mcp_servers={...} --model M
+   --model M
    -c developer_instructions=<scaffolding> -`.
   - `--ephemeral` keeps agents independent: no session files are saved.
-  - `--disable apps` turns off Codex's bundled app connectors (GitHub and
-    others), and `-c mcp_servers={...}` turns off, by name, each MCP
-    server your Codex config or the project's defines, so agents have no
-    MCP tools. agent-council lists the servers once per run, before any
-    agent starts, with `codex mcp list --json`; if that fails, the run
-    stops with codex's error rather than run agents with servers on.
+  - Your MCP servers, plugins, and apps connectors load as in an
+    interactive session, but `codex exec` never asks for approval, so an
+    MCP tool call goes through only if your config approves the tool in
+    advance; otherwise it is refused and reported as a warning (checked).
   - No sandbox or approval option is passed (`codex exec` never asks for
     approval, whatever your `approval_policy`), and no tool is withheld:
     Codex behaves as an interactive session started in the analyzed repo
@@ -1071,15 +1093,16 @@ usage page.
     agent whose turn fails (say, a model your account can't use) is
     reported with the reason Codex gives. [`DESIGN.md`](DESIGN.md) §13
     has the details.
-- The tool limits and the MCP settings above are the only restrictions
+- The tool limits above are the only restrictions
   agent-council enforces (see [Safety and
   privacy](#safety-and-privacy)). A fixed scaffolding text appended to
   the system prompt (identical for all agents, the consolidator
   included) tells agents not to modify project files, git state,
   software, or configuration, or start persistent services (they get a
-  scratch directory for temporary files), and not to run tests, builds,
-  or similar commands, which can collide between concurrent analysts,
-  unless the prompt permits them (as
+  scratch directory for temporary files); not to act outside the machine
+  (post, comment, or change remote data, MCP tools included); and,
+  unless the prompt permits them, not to run tests, builds, or similar
+  commands, which can collide between concurrent analysts (as
   `examples/prompts/review-latest-commit-prompt.md` does for tests and
   linters); where such a command isn't permitted but would help, the
   agent describes what it would run instead. The full text is
@@ -1119,11 +1142,38 @@ Before running it, know that:
   only Codex's sandbox limits what they can write. The
   read-only rules described above are instructions in the system prompt,
   which a model can ignore or misapply.
+- **Agents get your MCP servers.** Every harness loads the MCP servers
+  it would load for you interactively, so agents can use their tools:
+  the ones you've configured, the analyzed project's (for pi and Codex,
+  if you trust the project; for Claude Code, those you've approved),
+  those your pi extensions or your Claude Code and Codex plugins
+  provide, and Codex's bundled apps connectors (GitHub and others). A
+  server that writes (posting to chat, commenting on an issue, changing a ticket or a database) is as
+  available to a pi agent as it is to you, and only the read-only
+  instructions keep the agent from using it. In a council, that would
+  happen once per agent: five agents, five comments. Each agent also
+  starts every server it loads, so a server that does something merely
+  by starting does it once per agent. Claude Code and Codex agents run
+  an MCP tool only if your settings or config (or, for Claude Code, the
+  analyzed project's settings) already allow it, since
+  they can't ask (see [Choosing a harness](#choosing-a-harness)); pi
+  agents can call any MCP tool pi gives them. The read-only instructions
+  tell agents not to act outside the machine (post, comment, or change
+  records), but they are only instructions. Before a run, remove or
+  disable servers you don't want agents to have (in pi, Claude Code, or
+  Codex's own config, the analyzed project's, or the extension or
+  plugin that provides them; Codex's apps connectors are its `apps`
+  feature), or run in an environment without them.
+- **pi agents can call other models.** `codemode`, which every pi agent
+  gets (it's how pi reaches MCP tools), whether or not any MCP server is
+  configured, also gives scripts pi's `models` API
+  (`models.classify`, `models.generateImages`), which sends what a
+  script passes it to any model pi has credentials for, billed to you
+  (its usage is counted in the agent's). The read-only instructions
+  don't limit it.
 - **Your pi extensions, your Claude Code hooks and plugins, and your
   Codex skills, plugins, and trusted hooks, load.**
-  `--no-mcp` turns off only pi's built-in
-  MCP support. Extensions you've installed load for every pi agent, as
-  you, and one that provides its own MCP support can still start servers.
+  Extensions you've installed load for every pi agent, as you.
   Your Claude Code hooks and plugins run for every Claude Code agent, as
   you, and so do hooks the analyzed repository's `.claude` settings
   define (see the next item). Agents also get Claude Code's auto memory

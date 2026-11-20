@@ -35,7 +35,7 @@ RSpec.describe AgentCouncil::Harnesses do
 
   # What AgentCouncil calls on every harness (see harnesses.rb).
   it 'gives every harness the whole interface' do
-    interface = %i[prepare argv usage error_message exit_detail warnings final_response assistant_messages]
+    interface = %i[argv usage error_message exit_detail warnings final_response assistant_messages]
     described_class::BY_NAME.each_value do |harness|
       expect(harness).to respond_to(*interface)
     end
@@ -46,12 +46,8 @@ RSpec.describe AgentCouncil::Harnesses do
   end
 
   # The startup check looks for NAME on PATH, so it must be what argv runs.
-  # prepare runs first, as the startup check runs it; CodexHarness's lists
-  # MCP servers, stubbed here so no real codex runs.
   it 'runs each harness as its NAME' do
-    allow(Open3).to receive(:capture3).and_return(['[]', '',
-      instance_double(Process::Status, success?: true)])
-    runs_as_name = satisfy { |harness| harness.prepare.nil? && harness.argv('p', 'm').first == harness::NAME }
+    runs_as_name = satisfy { |harness| harness.argv('p', 'm').first == harness::NAME }
     expect(described_class::BY_NAME.values).to all(runs_as_name)
   end
 
@@ -74,6 +70,7 @@ RSpec.describe AgentCouncil::Harnesses do
     # Safety-critical invariants; deliberate rewording should update these.
     it 'states the read-only rules' do
       expect(scaffold).to match(/do not modify/i)
+      expect(scaffold).to match(/do not act outside this machine/i) # agents may have MCP tools that write
       expect(scaffold).to match(/test suites/i) # no stateful commands...
       expect(scaffold).to match(/unless the user's prompt explicitly permits/i) # ...unless the prompt allows
     end

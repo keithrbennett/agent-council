@@ -1159,7 +1159,7 @@ module AgentCouncil
     end
 
     # A consolidator of false, like nil, means none, as in the check above.
-    abort_unless_harnesses_ready(consolidator ? [*agents, consolidator] : agents)
+    abort_unless_harnesses_installed(consolidator ? [*agents, consolidator] : agents)
 
     # One run dir per invocation, day-bucketed so the reports dir stays
     # navigable at volume: <reports dir>/<yyyy-mm-dd>/<hh-mm-ss>/. The dir name is pure time
@@ -1331,7 +1331,7 @@ module AgentCouncil
     prompt = File.read(prompt_path, encoding: ENCODING)
     abort "Prompt copy is empty: #{prompt_path}" if prompt.empty?
 
-    abort_unless_harnesses_ready([consolidator])
+    abort_unless_harnesses_installed([consolidator])
 
     # In the same key order as a normal run's front matter.
     meta = fields.slice('role', 'timestamp', 'query', 'prompt_file', 'config_file', 'config_source',
@@ -1432,21 +1432,17 @@ module AgentCouncil
 
   # Checked up front, before any run dir is created or model called: the
   # executable of every harness the config entries use (validated ones, so
-  # each harness is known), then each harness's prepare (see Harnesses),
-  # once per run, before any agent runs.
-  module_function def abort_unless_harnesses_ready(entries)
-    harnesses = entries.map { |entry| Harnesses.module_for(entry) }.uniq
-    missing = harnesses.map { |harness| harness::NAME }.reject { |name| executable_on_path?(name) }
-    unless missing.empty?
-      lines = missing.map { |name| "#{name} executable not found; is `#{name}` installed and on your PATH?" }
-      abort <<~MESSAGE
-        #{lines.join("\n")}
-        See "Prerequisites" in #{File.join(PROJECT_ROOT, 'README.md')}
-      MESSAGE
-    end
+  # each harness is known).
+  module_function def abort_unless_harnesses_installed(entries)
+    names = entries.map { |entry| Harnesses.module_for(entry)::NAME }.uniq
+    missing = names.reject { |name| executable_on_path?(name) }
+    return if missing.empty?
 
-    errors = harnesses.filter_map { |harness| harness.prepare }
-    abort errors.join("\n") unless errors.empty?
+    lines = missing.map { |name| "#{name} executable not found; is `#{name}` installed and on your PATH?" }
+    abort <<~MESSAGE
+      #{lines.join("\n")}
+      See "Prerequisites" in #{File.join(PROJECT_ROOT, 'README.md')}
+    MESSAGE
   end
 
   # After Ctrl-C (or another signal WorkerPool#trap_signals traps):

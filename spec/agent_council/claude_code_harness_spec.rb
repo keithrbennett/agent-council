@@ -50,8 +50,10 @@ RSpec.describe AgentCouncil::Harnesses::ClaudeCodeHarness do
       expect(value_of('--permission-mode')).to eq('manual')
     end
 
-    it 'loads no MCP servers' do
-      expect(argv).to include('--strict-mcp-config')
+    # MCP servers load as in an interactive session; -p can't ask, so
+    # their tools run only where the user's settings allow them.
+    it 'leaves MCP to Claude Code settings' do
+      expect(argv).not_to include('--strict-mcp-config')
       expect(argv).not_to include('--mcp-config')
     end
 

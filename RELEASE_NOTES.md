@@ -9,20 +9,39 @@
   - Codex agents run as an interactive session would: your Codex config
     applies, its `sandbox_mode` included, and so do the project's
     `AGENTS.md` files. `codex exec` never asks for approval, whatever
-    your `approval_policy`, so a command that would need it is refused. Under Codex's default `read-only`
-    sandbox they get no scratch space; under `workspace-write` they can
+    your `approval_policy`, so a command that would need it is refused.
+    Under Codex's default `read-only` sandbox they get no scratch space; under `workspace-write` they can
     also write the analyzed repository (see "Codex's sandbox" in the
     README).
-  - Unlike pi and Claude Code agents, Codex agents keep Codex's whole
-    toolset, file editing and subagents included, since Codex can't
-    withhold tools.
-  - MCP is off: the bundled apps connectors are disabled, and every MCP
-    server your Codex config or the project's defines is turned off by
-    name. The servers are listed once per run with `codex mcp list`; if
-    that fails, the run stops before any agent starts.
+  - Unlike pi and Claude Code agents, whose built-in tools are limited,
+    Codex agents keep Codex's whole built-in toolset, file editing and
+    subagents included, since Codex can't withhold tools.
+  - Codex agents get your MCP servers (see below), but `codex exec` never
+    asks for approval, so an MCP tool call is refused unless your config
+    approves the tool in advance (e.g. `default_tools_approval_mode =
+    "approve"` on the server). Refused and failed MCP calls are warnings.
   - Codex reports no cost, so a Codex agent's cost is blank, and a run's
     total shows no cost when a Codex agent reported usage.
   - `mixed-harness.yml` gains a Codex analyst.
+- Agents in every harness now get the MCP servers you've configured for
+  it, as an interactive session would, instead of none: pi is no longer
+  run with `--no-mcp`, and Claude Code no longer with
+  `--strict-mcp-config`. Claude Code agents run only the MCP tools your
+  permission rules allow, since `-p` can't ask; refused calls are
+  warnings, as before. This is a risk to weigh: a server that writes is
+  available to every agent, and one that acts on startup acts once per
+  agent. See "Agents get your MCP servers" in the README's Safety
+  section. `pi-models` still passes `--no-mcp`. pi's tool allowlist gains
+  `codemode` (how pi exposes MCP tools by default), `mcp__*` (for servers
+  with direct exposure), `tool_search` (for servers with deferred
+  exposure), and pi's MCP resource tools.
+- pi agents' usage now includes what their tools report, such as a
+  `codemode` script's `models.classify` calls. `codemode` gives scripts
+  pi's `models` API, which can call any model pi has credentials for;
+  see "pi agents can call other models" in the README's Safety section.
+- The scaffolding gains a rule: agents must not act outside the machine
+  (post, comment, send messages, or change remote data) with any tool,
+  MCP tools included.
 
 ## 0.2.0 (2026-11-19)
 

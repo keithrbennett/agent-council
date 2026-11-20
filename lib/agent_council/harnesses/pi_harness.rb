@@ -19,13 +19,17 @@ module AgentCouncil
       # Analysis toolset (pi's built-in tool names): edit/write (and the
       # Windows-only powershell) are withheld. bash, a full shell, stays for
       # investigation (git log/status, dependency inspection, ...); only the
-      # scaffolding text asks the model to use it read-only.
-      TOOLS = 'read,grep,find,ls,bash'
-
-      # Nothing to do once per run (see Harnesses).
-      module_function def prepare
-        nil
-      end
+      # scaffolding text asks the model to use it read-only. The rest give
+      # agents the MCP tools pi gives an interactive session, however a
+      # server exposes them: codemode for the default exposure (a server's
+      # tools are called from a codemode script, which reaches only the
+      # tools listed here), mcp__* for servers with direct exposure,
+      # tool_search for servers with deferred exposure (it loads only MCP
+      # tools, not withheld built-in ones), and pi's MCP resource tools,
+      # which --tools would drop once it names an mcp__ entry.
+      TOOLS = %w[read grep find ls bash
+        codemode mcp__* tool_search
+        list_mcp_resources list_mcp_resource_templates read_mcp_resource].join(',')
 
       # Invocation for one agent. The substantive prompt is not part of argv;
       # it is piped to stdin (byte-identical for every analyst; the
@@ -36,7 +40,6 @@ module AgentCouncil
           '-p',               # non-interactive: process prompt and exit
           '--mode', 'json',   # JSONL event stream on stdout
           '--no-session',     # ephemeral: no session state between agents
-          '--no-mcp',         # built-in MCP off: configured servers don't start
           '--tools', TOOLS,
           '--provider', provider,
           '--model', model,
@@ -49,6 +52,12 @@ module AgentCouncil
       # The assistant message from a single pi JSONL line, or nil if the line
       # is not an assistant message_end event.
       module_function def assistant_message_from_line(line)
+        message_from_line(line, %w[assistant])
+      end
+
+      # The message with one of the given roles from a single pi JSONL line,
+      # or nil if the line is not a message_end event for one.
+      module_function def message_from_line(line, roles)
         event =
           begin
             JSON.parse(line)
@@ -60,7 +69,7 @@ module AgentCouncil
         return nil unless event['type'] == 'message_end'
 
         message = event['message']
-        return nil unless message && message['role'] == 'assistant'
+        return nil unless message.is_a?(Hash) && roles.include?(message['role'])
 
         message
       end
@@ -97,12 +106,14 @@ module AgentCouncil
                      'cache_read' => 'cacheRead', 'cache_write' => 'cacheWrite' }.freeze
 
       # Token usage summed over all assistant messages (each is a separate
-      # model request), as AgentCouncil expects it: integer 'input', 'output',
-      # 'cache_read', and 'cache_write', plus 'cost' in US dollars when pi
-      # priced the usage. nil when the stream reports no usage, as some
-      # providers don't.
+      # model request) and tool results, as AgentCouncil expects it: integer
+      # 'input', 'output', 'cache_read', and 'cache_write', plus 'cost' in US
+      # dollars when pi priced the usage. A tool result has usage when the
+      # tool called a model itself, e.g. a codemode script's models.classify
+      # call. nil when the stream reports no usage, as some providers don't.
       module_function def usage(jsonl)
-        usages = assistant_messages(jsonl).map { |m| m['usage'] }.grep(Hash)
+        messages = jsonl.each_line.filter_map { |line| message_from_line(line, %w[assistant toolResult]) }
+        usages = messages.map { |m| m['usage'] }.grep(Hash)
         totals = USAGE_KEYS.transform_values { |key| usages.sum { |u| count(u[key]) } }
         return nil if totals.values.all?(&:zero?)
 
@@ -143,7 +154,9 @@ module AgentCouncil
         stderr.lines.map(&:strip).reject(&:empty?).first || 'no error output'
       end
 
-      # Warnings about an agent that succeeded; pi's stream has none to give.
+      # Warnings about an agent that succeeded: none. A failed tool call,
+      # MCP calls included, is an ordinary tool error the agent sees, not a
+      # refusal (DESIGN.md §11).
       module_function def warnings(_jsonl)
         []
       end

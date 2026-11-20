@@ -31,9 +31,11 @@ own permission rules, and neither is tested.
 
 ## Accepted risk: Codex agents keep Codex's whole toolset
 
-pi and Claude Code agents get a fixed allowlist of read and shell tools,
-but Codex agents keep all of Codex's built-in tools, `apply_patch` (file
-editing) and the subagent tools (`spawn_agent` and others) included.
+pi and Claude Code agents get an allowlist of built-in read and shell
+tools (plus MCP tools: for pi, the tools that reach them; for Claude
+Code, those permission rules allow), but Codex agents keep all
+of Codex's built-in tools, `apply_patch` (file editing) and the subagent
+tools (`spawn_agent` and others) included.
 codex-cli 0.167.0 has no option that withholds them:
 `--disable multi_agent`, `-c features.multi_agent=false`, and
 `-c include_apply_patch_tool=false` each left them in the rendered
@@ -44,6 +46,22 @@ default, allows nothing; `workspace-write` allows the analyzed
 repository). The README's "Choosing a harness" and "Safety and privacy"
 sections state it. If Codex gains a way to withhold tools, use it and
 remove this entry.
+
+## Accepted risk: agents get the user's MCP servers
+
+Every harness loads the MCP servers it would load interactively, so an
+agent can reach a server that writes (posts, comments, changes tickets
+or records), Codex's apps connectors (GitHub and others) included:
+agent-council no longer passes `--disable apps`. For pi agents only the scaffolding's rule against acting
+outside the machine holds them back; Claude Code and Codex agents run
+an MCP tool only if the user's settings or config (or, for Claude
+Code, the analyzed project's settings) already allow it.
+Withholding MCP made agents worse at the user's own work and, for
+Codex, failed every agent when a plugin's server was listed (DESIGN.md
+§11). Every pi agent also gets `codemode`, and with it pi's `models`
+API, which can send what a script passes it to other models at the
+user's expense. The README's Safety section states these risks and
+where to turn each kind of server off.
 
 ## Accepted risk: --consolidate leaves out provider-less agents of c60b7f8 runs
 

@@ -4,8 +4,8 @@
 # a config entry gives in its 'harness' key. What they share, the read-only
 # scaffolding, is in harnesses/scaffold.rb.
 #
-# Each harness is a plain module shaped like PiHarness (NAME, prepare,
-# argv, usage, error_message, exit_detail, warnings, final_response,
+# Each harness is a plain module shaped like PiHarness (NAME, argv, usage,
+# error_message, exit_detail, warnings, final_response,
 # assistant_messages), not an adapter framework; AgentCouncil looks one up
 # per agent with module_for. NAME is both the config value and the
 # executable argv runs, which the startup check looks for on PATH. The
@@ -13,11 +13,6 @@
 # scratch dir, so a harness must pass TMPDIR through to its tools. It also
 # goes into report filenames unsanitized, so it must be one
 # AgentCouncil.sanitize leaves unchanged (the specs check this).
-#
-# prepare does whatever a harness needs once per run before argv can be
-# called (e.g. CodexHarness lists the MCP servers to turn off); the startup
-# check calls it, in the main thread, and aborts the run with the error
-# message it returns, or goes on if it returns nil.
 #
 # exit_detail (stdout, stderr) says why an agent that exited nonzero failed;
 # the caller puts it, and error_message's reason, on one line cut to 300

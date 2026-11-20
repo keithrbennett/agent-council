@@ -21,6 +21,10 @@ module AgentCouncil
           configuration file. Do not change git state, install or remove
           software, modify user or system configuration, or start persistent
           services.
+        - Do not act outside this machine, with any tool (MCP tools
+          included): do not post, comment, send messages, or create or
+          change issues, tickets, records, or other remote data. Reading
+          remote information is fine.
         - Do not run test suites, builds, coverage tools, application servers,
           or database tasks unless the user's prompt explicitly permits it:
           other agents may be running concurrently and such commands can collide

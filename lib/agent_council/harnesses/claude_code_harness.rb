@@ -23,11 +23,6 @@ module AgentCouncil
       # only the scaffolding text asks the model to use it read-only.
       TOOLS = 'Read,Grep,Glob,Bash'
 
-      # Nothing to do once per run (see Harnesses).
-      module_function def prepare
-        nil
-      end
-
       # Invocation for one agent. The substantive prompt is not part of
       # argv; it is piped to stdin. provider is not passed: Claude Code
       # takes none, so an entry's provider only labels the agent (e.g.
@@ -42,7 +37,6 @@ module AgentCouncil
           '--tools', TOOLS,                  # the only built-in tools available
           '--allowedTools', TOOLS,           # ...and pre-approved, since -p can't ask
           '--permission-mode', 'manual',     # the same for every user, whatever their defaultMode
-          '--strict-mcp-config',             # with no --mcp-config: no MCP servers
           '--model', model,
           '--append-system-prompt', Harnesses.scaffold_text
         ]

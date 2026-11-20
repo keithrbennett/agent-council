@@ -434,11 +434,10 @@ RSpec.describe 'agent-council end to end' do
       .to include("- #2 anthropic / stuck (harness: claude): #{reason}; warning: #{warning}\n")
   end
 
-  # A fake codex. `codex mcp list --json` lists one server, srv, or exits 1
-  # if bin_dir/mcp_fails exists. `codex exec` saves its argv, one argument
-  # per line, to bin_dir/codex_argv_<model>, then answers by model: split
-  # with a split report, anything else with a plain one, with a non-fatal
-  # error item first.
+  # A fake codex. `codex exec` saves its argv, one argument per line, to
+  # bin_dir/codex_argv_<model>, then answers by model: split with a split
+  # report, anything else with a plain one, with a non-fatal error item
+  # first.
   def write_fake_codex
     turn = JSON.generate(type: 'turn.completed', usage: { input_tokens: 1200, cached_input_tokens: 200,
                                                           cache_write_input_tokens: 0, output_tokens: 200 })
@@ -452,10 +451,6 @@ RSpec.describe 'agent-council end to end' do
     fake_codex = File.join(bin_dir, 'codex')
     File.write(fake_codex, <<~SH)
       #!/usr/bin/env bash
-      if [ "$1 $2" = "mcp list" ]; then
-        [ -e '#{bin_dir}/mcp_fails' ] && { echo 'Error: failed to load config' >&2; exit 1; }
-        echo '[{"name":"srv"}]'; exit 0
-      fi
       model=; prev=
       for arg in "$@"; do [ "$prev" = --model ] && model=$arg; prev=$arg; done
       printf '%s\\n' "$@" >"#{bin_dir}/codex_argv_$model"
@@ -468,7 +463,7 @@ RSpec.describe 'agent-council end to end' do
     File.chmod(0o755, fake_codex)
   end
 
-  it 'runs codex agents with their MCP servers and apps turned off' do
+  it 'runs codex agents, the consolidator included' do
     write_fake_codex
     config = { 'agents'       => [{ 'harness' => 'codex', 'provider' => 'openai', 'model' => 'm1' }],
                'consolidator' => { 'harness' => 'codex', 'provider' => 'openai', 'model' => 'split' } }
@@ -479,7 +474,8 @@ RSpec.describe 'agent-council end to end' do
     expect(status.exitstatus).to eq(0), output_report
     %w[m1 split].each do |model|
       argv = File.read(File.join(bin_dir, "codex_argv_#{model}")).lines(chomp: true)
-      expect(argv.each_cons(2)).to include(%w[--disable apps], ['-c', 'mcp_servers={srv={enabled=false}}'])
+      expect(argv.first(2)).to eq(%w[exec --json])
+      expect(argv.each_cons(2)).to include(['--model', model])
     end
     fields, body = AgentCouncil.parse_front_matter(File.read(reports('reviews/*_codex_*').first))
     expect(fields.values_at('harness', 'provider', 'model')).to eq(%w[codex openai m1])
@@ -489,21 +485,6 @@ RSpec.describe 'agent-council end to end' do
     run = JSON.parse(File.read(reports('run.json').first))
     expect(run['analysts'].first['usage'])
       .to eq('input' => 1000, 'output' => 200, 'cache_read' => 200, 'cache_write' => 0)
-  end
-
-  it "aborts before any agent runs when codex can't list its MCP servers" do
-    write_fake_codex
-    FileUtils.touch(File.join(bin_dir, 'mcp_fails'))
-    config = { 'agents' => [{ 'harness' => 'codex', 'provider' => 'openai', 'model' => 'm1' }] }
-    File.write(File.join(work_dir, 'config.yml'), YAML.dump(config))
-
-    status = run_council
-
-    expect(status.exitstatus).to eq(1), output_report
-    expect(File.read(err_path))
-      .to include("codex: can't list Codex's MCP servers to turn them off: Error: failed to load config")
-    expect(File).not_to exist(File.join(bin_dir, 'codex_argv_m1'))
-    expect(File).not_to exist(File.join(work_dir, 'agent-council-reports'))
   end
 
   it 'writes the run dir under --output-dir when given' do
