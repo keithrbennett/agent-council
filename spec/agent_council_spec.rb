@@ -324,6 +324,7 @@ RSpec.describe AgentCouncil do
       other = Module.new do
         const_set(:NAME, 'other')
         module_function def argv(provider, model) = ['sh', '-c', "echo #{provider}-#{model}"]
+        module_function def env(_scratch_dir) = {}
         module_function def usage(_stdout) = { 'input' => 1, 'output' => 2 }
         module_function def error_message(_stdout) = nil
         module_function def final_response(stdout) = "answer from #{stdout.strip}"
@@ -344,19 +345,32 @@ RSpec.describe AgentCouncil do
       expect(body).to eq("answer from p-m\n")
     end
 
-    it "sets the scratch dir as the agent's TMPDIR and CLAUDE_CODE_TMPDIR, and nothing else" do
+    # The env each agent's process got, from a capture3 that succeeds with
+    # no output.
+    def captured_envs
       envs = []
       allow(Open3).to receive(:capture3) do |env, *_argv, **_opts|
         envs << env
         ['', '', instance_double(Process::Status, success?: true)]
       end
+      envs
+    end
+
+    it "sets the scratch dir as the agent's TMPDIR, and nothing else under pi" do
+      envs = captured_envs
       allow(pi_harness).to receive_messages(error_message: nil, final_response: 'answer')
       described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
       expect(envs.size).to eq(1)
-      expect(envs.first.keys).to contain_exactly('TMPDIR', 'CLAUDE_CODE_TMPDIR')
-      expect(envs.first['CLAUDE_CODE_TMPDIR']).to eq(envs.first['TMPDIR'])
+      expect(envs.first.keys).to contain_exactly('TMPDIR')
       expect(File.basename(envs.first['TMPDIR'])).to start_with('agent-council-')
       expect(File.dirname(envs.first['TMPDIR'])).to eq(File.realpath(Dir.tmpdir)).or eq(Dir.tmpdir)
+    end
+
+    it "adds the harness's own variables, such as Claude Code's CLAUDE_CODE_TMPDIR" do
+      envs = captured_envs
+      described_class.run_agent(agent.merge('harness' => 'claude'), 'prompt', run_dir, 'prefix')
+      expect(envs.first.keys).to contain_exactly('TMPDIR', 'CLAUDE_CODE_TMPDIR')
+      expect(envs.first['CLAUDE_CODE_TMPDIR']).to eq(envs.first['TMPDIR'])
     end
 
     it 'deletes the scratch dir after a successful agent' do
@@ -808,7 +822,7 @@ RSpec.describe AgentCouncil do
           'agents' entry #2 in config.yml is missing 'harness' and 'provider'
           'agents' entry #3 in config.yml is missing 'provider'
           'consolidator' in config.yml is missing 'harness'
-          Every entry needs 'harness', 'provider', and 'model' (harness: pi, claude, codex).
+          Every entry needs 'harness', 'provider', and 'model' (harness: pi, claude, codex, opencode).
         ERR
       expect(File).not_to exist('agent-council-reports')
     end
@@ -820,7 +834,7 @@ RSpec.describe AgentCouncil do
       File.write('config.yml', YAML.dump('agents' => [harnessless, harnessless.dup]))
       expect { described_class.main(['p_prompt.md', 'config.yml']) }
         .to raise_error(SystemExit)
-        .and output(a_string_ending_with("codex).\n#{described_class::MISSING_HARNESS_HINT}\n"))
+        .and output(a_string_ending_with("opencode).\n#{described_class::MISSING_HARNESS_HINT}\n"))
         .to_stderr
     end
 
@@ -2137,13 +2151,13 @@ RSpec.describe AgentCouncil do
       expect(described_class.entry_error('oops')).to end_with(', but is a string')
       expect(described_class.entry_error([entry])).to eq(
         "must be a mapping giving 'harness', 'provider', and 'model' " \
-        '(harness: pi, claude, codex), but is a list'
+        '(harness: pi, claude, codex, opencode), but is a list'
       )
     end
 
     it 'names a value that is not a string, and its kind' do
       expect(described_class.entry_error(entry.merge('model' => 2026, 'harness' => false))).to eq(
-        "gives 'harness' as a boolean, false, not a string (known: pi, claude, codex); " \
+        "gives 'harness' as a boolean, false, not a string (known: pi, claude, codex, opencode); " \
         "gives 'model' as a number, 2026, not a string (quote it)"
       )
     end
@@ -2158,7 +2172,7 @@ RSpec.describe AgentCouncil do
 
     it 'reports an unknown harness along with the other problems' do
       expect(described_class.entry_error({ 'harness' => 'nope', 'model' => 'm' })).to eq(
-        "is missing 'provider'; names an unknown harness, \"nope\" (known: pi, claude, codex)"
+        "is missing 'provider'; names an unknown harness, \"nope\" (known: pi, claude, codex, opencode)"
       )
     end
 

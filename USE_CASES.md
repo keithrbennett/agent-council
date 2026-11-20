@@ -110,7 +110,7 @@ saved.
 - Comparing providers serving the same model, on latency, price, and
   reliability.
 - Comparing harnesses running the same model (say, pi and Claude Code,
-  or pi and Codex), on
+  pi and Codex, or pi and OpenCode, which can also share a provider), on
   speed, cost, and what they find.
 - Finding out which listed models your plan actually covers.
 

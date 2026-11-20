@@ -9,7 +9,8 @@ cost, and quality.
 agent-council runs the **same analytical prompt** through each agent,
 under the coding-agent harness each one names: the
 [Pi](https://github.com/earendil-works/pi) harness, for any provider's
-models; [Claude Code](https://code.claude.com/docs), for Anthropic's,
+models; [OpenCode](https://opencode.ai/docs/cli), likewise for any
+provider's; [Claude Code](https://code.claude.com/docs), for Anthropic's,
 billed however your `claude` login is; or
 [Codex](https://developers.openai.com/codex/cli), for OpenAI's, billed
 however your `codex` login is. The agents can use any mix of
@@ -139,7 +140,7 @@ in detail.
    [`pi` CLI](https://github.com/earendil-works/pi) (`pi --version`). See
    [Prerequisites](#prerequisites), or [INSTALL.md](INSTALL.md) if you
    need to install Ruby too. These steps run every agent under pi; to
-   run agents under Claude Code or Codex as well, or instead (then
+   run agents under OpenCode, Claude Code, or Codex as well, or instead (then
    without pi), see [Choosing a harness](#choosing-a-harness).
 2. **Set up credentials for at least one provider in pi** (see
    [pi's documentation][pi-docs]), then list the models available to pi
@@ -227,9 +228,14 @@ consolidator, see
   - for Codex: the [`codex` CLI](https://developers.openai.com/codex/cli)
     (`codex --version`; tested with 0.167.0, and earlier versions may
     lack flags agent-council passes), logged in with a ChatGPT plan or
-    an API key.
+    an API key;
+  - for OpenCode: the [`opencode` CLI](https://opencode.ai/docs/cli)
+    (`opencode --version`; tested with 1.19.6; 1.2.4 ignores
+    `OPENCODE_DB`, so its agents' sessions would be saved to your
+    history), with credentials for at least one provider
+    (`opencode auth login`).
 
-  agent-council runs the `pi`, `claude`, and `codex` executables found on its
+  agent-council runs the `pi`, `opencode`, `claude`, and `codex` executables found on its
   `PATH`, not your shell's aliases or functions of those names. If yours
   add something, such as an environment variable or a directory on
   `PATH`, set it in the environment you run agent-council from (for
@@ -241,7 +247,7 @@ consolidator, see
   ([INSTALL.md](INSTALL.md) has the steps). Windows drives are reachable
   at `/mnt/c/...`, but file access there is much slower than in the Linux
   filesystem (e.g. `~/projects`). Set up pi's provider credentials (and
-  log in to Claude Code or Codex) inside WSL too; WSL doesn't share them
+  log in to OpenCode, Claude Code, or Codex) inside WSL too; WSL doesn't share them
   with Windows.
 
 ## Installation
@@ -327,7 +333,7 @@ agent, and the consolidator, needs nonblank string `harness`,
 `provider`, and `model` values (quote any value YAML would read as
 something else, such as a number, a date, or `yes`). None has a default;
 a 0.1.0 config needs `harness: pi` added to each entry. `harness` names
-the harness the entry runs under, `pi`, `claude`, or `codex`; an unknown name is
+the harness the entry runs under, `pi`, `claude`, `codex`, or `opencode`; an unknown name is
 rejected at startup (with `--consolidate`, only the consolidator's,
 since no analysts run). Other keys are ignored. A config error lists
 every bad entry, named as in `'agents' entry #2` or `'consolidator'`,
@@ -335,7 +341,7 @@ with every problem it has.
 
 More samples are in [`examples/configs/`](examples/configs/), which is
 included in the installed gem; `mixed-harness.yml` mixes pi, Claude
-Code, and Codex agents. For scripts and agents,
+Code, Codex, and OpenCode agents. For scripts and agents,
 [`pi-models`](#occasional-utility-pi-models) lists the models in
 machine-readable forms.
 
@@ -446,13 +452,14 @@ agents:
   what an agent can write is whatever your `sandbox_mode` allows (see
   [Codex's sandbox](#codexs-sandbox)). The read-only rules are
   given as `developer_instructions`, which replaces any your config sets.
-- **Tools.** Unlike pi and Claude Code agents, whose built-in tools are
-  limited to read and shell tools (plus MCP tools, as described here),
-  Codex agents keep Codex's whole built-in toolset, including its
-  file-editing tool (`apply_patch`) and its subagent tools: this Codex
-  version has no way to withhold them. The subagent tools fail, though,
-  since agent-council runs Codex with `--ephemeral` (no session files),
-  which subagents need, so a Codex agent works alone.
+- **Tools.** Codex agents keep Codex's whole built-in toolset,
+  including its file-editing tool (`apply_patch`) and its subagent
+  tools: this Codex version has no way to withhold them. (pi and Claude
+  Code agents get only read and shell tools, plus MCP tools, as
+  described here, and OpenCode agents lose their file-editing tools.)
+  The subagent tools fail, though, since agent-council runs Codex with
+  `--ephemeral` (no session files), which subagents need, so a Codex
+  agent works alone.
 - **MCP tools need approval in your config.** Your MCP servers load (see
   [Safety and privacy](#safety-and-privacy)), but `codex exec` never asks
   for approval, so an agent's MCP tool call is refused unless your config
@@ -462,11 +469,85 @@ agents:
   warning, recorded the same way as Claude Code's refused calls.
 - **Outside a git repository.** Codex normally refuses to run outside one
   it trusts; agent-council passes `--skip-git-repo-check`, so Codex agents
-  run wherever pi and Claude Code agents do.
+  run wherever pi, Claude Code, and OpenCode agents do.
 - **Warnings.** Errors Codex reports without failing the agent (such as
   missing metadata for a model name) are printed as one warning, and
   failed MCP tool calls (such as those refused for lack of approval) as
   another, each recorded the same way as Claude Code's refused calls.
+
+An entry with `harness: opencode` runs under
+[OpenCode](https://opencode.ai/docs/cli) (`opencode run`), which, like
+pi, reaches many providers, so a council can compare one model under
+both:
+
+```yaml
+agents:
+  - harness: opencode
+    provider: opencode-go
+    model: glm-5.3
+  - harness: pi
+    provider: opencode-go
+    model: glm-5.3
+```
+
+- **Models.** Unlike Claude Code's and Codex's, `provider` is passed:
+  the agent runs `--model <provider>/<model>`, so give a provider and a
+  model as `opencode models` lists them, split at the first `/`.
+- **Billing.** agent-council leaves authentication and billing to
+  OpenCode: an agent uses the credentials `opencode auth login` saved.
+  Cost is OpenCode's estimate from its own model catalog (see
+  [How far to trust the cost](#how-far-to-trust-the-cost)).
+- **Context.** Each agent runs as an interactive session started in your
+  project would: your OpenCode config, plugins, and MCP servers apply,
+  and so do the project's `AGENTS.md` files and `opencode.json`. On top
+  of that, agent-council sets `OPENCODE_CONFIG_CONTENT`, which OpenCode
+  merges over your config and the project's: it adds the read-only
+  rules as an `instructions` file and sets `permission.edit` to `deny`,
+  globally and for the `build`, `general`, and `explore` agents, and
+  keeps `build` enabled and primary, so a per-agent setting in your
+  config or the project's can't allow editing again for the agent your
+  agents run as (see **Tools** for subagents). It also turns off
+  snapshots (see **No session history**). A value of your own for
+  `OPENCODE_CONFIG_CONTENT` is replaced. One for `OPENCODE_PERMISSION`
+  is kept: it applies over the global permission, but not over the
+  per-agent denials, so its other rules (such as `"bash": "deny"`)
+  still apply (checked).
+- **Agent.** Agents run as OpenCode's `build` agent (`--agent build`),
+  whatever `default_agent` your config or the project's names.
+- **A `.gitignore` in the project's `.opencode` directory.** If the
+  analyzed project has a `.opencode` directory, OpenCode writes a
+  `.gitignore` there (for the dependencies its plugins install), as an
+  interactive session would (checked).
+- **Tools.** The edit permission withholds OpenCode's file-editing
+  tools (checked, with the project's config and `OPENCODE_PERMISSION`
+  both allowing them); `bash` and the rest of its tools stay, its
+  subagent tool (`task`) included. A subagent your config or the
+  project's allows to edit keeps its editing tools: a custom subagent,
+  or `general` or `explore` given editing through the legacy `mode`
+  key (checked: a project's custom subagent wrote a file).
+- **No session history.** Each agent gets `OPENCODE_DB` pointing at a
+  database in its scratch directory, so its session isn't added to your
+  OpenCode history and is deleted with the directory. Snapshots, which
+  OpenCode uses for undo, are turned off; otherwise each run would copy
+  the project's untracked files (a `.env`, say) into a git store in
+  OpenCode's data directory (`~/.local/share/opencode/snapshot`), kept
+  after the run (checked). OpenCode still writes its logs there, and
+  may save the full output of a tool call it truncates, as an
+  interactive session does.
+- **Permissions that ask are refused.** `opencode run` can't ask, so a
+  tool call your permissions set to `ask` is refused, and agent-council
+  warns of it. OpenCode's own defaults ask too: for files outside the
+  project (`external_directory`, which includes an agent's scratch
+  directory when read with the `read` tool), for reading `.env` files,
+  and for a call repeated three times (`doom_loop`). A refusal would end
+  the agent's session, so agent-council sets
+  `experimental.continue_loop_on_deny`, and the agent goes on without
+  the call, as under the other harnesses (checked). To let agents make
+  such a call, allow it in your permissions. MCP tools need no
+  permission by default, so agents can call them (checked).
+- **Subagents' usage is missing.** A subagent's tokens and cost aren't
+  in the agent's event stream, so an agent that starts subagents
+  reports less usage than it caused (checked).
 
 ## Running
 
@@ -658,7 +739,9 @@ Ctrl-C (or SIGTERM, SIGHUP, or SIGQUIT) stops the run, keeping reports
 already written:
 
 - Running agents, the consolidator included, get SIGTERM (pi, Claude
-  Code, and Codex then also stop the commands they started) and a shared 5 seconds to exit before
+  Code, and Codex then also stop the commands they started; OpenCode
+  doesn't, and didn't exit within the 5 seconds in a check with 1.19.6)
+  and a shared 5 seconds to exit before
   they are killed. A killed agent can't stop the commands it started, so
   those may keep running.
 - A second SIGINT, SIGTERM, or SIGQUIT kills them at once; further SIGHUPs
@@ -833,7 +916,7 @@ agent-council-reports/
   `<agent-number>`, and, if the report was split, ends in `_findings` or `_meta` before `.md`); `<hh-mm-ss>` includes the run dir's suffix, if any,
   and `<provider>` and `<model>` are sanitized like the query slug below,
   but keep their case. `<harness>` is the agent's (or consolidator's)
-  `harness` config value, `pi`, `claude`, or `codex` (see
+  `harness` config value, `pi`, `claude`, `codex`, or `opencode` (see
   [Choosing a harness](#choosing-a-harness)).
   `<agent-number>` is the agent's 1-based position in the config's
   `agents` list (`01`, `02`, ...), so every report has a unique name even
@@ -894,12 +977,15 @@ agent-council-reports/
   script's `models.classify` calls), as reported by the harness: `input` (excluding cached input),
   `cache_read`, `cache_write`, and `output` token counts, plus `cost` in
   US dollars when the harness could price the usage (pi uses its own price
-  table, so models missing from it have no cost; Claude Code prices usage
+  table, so models missing from it have no cost; OpenCode uses its own
+  model catalog; Claude Code prices usage
   at Anthropic's API list prices; Codex prices nothing, so a Codex
   agent has no cost), recorded as the harness reports it,
   only rounded to six decimal places. It is an estimate, not what you're
   billed; see [How far to trust the cost](#how-far-to-trust-the-cost).
-  `usage` is `null` when the provider reports no usage.
+  `usage` is `null` when the provider reports no usage. An OpenCode
+  agent's `usage` leaves out its subagents' (see
+  [Choosing a harness](#choosing-a-harness)).
 
   `--consolidate` relies on the analysts' `prompt_file`, `config_file`,
   `run_stamp`, and `query`, and on `agent_index` to tell which configured
@@ -994,13 +1080,15 @@ from per-token prices, not a bill, and it can be far off in either
 direction:
 
 - **Subscriptions.** On a subscription or plan (a Claude Code login, a
-  Codex ChatGPT login, or a plan-based pi provider), the estimate is what the usage would cost
+  Codex ChatGPT login, or a plan-based pi or OpenCode provider such as
+  `opencode-go`), the estimate is what the usage would cost
   at pay-per-token prices. What you actually pay for a run may be
   nothing extra, while the run uses up your plan's limits.
 - **Price tables.** pi prices usage from its own price table, which may
   not match what your provider charges (discounts, price changes, or
   routing to a differently priced upstream), and a model missing from
-  it gets no cost at all. Claude Code prices usage at Anthropic's API
+  it gets no cost at all. OpenCode likewise prices usage from its own
+  model catalog. Claude Code prices usage at Anthropic's API
   list prices. Codex prices nothing, so Codex agents have no cost, and
   a run's total then has no cost; the console summary and `run.json`'s
   `known_cost` give only the other agents' cost, and say how many those
@@ -1107,6 +1195,28 @@ usage page.
     agent whose turn fails (say, a model your account can't use) is
     reported with the reason Codex gives. [`DESIGN.md`](DESIGN.md) §13
     has the details.
+- Under OpenCode, each agent runs as
+  `opencode run --format json --agent build --model P/M`:
+  - `OPENCODE_CONFIG_CONTENT` adds the scaffolding as an `instructions`
+    file (written to the agent's scratch directory), sets
+    `permission.edit` to `deny`, globally and for the `build`,
+    `general`, and `explore` agents, withholding the file-editing tools,
+    disables the hidden `title` agent (which would make an extra request,
+    left out of usage, to the provider's small model), and turns off
+    snapshots.
+    OpenCode merges it over your config and the project's, which
+    otherwise apply as in an interactive session, along with the
+    project's `AGENTS.md` files.
+  - `OPENCODE_DB`, a database in the scratch directory, keeps agents
+    independent: no session is added to your history.
+  - No `--auto` is passed, so a tool call your permissions set to `ask`
+    is refused, with a warning; `experimental.continue_loop_on_deny`
+    lets the agent go on.
+  - The final response is the text of the last message with text; an
+    `error` event fails the agent, whatever the exit status, and so does
+    a model request cut off or failed (by the token limit, a content
+    filter, or an error) if it was the last one or the report's.
+    [`DESIGN.md`](DESIGN.md) §13 has the details.
 - The tool limits above are the only restrictions
   agent-council enforces (see [Safety and
   privacy](#safety-and-privacy)). A fixed scaffolding text appended to
@@ -1143,14 +1253,17 @@ Codex config's `sandbox_mode` sets, restricts Codex agents; see
 Before running it, know that:
 
 - **Agents have a shell.** Each agent, the consolidator included, gets a
-  shell tool (pi's `bash`, Claude Code's `Bash`, or Codex's), running as you, in
+  shell tool (pi's and OpenCode's `bash`, Claude Code's `Bash`, or Codex's), running as you, in
   the directory you run from, with your environment (including any API
-  keys in it; agent-council only sets `TMPDIR` and `CLAUDE_CODE_TMPDIR`,
-  both to the agent's scratch directory), your file permissions, and
+  keys in it; agent-council only sets `TMPDIR`, to the agent's scratch
+  directory, and, by harness, `CLAUDE_CODE_TMPDIR` (the same directory)
+  or `OPENCODE_DB` and `OPENCODE_CONFIG_CONTENT`), your file
+  permissions, and
   your network access (for Claude Code agents, unless its sandbox
   restricts writes and network access; for Codex agents, unless your
   Codex config allows it, its sandbox blocks network access). Of pi's built-in tools, only
   `edit` and `write` (and the Windows-only `powershell`) are withheld;
+  of OpenCode's, the file-editing ones;
   of Claude Code's, all but `Read`, `Grep`, `Glob`, and `Bash`; of
   Codex's, none, so Codex agents also have its file-editing tool, and
   only Codex's sandbox limits what they can write. The
@@ -1159,8 +1272,9 @@ Before running it, know that:
 - **Agents get your MCP servers.** Every harness loads the MCP servers
   it would load for you interactively, so agents can use their tools:
   the ones you've configured, the analyzed project's (for pi and Codex,
-  if you trust the project; for Claude Code, those you've approved),
-  those your pi extensions or your Claude Code and Codex plugins
+  if you trust the project; for Claude Code, those you've approved; for
+  OpenCode, those its `opencode.json` names, without asking),
+  those your pi extensions or your OpenCode, Claude Code, and Codex plugins
   provide, and Codex's bundled apps connectors (GitHub and others). A
   server that writes (posting to chat, commenting on an issue, changing a ticket or a database) is as
   available to a pi agent as it is to you, and only the read-only
@@ -1171,10 +1285,11 @@ Before running it, know that:
   an MCP tool only if your settings or config (or, for Claude Code, the
   analyzed project's settings) already allow it, since
   they can't ask (see [Choosing a harness](#choosing-a-harness)); pi
-  agents can call any MCP tool pi gives them. The read-only instructions
+  agents can call any MCP tool pi gives them, and OpenCode agents any
+  that their permissions don't set to `ask` or `deny`. The read-only instructions
   tell agents not to act outside the machine (post, comment, or change
   records), but they are only instructions. Before a run, remove or
-  disable servers you don't want agents to have (in pi, Claude Code, or
+  disable servers you don't want agents to have (in pi, OpenCode, Claude Code, or
   Codex's own config, the analyzed project's, or the extension or
   plugin that provides them; Codex's apps connectors are its `apps`
   feature), or run in an environment without them.
@@ -1185,9 +1300,10 @@ Before running it, know that:
   script passes it to any model pi has credentials for, billed to you
   (its usage is counted in the agent's). The read-only instructions
   don't limit it.
-- **Your pi extensions, your Claude Code hooks and plugins, and your
-  Codex skills, plugins, and trusted hooks, load.**
-  Extensions you've installed load for every pi agent, as you.
+- **Your pi extensions, your OpenCode plugins, your Claude Code hooks
+  and plugins, and your Codex skills, plugins, and trusted hooks, load.**
+  Extensions you've installed load for every pi agent, as you, and
+  OpenCode plugins, yours and the project's, for every OpenCode agent.
   Your Claude Code hooks and plugins run for every Claude Code agent, as
   you, and so do hooks the analyzed repository's `.claude` settings
   define (see the next item). Agents also get Claude Code's auto memory
@@ -1199,7 +1315,9 @@ Before running it, know that:
   repository's files, and the harness loads the repository's context
   files and settings: pi its context files (such as `AGENTS.md`) and, if
   the project is trusted, its `.pi` resources; Codex its `AGENTS.md`
-  files and, if you trust the project, its `.codex` config; Claude Code its
+  files and, if you trust the project, its `.codex` config; OpenCode its
+  `AGENTS.md` files and `opencode.json`, with no trust step (checked);
+  Claude Code its
   `CLAUDE.md` files and `.claude` settings, which apply without the
   trust prompt an interactive session would show first (their hooks,
   for one, run commands; checked). So the repository can direct what
@@ -1216,7 +1334,8 @@ Before running it, know that:
   and the output of whatever it runs, is sent to that agent's provider
   (for a Claude Code agent, wherever your `claude` sends it: Anthropic,
   unless it is set up for another; for a Codex agent, wherever your
-  `codex` sends it: OpenAI, unless its config names another provider). The
+  `codex` sends it: OpenAI, unless its config names another provider;
+  for an OpenCode agent, to its entry's provider). The
   consolidator's provider receives the prompt and all reports, plus
   anything the consolidator itself reads or runs. Check those providers'
   data policies before analyzing private code.
@@ -1286,7 +1405,7 @@ checked; most apply on any platform, the last two were checked on Linux.
   scratch directory inside your own temporary directory (from `TMPDIR`,
   `TMP`, or `TEMP`, else `/tmp`), which adds about 36 bytes, so keep
   yours short, e.g. `TMPDIR=/tmp agent-council ...`. A
-  `CLAUDE_CODE_TMPDIR` of your own doesn't reach agents.
+  `CLAUDE_CODE_TMPDIR` of your own doesn't reach Claude Code agents.
 
 ### Codex's sandbox
 

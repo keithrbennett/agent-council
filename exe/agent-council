@@ -10,6 +10,8 @@
 #                                              Claude Code-specific behavior (ClaudeCodeHarness)
 #   lib/agent_council/harnesses/codex_harness.rb
 #                                              Codex-specific behavior (CodexHarness)
+#   lib/agent_council/harnesses/opencode_harness.rb
+#                                              OpenCode-specific behavior (OpenCodeHarness)
 #
 # Usage, options, and AGENT_COUNCIL_OPTS: agent-council -h, and the README.
 

@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 # End-to-end runs of exe/agent-council against a fake `pi` (and, for other
-# harnesses, a fake `claude` or `codex`; see write_fake_claude and
-# write_fake_codex), mostly for Ctrl-C:
+# harnesses, a fake `claude`, `codex`, or `opencode`; see write_fake_claude,
+# write_fake_codex, and write_fake_opencode), mostly for Ctrl-C:
 # SIGINT goes to agent-council's whole process group, as a terminal sends it.
 # Agents run in process groups of their own, so they should get only the
 # SIGTERM agent-council sends them; a fake pi that gets SIGINT records it.
@@ -488,6 +488,66 @@ RSpec.describe 'agent-council end to end' do
     expect(run['analysts'].first['usage'])
       .to eq('input' => 1000, 'output' => 200, 'cache_read' => 200, 'cache_write' => 0)
     expect(run.values_at('known_cost', 'known_cost_runs')).to eq([nil, 0])
+  end
+
+  # A fake opencode. `opencode run` saves its argv, one argument per line,
+  # and its OPENCODE_* variables and scaffolding file, to
+  # bin_dir/opencode_*_<model>, and its stdin to
+  # bin_dir/opencode_prompt_<model>, then answers by model: split with a split
+  # report, anything else with a plain one.
+  def write_fake_opencode
+    stream = ->(text) do
+      [{ type: 'step_start', part: { messageID: 'm1' } },
+        { type: 'text', part: { messageID: 'm1', text: text } },
+        { type: 'step_finish', part: { messageID: 'm1', reason: 'stop', cost: 0.25,
+                                        tokens: { input: 1000, output: 150, reasoning: 50,
+                                                  cache: { read: 200, write: 0 } } } }]
+        .map { |event| JSON.generate(event) }.join("\n")
+    end
+    fake_opencode = File.join(bin_dir, 'opencode')
+    File.write(fake_opencode, <<~SH)
+      #!/usr/bin/env bash
+      model=; prev=
+      for arg in "$@"; do [ "$prev" = --model ] && model=${arg#*/}; prev=$arg; done
+      printf '%s\\n' "$@" >"#{bin_dir}/opencode_argv_$model"
+      env | grep '^OPENCODE_' >"#{bin_dir}/opencode_env_$model"
+      cat "$TMPDIR/#{AgentCouncil::Harnesses::OpenCodeHarness::SCAFFOLD_FILE}" >"#{bin_dir}/opencode_scaffold_$model"
+      cat >"#{bin_dir}/opencode_prompt_$model"
+      case $model in
+        split) echo '#{stream.call(split_answer)}' ;;
+        *) echo '#{stream.call('OpenCode answer.')}' ;;
+      esac
+    SH
+    File.chmod(0o755, fake_opencode)
+  end
+
+  it 'runs opencode agents, the consolidator included' do
+    write_fake_opencode
+    entry = { 'harness' => 'opencode', 'provider' => 'opencode-go' }
+    config = { 'agents' => [entry.merge('model' => 'm1')], 'consolidator' => entry.merge('model' => 'split') }
+    File.write(File.join(work_dir, 'config.yml'), YAML.dump(config))
+
+    status = run_council(env: { 'OPENCODE_PERMISSION' => '{"bash":"deny"}' })
+
+    expect(status.exitstatus).to eq(0), output_report
+    %w[m1 split].each do |model|
+      argv = File.read(File.join(bin_dir, "opencode_argv_#{model}")).lines(chomp: true)
+      expect(argv.first(3)).to eq(%w[run --format json])
+      expect(argv.each_cons(2)).to include(['--model', "opencode-go/#{model}"])
+      env = File.read(File.join(bin_dir, "opencode_env_#{model}"))
+      expect(env).to include('OPENCODE_DB=', 'OPENCODE_CONFIG_CONTENT=')
+      expect(env).to include('OPENCODE_PERMISSION={"bash":"deny"}')
+      expect(File.read(File.join(bin_dir, "opencode_scaffold_#{model}")))
+        .to eq(AgentCouncil::Harnesses.scaffold_text)
+    end
+    expect(File.read(File.join(bin_dir, 'opencode_prompt_m1'))).to include('Question?')
+    fields, body = AgentCouncil.parse_front_matter(File.read(reports('reviews/*_opencode_*').first))
+    expect(fields.values_at('harness', 'provider', 'model')).to eq(%w[opencode opencode-go m1])
+    expect(body).to include('OpenCode answer.')
+    expect(reports('*_consolidated_opencode_opencode-go_split_findings.md').size).to eq(1), output_report
+    run = JSON.parse(File.read(reports('run.json').first))
+    expect(run['analysts'].first['usage'])
+      .to eq('input' => 1000, 'output' => 200, 'cache_read' => 200, 'cache_write' => 0, 'cost' => 0.25)
   end
 
   it 'writes the run dir under --output-dir when given' do

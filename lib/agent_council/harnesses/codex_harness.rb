@@ -46,6 +46,11 @@ module AgentCouncil
         ]
       end
 
+      # Variables for the agent's process beyond TMPDIR: none.
+      module_function def env(_scratch_dir)
+        {}
+      end
+
       # A TOML basic string (JSON's string escapes are valid TOML ones), so
       # -c reads the value as the string itself, not as TOML to parse.
       module_function def toml_string(text)
