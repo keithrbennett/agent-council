@@ -14,8 +14,10 @@
     also write the analyzed repository (see "Codex's sandbox" in the
     README).
   - Unlike pi and Claude Code agents, whose built-in tools are limited,
-    Codex agents keep Codex's whole built-in toolset, file editing and
-    subagents included, since Codex can't withhold tools.
+    Codex agents keep Codex's whole built-in toolset, file editing
+    included, since Codex can't withhold tools. Its subagent tools fail
+    under the `--ephemeral` agent-council passes, so agents can't fan
+    out.
   - Codex agents get your MCP servers (see below), but `codex exec` never
     asks for approval, so an MCP tool call is refused unless your config
     approves the tool in advance (e.g. `default_tools_approval_mode =

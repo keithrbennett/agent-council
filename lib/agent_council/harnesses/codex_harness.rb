@@ -37,7 +37,7 @@ module AgentCouncil
         [
           NAME, 'exec',
           '--json',                  # JSONL event stream on stdout
-          '--ephemeral',             # no session files saved
+          '--ephemeral',             # no session files saved; subagents then fail to spawn
           '--skip-git-repo-check',   # run anywhere, as pi and claude agents do
           '--color', 'never',
           '--model', model,

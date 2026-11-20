@@ -39,7 +39,13 @@ tools (`spawn_agent` and others) included.
 codex-cli 0.167.0 has no option that withholds them:
 `--disable multi_agent`, `-c features.multi_agent=false`, and
 `-c include_apply_patch_tool=false` each left them in the rendered
-prompt (`codex debug prompt-input`). What Codex agents can write is
+prompt (`codex debug prompt-input`). The subagent tools don't work,
+though: under `--ephemeral`, which agent-council passes, `spawn_agent`
+fails ("collab spawn failed ... no rollout found for thread id"), so a
+Codex agent can't fan out, and its usage misses no subagent's (a
+subagent's tokens aren't in its parent's `turn.completed`, so if
+spawning ever works under `--ephemeral`, usage will undercount). What
+Codex agents can write is
 whatever the user's `sandbox_mode` allows, which agent-council doesn't
 override, as an interactive session wouldn't (`read-only`, Codex's
 default, allows nothing; `workspace-write` allows the analyzed

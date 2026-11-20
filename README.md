@@ -449,8 +449,10 @@ agents:
 - **Tools.** Unlike pi and Claude Code agents, whose built-in tools are
   limited to read and shell tools (plus MCP tools, as described here),
   Codex agents keep Codex's whole built-in toolset, including its
-  file-editing tool (`apply_patch`) and its subagents: this Codex
-  version has no way to withhold them.
+  file-editing tool (`apply_patch`) and its subagent tools: this Codex
+  version has no way to withhold them. The subagent tools fail, though,
+  since agent-council runs Codex with `--ephemeral` (no session files),
+  which subagents need, so a Codex agent works alone.
 - **MCP tools need approval in your config.** Your MCP servers load (see
   [Safety and privacy](#safety-and-privacy)), but `codex exec` never asks
   for approval, so an agent's MCP tool call is refused unless your config
