@@ -53,5 +53,12 @@ RSpec.describe 'installed agent-council binstub' do
     expect(gem_dir).to start_with(gem_home)
     expect(gem_dir).to eq(File.dirname(docs_path))
     expect(gem_dir).to eq(File.dirname(examples_path))
+
+    # agent-council-ps is installed too, and the RUNAWAY_AGENTS.md its help
+    # points to is in the gem.
+    out, err, status = run_cmd(env, File.join(gem_home, 'bin', 'agent-council-ps'), '--help')
+    expect(status).to be_success, err
+    expect(out).to include('Usage: agent-council-ps', 'RUNAWAY_AGENTS.md')
+    expect(File.file?(File.join(gem_dir, 'RUNAWAY_AGENTS.md'))).to be(true)
   end
 end

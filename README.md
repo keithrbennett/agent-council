@@ -752,7 +752,9 @@ agent-council has no time limit, so an agent that never finishes holds
 up the run until you stop it. To stop a run automatically after a set
 time, run it under the `timeout` command; [`RUNAWAY_AGENTS.md`](RUNAWAY_AGENTS.md)
 explains how, the options to use and avoid, and why there's no
-built-in limit yet. It also explains how to [stop one
+built-in limit yet. It also explains how to [see what an agent is
+doing](RUNAWAY_AGENTS.md#seeing-what-an-agent-is-doing) with
+`agent-council-ps`, which the gem includes, and how to [stop one
 agent](RUNAWAY_AGENTS.md#stopping-one-agent) by the process ID printed
 as it started, letting the others finish.
 
@@ -1440,7 +1442,8 @@ directory layout, and report front matter may change incompatibly before 1.0.
 ## Development
 
 In a git checkout (the gemspec lists files with `git ls-files`),
-`./exe/agent-council` and `./exe/pi-models` are equivalent to the installed `agent-council` and
+`./exe/agent-council`, `./exe/agent-council-ps`, and `./exe/pi-models` are
+equivalent to the installed `agent-council`, `agent-council-ps`, and
 `pi-models`. Agents analyze the working directory, so running
 `./exe/agent-council` from the checkout analyzes agent-council itself; to
 analyze another project, `cd` there and run the checkout's executable by

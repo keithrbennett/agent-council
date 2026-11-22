@@ -53,10 +53,62 @@ A limit is easy to write; a good default is not:
   differs by operating system and, for the `timeout` command, by
   implementation (see below).
 
+## Seeing what an agent is doing
+
+Before stopping an agent that is taking longer than expected, you can
+check what it is doing with `agent-council-ps`, which the gem
+installs next to `agent-council`. Run it in another terminal:
+
+```
+$ agent-council-ps
+agent-council pid 48200, running 01:02:13, in /home/me/project
+  - pid 48211  pi  running 01:02:10  cpu 00:03:12 (2% now)  210 MB
+  - pid 48212  pi  running 01:02:10  cpu 00:01:40 (0% now)  190 MB
+      48390  00:41:07  /bin/bash -c npm test
+          48391  00:41:07  node node_modules/.bin/jest
+```
+
+For each running agent-council, it shows the agent-council process's
+ID, how long it has been running, and its working directory. Under that
+it lists the agents the process is running, each by the process ID
+agent-council printed when the agent started (under `Started Agents:`,
+or for the consolidator, under its `Consolidation Report` heading).
+For each agent it shows:
+
+- its harness and, where the harness's command line shows it, its
+  model. pi replaces its command line with plain `pi`, so a pi agent's
+  line shows no model; match its process ID to the `Started Agents:`
+  line to see which agent it is.
+- how long it has been running, its CPU time, its CPU use over the
+  last second (in watch mode, since the last refresh), and its memory.
+- the processes it started that are still running, such as the
+  commands it runs and any MCP servers its harness started, with how
+  long each has been running.
+
+Above, agent #2 has been waiting 41 minutes for a test run to finish.
+
+- `-w` or `--watch` refreshes the list every 5 seconds until Ctrl-C.
+  To choose the interval, attach it: `-w30` or `--watch=30`.
+- Process IDs limit the list to the runs that have those IDs, or that
+  have agents with those IDs: `agent-council-ps 48212`.
+- Several runs, including runs in the same directory, are listed
+  separately, each with its own agents. agent-council-ps doesn't show each
+  run's run dir, which can't be told reliably from outside the
+  process. The `Run Dir:` line that the run printed when it started
+  gives it.
+
+What it can't show: it reads only what the operating system shows
+(through `ps`, and `lsof` on macOS), so it can't see an agent's
+conversation with its model, which goes only to agent-council. Low CPU
+use is normal for an agent waiting on its model. An agent that has no
+long-running command, and whose sibling agents finished long ago, may
+be stuck in a loop with its model, and only stopping it will end that.
+
 ## Stopping one agent
 
 Each agent's process ID is printed under `Started Agents:` as it
-starts:
+starts (and `agent-council-ps` lists the running ones; see [Seeing what
+an agent is doing](#seeing-what-an-agent-is-doing)):
 
 ```
 Started Agents:

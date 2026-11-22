@@ -145,6 +145,14 @@ document the arguments, options, and `AGENT_COUNCIL_OPTS`. The command:
 consolidation of a finished run, using the run dir's own prompt and
 config copies, found through its reports' front matter (§12).
 
+`agent-council-ps` is a separate, read-only command for a run in
+progress: it lists each running agent-council, its agents, and the
+commands they are running, read from `ps`. It runs outside
+agent-council and needs nothing from it beyond the process tree (each
+agent is a child leading its own process group, §7), so it can't see
+agents' event streams, and it doesn't try to find a run's run dir. See
+[RUNAWAY_AGENTS.md](RUNAWAY_AGENTS.md#seeing-what-an-agent-is-doing).
+
 ---
 
 ## 7. Parallel Execution
@@ -475,6 +483,7 @@ CONTRIBUTING.md          # contribution process; not shipped in the gem
 agent-council.gemspec
 exe/                     # executable entry points; nearly all code lives in lib/
   agent-council
+  agent-council-ps       # helper: list running councils, their agents, and their commands
   pi-models              # helper: list models available to pi
 lib/
   agent_council.rb       # harness-agnostic orchestration (AgentCouncil)
@@ -482,9 +491,11 @@ lib/
     version.rb
     platform.rb          # windows? and the native-Windows abort (WSL is required)
     pi_models.rb         # backs exe/pi-models
+    ps.rb                # backs exe/agent-council-ps
     worker_pool.rb       # worker threads, agent processes, and Ctrl-C handling
     progress_printer.rb  # the Started Agents and Finished Agents output
     safe_stdout.rb       # the $stdout that discards output it can't write
+    plain_line.rb        # AgentCouncil.plain_line: text made safe to print on one line
     harnesses.rb         # harnesses by name (AgentCouncil::Harnesses)
     harnesses/
       scaffold.rb        # the read-only scaffolding every harness appends
@@ -528,7 +539,9 @@ framework.
 
 ## 17. Dependencies
 
-The tool itself uses only the Ruby standard library (`yaml`, `json`, `open3`, `optparse`, `fileutils`, `tmpdir`, `shellwords`, ...); tests use RSpec.
+The tool itself uses only the Ruby standard library (`yaml`, `json`, `open3`, `optparse`, `fileutils`, `tmpdir`, `shellwords`, ...); tests use RSpec. Beyond the harnesses, it runs only standard system
+commands: `agent-council-ps` reads `ps`, and on macOS, which has no
+`/proc`, `lsof` for a process's working directory.
 
 New gems are added only if they solve a meaningful problem that would otherwise require substantial code.
 

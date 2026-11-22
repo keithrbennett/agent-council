@@ -2,6 +2,13 @@
 
 ## 0.4.0 (unreleased)
 
+- A new command, `agent-council-ps`, run in another terminal, shows
+  what a run's agents are doing, for when one is taking longer than
+  expected: each running agent-council, its agents by the process IDs
+  it printed, with each one's harness (and model, except for pi), how
+  long it has run, its CPU use, and its memory, and the commands each
+  agent is running. `-w` refreshes it until Ctrl-C. See "Seeing what
+  an agent is doing" in `RUNAWAY_AGENTS.md`.
 - Each agent's process ID is printed as it starts, on a `- pid` line under
   a new `Started Agents:` heading (or, for the consolidator, under its
   `Consolidation Report` heading), so a running agent can be found, or
