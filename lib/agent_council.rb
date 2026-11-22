@@ -24,6 +24,8 @@ require_relative 'agent_council/version'
 require_relative 'agent_council/platform'
 require_relative 'agent_council/harnesses'
 require_relative 'agent_council/worker_pool'
+require_relative 'agent_council/progress_printer'
+require_relative 'agent_council/safe_stdout'
 
 module AgentCouncil
   # Runtime data files (prompt templates) ship inside lib/, resolved
@@ -154,7 +156,8 @@ module AgentCouncil
   # and returning it). If the response begins
   # with an H1 of its own, it is dropped: the header leads the body (and
   # carries the title, in consolidated reports).
-  # pool: the WorkerPool to spawn the agent through, so Ctrl-C can stop it;
+  # pool: the WorkerPool to spawn the agent through, so Ctrl-C can stop it
+  # (and its #collect can report the agent's pid, tagged with its label);
   # without one it's spawned untracked.
   module_function def run_agent(agent, prompt, run_dir, file_prefix, index: nil, filename: nil, meta: {},
     header: nil, pool: nil)
@@ -173,8 +176,13 @@ module AgentCouncil
     harness = Harnesses.module_for(agent)
     scratch_dir = Dir.mktmpdir('agent-council-')
     argv = harness.argv(provider, model)
+    env = agent_env(scratch_dir, harness)
     (stdout, stderr, status), elapsed = timed do
-      (pool || Open3).capture3(agent_env(scratch_dir, harness), *argv, stdin_data: prompt)
+      if pool
+        pool.capture3(env, *argv, stdin_data: prompt, tag: label)
+      else
+        Open3.capture3(env, *argv, stdin_data: prompt)
+      end
     end
     # Harness output is UTF-8. WorkerPool#capture3 already returns it as such,
     # but Open3.capture3 (used without a pool) returns the locale's encoding.
@@ -191,7 +199,9 @@ module AgentCouncil
 
     unless status.success?
       detail = failure_reason(harness.exit_detail(stdout, stderr))
-      return [label, false, "#{harness::NAME} exited #{status.exitstatus}: #{detail}", usage, warnings]
+      # A signal is reason enough; "no error output" would add nothing.
+      reason = [exit_description(status), (detail unless status.signaled? && detail == Harnesses::NO_ERROR_OUTPUT)]
+      return [label, false, "#{harness::NAME} #{reason.compact.join(': ')}", usage, warnings]
     end
 
     error = harness.error_message(stdout)
@@ -250,16 +260,17 @@ module AgentCouncil
 
   # A harness's reason for a failure, as run_agent reports it: a
   # plain_line, since it can quote the model or the CLI, cut to 300
-  # characters plus "..." so it doesn't swamp the progress line, the Errors
-  # list, or the consolidation prompt; 'no error output' if nothing is left.
+  # characters plus "..." so it doesn't swamp the finish line, the Errors
+  # list, or the consolidation prompt; Harnesses::NO_ERROR_OUTPUT if
+  # nothing is left.
   module_function def failure_reason(text)
     reason = plain_line(text)
-    return 'no error output' if reason.empty?
+    return Harnesses::NO_ERROR_OUTPUT if reason.empty?
 
     reason.length > 300 ? "#{reason[0, 300]}..." : reason
   end
 
-  # Lines showing an agent's warnings under its progress line or result table.
+  # Lines showing an agent's warnings under its finish line or result table.
   module_function def warning_lines(warnings)
     Array(warnings).map { |warning| "      Warning: #{plain_line(warning)}" }
   end
@@ -356,7 +367,7 @@ module AgentCouncil
     "#{prompt.chomp}\n\n#{addendum}"
   end
 
-  # An agent's label in progress lines, report sources, and consolidation
+  # An agent's label in start and finish lines, report sources, and consolidation
   # prompts: "#<index> <provider> / <model>", or without the index when
   # there is none (the consolidator). missing_agents matches reports by it.
   module_function def agent_label(provider, model, index = nil)
@@ -849,6 +860,26 @@ module AgentCouncil
     text.length + text.scan(WIDE_CHAR).size - text.scan(ZERO_WIDTH_CHAR).size
   end
 
+  # How an agent's process ended, for a failure's reason: "exited N", or
+  # "was stopped by SIGNAME" for one a signal stopped (e.g. the user's
+  # kill -TERM -PID), which has no exit status.
+  module_function def exit_description(status)
+    return "exited #{status.exitstatus}" unless status.signaled?
+
+    name =
+      begin
+        Signal.signame(status.termsig)
+      rescue ArgumentError # JRuby, for a signal with no name; MRI returns nil
+        nil
+      end
+    "was stopped by #{name ? "SIG#{name}" : "signal #{status.termsig}"}"
+  end
+
+  # Prints the consolidator's pid line as it starts (see ProgressPrinter).
+  module_function def puts_spawned(label, pid)
+    ProgressPrinter.puts_live([ProgressPrinter.spawned_line(label, pid)])
+  end
+
   # Prints the "--- Consolidation complete ---" (or error) marker.
   module_function def puts_consolidation_status(ok)
     puts "\n--- Consolidation #{ok ? 'complete' : 'error'} ---"
@@ -1063,6 +1094,7 @@ module AgentCouncil
   end
 
   module_function def main(argv)
+    $stdout = SafeStdout.new($stdout) unless $stdout.is_a?(SafeStdout)
     abort_if_native_windows
     options = {}
     parser = option_parser(options)
@@ -1217,12 +1249,12 @@ module AgentCouncil
     puts(argv[1] ? "Config:      #{relative_path(config_path)}" : "Config:      [default] #{config_path}")
     puts "Prompt:      #{relative_path(prompt_path)}"
     puts "Run Dir:     #{relative_path(run_dir)}"
-    puts "\nReview Agents (#{agents.size}):"
+    puts "\nConfigured Review Agents (#{agents.size}):"
     agents.each_with_index do |agent, i|
       puts "  ##{i + 1} #{agent_descriptor(agent)}"
     end
     puts "\nConsolidator Agent:\n  #{agent_descriptor(consolidator)}" if consolidator
-    puts "\nReview Progress:"
+    puts "\nStarted Agents:"
     pool = WorkerPool.new(grace: INTERRUPT_GRACE_SECONDS)
     pool.trap_signals
     agents.each_with_index do |agent, i|
@@ -1240,11 +1272,18 @@ module AgentCouncil
       end
     end
     # Printed here, in the main thread, as everything is (see WorkerPool).
-    results = pool.collect do |label, ok, detail, elapsed, _usage, warnings|
-      duration = format_duration(elapsed)
-      puts(ok ? "  ✓ #{duration}  #{label}" : "  ✗ #{duration}  #{label}\n      #{detail}")
-      puts warning_lines(warnings)
-    end
+    progress = ProgressPrinter.new(agents.size)
+    results =
+      begin
+        pool.collect(on_spawn: progress.method(:started)) do |label, ok, detail, elapsed, _usage, warnings|
+          duration = format_duration(elapsed)
+          line = ok ? "  ✓ #{duration}  #{label}" : "  ✗ #{duration}  #{label}\n      #{detail}"
+          progress.finished(label, [line, *warning_lines(warnings)])
+        end
+      rescue
+        progress.flush_held # a worker raised; not after Ctrl-C, which prints nothing more
+        raise
+      end
 
     failed = results.count { |_, ok, _| !ok }
     puts "\nReviews (in #{relative_path(reviews_dir)}):"
@@ -1271,7 +1310,8 @@ module AgentCouncil
             pool: pool)
         end
       end
-      (label, ok, detail, usage, meta_name, warnings), elapsed = pool.collect.first
+      (label, ok, detail, usage, meta_name, warnings), elapsed =
+        pool.collect(on_spawn: method(:puts_spawned)).first
       puts format_result_table([[label, ok, detail, elapsed, usage]])
       puts warning_lines(warnings)
       entry = run_entry(consolidator, ok, detail, elapsed, usage, meta_report: meta_name, warnings: warnings)
@@ -1371,7 +1411,8 @@ module AgentCouncil
           analyst_runs: analysts || [], pool: pool)
       end
     end
-    (label, ok, detail, usage, meta_name, warnings), elapsed = pool.collect.first
+    (label, ok, detail, usage, meta_name, warnings), elapsed =
+      pool.collect(on_spawn: method(:puts_spawned)).first
     puts format_result_table([[label, ok, detail, elapsed, usage]])
     puts warning_lines(warnings)
     # Added to the run's run.json. Without one (deleted, or unreadable),

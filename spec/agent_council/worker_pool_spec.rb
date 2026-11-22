@@ -85,6 +85,13 @@ RSpec.describe AgentCouncil::WorkerPool do
       expect(pool.collect).to eq([:b])
     end
 
+    it "reports each agent's tag and pid to on_spawn as it's spawned" do
+      spawned = []
+      pool.start { pool.capture3({}, 'sh', '-c', 'echo $$', stdin_data: '', tag: :a) }
+      out, = pool.collect(on_spawn: ->(tag, pid) { spawned << [tag, pid] }).first
+      expect(spawned).to eq([[:a, Integer(out)]])
+    end
+
     it 're-raises an exception from a worker' do
       pool.start { raise ArgumentError, 'boom' }
       expect { pool.collect }.to raise_error(ArgumentError, 'boom')

@@ -156,7 +156,7 @@ module AgentCouncil
 
       # Why an agent that exited nonzero failed: pi explains it on stderr.
       module_function def exit_detail(_stdout, stderr)
-        stderr.lines.map(&:strip).reject(&:empty?).first || 'no error output'
+        stderr.lines.map(&:strip).reject(&:empty?).first || NO_ERROR_OUTPUT
       end
 
       # Warnings about an agent that succeeded: none. A failed tool call,

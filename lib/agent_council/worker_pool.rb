@@ -25,9 +25,9 @@ module AgentCouncil
   # .exit_by_signal).
   #
   # Agents run in worker threads, never the main thread, so the main thread
-  # is always free to take the Interrupt. Workers report completion through
-  # a queue and only the main thread prints, so nothing more is printed once
-  # the Interrupt has been taken.
+  # is always free to take the Interrupt. Workers report each agent's spawn
+  # and their own completion through a queue and only the main thread
+  # prints, so nothing more is printed once the Interrupt has been taken.
   class WorkerPool
     # Not QUIT on JRuby: the JVM reserves it for thread dumps, so trapping
     # it only prints a warning.
@@ -53,7 +53,9 @@ module AgentCouncil
     def initialize(grace:)
       @grace = grace
       @threads = []
-      @finished = Queue.new # indexes of threads as they finish
+      # As they happen: [:spawned, tag, pid] when an agent is spawned
+      # (see #capture3) and [:finished, index] when a thread finishes.
+      @events = Queue.new
       @uncollected = 0 # threads not yet #collect'ed
       @children = {} # agent pids (each also its process group id)
       @children_lock = Mutex.new
@@ -94,20 +96,27 @@ module AgentCouncil
           Thread.current.report_on_exception = false
           Thread.handle_interrupt(Interrupt => :immediate, &block)
         ensure
-          @finished << index
+          @events << [:finished, index]
         end
       end
     end
 
     # Waits for the threads started since the last call, yielding each
     # one's value as it finishes. Returns their values in start order.
-    # Re-raises if a worker raised.
-    def collect
+    # Re-raises if a worker raised. on_spawn: called with the tag and pid
+    # of each agent the threads spawn (see #capture3), as it's spawned.
+    def collect(on_spawn: nil)
       count = @uncollected
       @uncollected = 0
-      finished = Array.new(count) do
-        index = @finished.pop
-        [index, @threads[index].value.tap { |value| yield value if block_given? }]
+      finished = []
+      while finished.size < count
+        kind, *args = @events.pop
+        if kind == :spawned
+          on_spawn&.call(*args)
+        else
+          index = args.first
+          finished << [index, @threads[index].value.tap { |value| yield value if block_given? }]
+        end
       end
       finished.sort_by(&:first).map(&:last)
     end
@@ -115,8 +124,10 @@ module AgentCouncil
     # Open3.capture3, but with the agent in its own process group and
     # tracked for #shutdown while it runs, and its output read as UTF-8
     # whatever the locale. An agent spawned after shutdown has started
-    # signalling gets the same signal at once.
-    def capture3(env, *argv, stdin_data:)
+    # signalling gets the same signal at once. tag: identifies the agent
+    # to #collect's on_spawn, which gets it with the agent's pid (an
+    # untagged agent isn't reported).
+    def capture3(env, *argv, stdin_data:, tag: nil)
       Open3.popen3(env, *argv, **SPAWN_OPTIONS) do |stdin, stdout, stderr, wait_thr|
         [stdout, stderr].each { |io| io.set_encoding(Encoding::UTF_8) }
         pid = wait_thr.pid
@@ -128,6 +139,7 @@ module AgentCouncil
             @stop_signal
           end
           signal_child(pid, signal) if signal
+          @events << [:spawned, tag, pid] if tag
           out_reader = Thread.new { stdout.read }
           err_reader = Thread.new { stderr.read }
           begin
@@ -198,6 +210,7 @@ module AgentCouncil
     end
 
     # A hung-up terminal can make writing fail; that mustn't stop shutdown.
+    # (main's SafeStdout doesn't raise, but a $stdout set otherwise may.)
     private def flush_stdout
       $stdout.flush
     rescue IOError, SystemCallError

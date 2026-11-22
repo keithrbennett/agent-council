@@ -160,7 +160,7 @@ module AgentCouncil
         stderr_line = stderr.lines.map(&:strip).reject(&:empty?).first
         return stderr_line if stderr_line
 
-        (error_message(stdout) if result) || 'no error output'
+        (error_message(stdout) if result) || NO_ERROR_OUTPUT
       end
 
       # Warnings about an agent, succeeded or not: the tool calls Claude Code

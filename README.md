@@ -413,7 +413,7 @@ consolidator:
   MCP call no rule allows, or one that a `permissions.deny` rule in your
   settings or the project's forbids. The agent then carries on without
   it; its report is kept, and a warning naming the call (up to five distinct calls, with a
-  count of the rest) is printed under its progress line (the
+  count of the rest) is printed under its finish line (the
   consolidator's, under its result table), shown in the report's
   metadata table (so the consolidator sees an analyst's too), and
   recorded in `run.json`, since the report may lack what the call would
@@ -659,7 +659,7 @@ Config:      [default] /home/me/.agent-council.yml
 Prompt:      examples/prompts/review-latest-commit-prompt.md
 Run Dir:     agent-council-reports/2026-11-18/22-46-15
 
-Review Agents (4):
+Configured Review Agents (4):
   #1 pi / deepseek / deepseek-flash
   #2 pi / deepseek / deepseek-flash
   #3 pi / openrouter / deepseek/deepseek-v4.1-flash-1017
@@ -668,7 +668,13 @@ Review Agents (4):
 Consolidator Agent:
   pi / anthropic / claude-sonnet-5-5
 
-Review Progress:
+Started Agents:
+  - pid 48211  #1 deepseek / deepseek-flash
+  - pid 48212  #2 deepseek / deepseek-flash
+  - pid 48214  #3 openrouter / deepseek/deepseek-v4.1-flash-1017
+  - pid 48216  #4 openrouter / deepseek/deepseek-v4.1-flash-1017
+
+Finished Agents:
   ✓ 00:01:53  #3 openrouter / deepseek/deepseek-v4.1-flash-1017
   ✓ 00:02:31  #4 openrouter / deepseek/deepseek-v4.1-flash-1017
   ✓ 00:02:42  #2 deepseek / deepseek-flash
@@ -684,11 +690,14 @@ Reviews (in agent-council-reports/2026-11-18/22-46-15/reviews):
 --- Reviews complete (4/4 succeeded; 4.9M in (4.7M cached) / 107.9k out, $0.18) ---
 
 Consolidation Report (in agent-council-reports/2026-11-18/22-46-15):
+  - pid 48390  anthropic / claude-sonnet-5-5
   Ok  Duration  Agent                             In  Cached   Out   Cost
   ✓   00:00:17  anthropic / claude-sonnet-5-5  11.7k       0  2.2k  $0.05
 ```
 
-Progress lines appear as each agent finishes. Costs are the harness's
+Each agent gets a line under `Started Agents:` as it starts, with its
+process ID, and one under `Finished Agents:` as it finishes, with `✓` or
+`✗`. Costs are the harness's
 estimates and can be far off; see [How far to trust the
 cost](#how-far-to-trust-the-cost). The files the run wrote are described
 in [What you get](#what-you-get).
@@ -743,7 +752,9 @@ agent-council has no time limit, so an agent that never finishes holds
 up the run until you stop it. To stop a run automatically after a set
 time, run it under the `timeout` command; [`RUNAWAY_AGENTS.md`](RUNAWAY_AGENTS.md)
 explains how, the options to use and avoid, and why there's no
-built-in limit yet.
+built-in limit yet. It also explains how to [stop one
+agent](RUNAWAY_AGENTS.md#stopping-one-agent) by the process ID printed
+as it started, letting the others finish.
 
 ### Consolidating a finished run
 
@@ -1010,7 +1021,7 @@ agent-council-reports/
 Each run starts by printing its working directory (`Working Dir:`, which
 relative paths below are shown against), config, prompt, and run
 directory (`Run Dir: agent-council-reports/2026-09-03/09-14-02`), then
-its agents under `Review Agents (N):` and, if configured,
+its agents under `Configured Review Agents (N):` and, if configured,
 `Consolidator Agent:`; these labels also name the harness
 (e.g. `#2 pi / openai / gpt-6.1-sol`).
 You can open the run dir while agents are still working, or after a
@@ -1025,11 +1036,16 @@ ls agent-council-reports/$(date +%F)/
 ls agent-council-reports/*/*/reviews/*codebase-review*
 ```
 
-While the agents run, a `Review Progress:` section prints one line per
-agent as it finishes: `✓` or `✗`, its duration, its label (e.g.
+While the agents run, a `Started Agents:` section prints a line per
+agent as it starts: `- pid`, its process ID (also the ID of its process
+group, so `kill -TERM -<pid>` stops that agent alone; see [Stopping one
+agent](RUNAWAY_AGENTS.md#stopping-one-agent)), and its label. A
+`Finished Agents:` section follows, with a line per agent as it
+finishes (held until every agent has started, so the sections don't
+mix): `✓` or `✗`, its duration, its label (e.g.
 `#2 openai / gpt-6.1-sol`) and, for a failure, the reason on the line
 below; any warnings about an agent (such as tool calls Claude Code
-refused) follow as indented `Warning:` lines, under its progress line or,
+refused) follow as indented `Warning:` lines, under its finish line or,
 for the consolidator, under its result row. When all reviews finish, a `Reviews` table shows which models
 succeeded, how long each took (`HH:MM:SS`) and their token usage in
 `In`, `Cached`, `Out`, and `Cost` columns (`In` counts cached input too;
@@ -1043,8 +1059,8 @@ cost of the analysts whose cost is known follows, e.g. `; $0.12 for the 2 of 3 a
 a known cost`. The total notes `(from K of M agents)` when some reported no usage (as some
 providers don't). With a consolidator,
 the `Consolidation Report (in <run dir>):` heading (with
-`--consolidate`, `(in <run dir>, from N review(s)):`) then prints while it
-runs, its result row when it finishes, and finally `--- Consolidation
+`--consolidate`, `(in <run dir>, from N review(s)):`) then prints, then
+its `- pid` line as it starts, its result row when it finishes, and finally `--- Consolidation
 complete ---` (or `--- Consolidation error ---`). One model's failure
 does not affect the others. Exit status is 0 only if every analyst
 agent succeeded; the consolidator's result doesn't affect it.
@@ -1077,11 +1093,14 @@ direction:
   a run's total then has no cost; the console summary and `run.json`'s
   `known_cost` give only the other agents' cost, and say how many those
   are.
-- **Stopped agents.** An agent stopped by Ctrl-C (or another signal)
-  records no usage, though its provider still bills for what it used,
-  and a run stopped before every analyst finished writes no `run.json`
-  at all. A runaway agent stopped by hand, the most expensive kind of
-  agent, is therefore missing from the totals entirely.
+- **Stopped agents.** An agent stopped by Ctrl-C (or another signal to
+  agent-council) records no usage, though its provider still bills for
+  what it used, and a run stopped before every analyst finished writes
+  no `run.json` at all. A runaway agent stopped that way, the most
+  expensive kind of agent, is therefore missing from the totals
+  entirely. One stopped on its own (see [Stopping one
+  agent](RUNAWAY_AGENTS.md#stopping-one-agent)) records only what its
+  output had reported by then, which may be little or nothing.
 - **Token counts.** Providers count tokens somewhat differently
   (reasoning tokens, for example), so compare counts, and the costs
   built on them, across providers only roughly.

@@ -2,8 +2,8 @@
 
 agent-council has no time limit of its own: a run lasts until every
 agent finishes. This document explains why, what can go wrong without
-one, and how to put a limit on a run yourself with the `timeout`
-command.
+one, how to stop a runaway agent yourself, and how to put a limit on a
+run with the `timeout` command.
 
 ## The problem
 
@@ -11,8 +11,8 @@ Now and then an agent doesn't finish. Its siblings finish in minutes,
 and it goes on for an hour or more, holding up the run (the
 consolidator starts only after every review agent has finished) and,
 on pay-per-token providers, running up cost. Its tokens and cost
-aren't in the run's totals if you stop it, since an interrupted agent
-records no usage (see [How far to trust the
+aren't in the run's totals if you stop the run, since an interrupted
+agent records no usage (see [How far to trust the
 cost](README.md#how-far-to-trust-the-cost)).
 
 The cause may be the particular model or provider: if one entry in
@@ -52,11 +52,48 @@ A limit is easy to write; a good default is not:
   wakes. Whether it counts depends on the clock the timer uses, which
   differs by operating system and, for the `timeout` command, by
   implementation (see below).
-- **Stopping one agent is more than ending a process.** The useful
-  version would stop only the runaway, let the others finish, record
-  the stopped agent as failed in `run.json`, and still consolidate.
-  That's a real feature, worth building once it's clear what limit
-  people actually need.
+
+## Stopping one agent
+
+Each agent's process ID is printed under `Started Agents:` as it
+starts:
+
+```
+Started Agents:
+  - pid 48211  #1 deepseek / deepseek-flash
+  - pid 48212  #2 deepseek / deepseek-flash
+```
+
+Each agent leads a process group with that ID, so this stops agent #2,
+and the commands it started that are in its group, while the others go
+on:
+
+```bash
+kill -TERM -48212
+```
+
+The stopped agent is listed under `Finished Agents:` as failed, with a
+reason such as `pi was stopped by SIGTERM`, and the run goes on as
+usual: it's recorded as failed in `run.json`, and the consolidator
+still runs on the other agents' reports. Its usage is what its output
+had reported by then, which may be little or nothing.
+
+- **The commands it started.** pi, Claude Code, and Codex stop them on
+  SIGTERM. OpenCode doesn't, and may not exit at all (it didn't within
+  5 seconds in a check with 1.19.6); `kill -KILL -48212` then stops it,
+  but not its commands, which run in process groups of their own and
+  are left running.
+- **Its output.** agent-council waits for the agent's output to close,
+  so a process the agent started that kept it open keeps the run
+  waiting until that process exits too.
+- **The consolidator.** Its process ID is printed under the
+  `Consolidation Report` heading as it starts, and it can be stopped the
+  same way. That fails the consolidation, which is recorded in
+  `run.json`. In a run that also ran the analysts, the exit status
+  doesn't change, since only the analysts decide it; under
+  `--consolidate`, where the consolidation is the run, it becomes 1.
+  `agent-council --consolidate RUN_DIR` runs it again (see
+  [Consolidating a finished run](README.md#consolidating-a-finished-run)).
 
 ## Limiting a run with `timeout`
 

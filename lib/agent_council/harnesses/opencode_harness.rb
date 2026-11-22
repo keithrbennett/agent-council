@@ -220,7 +220,7 @@ module AgentCouncil
       # Why an agent that exited nonzero failed: the stream's error event
       # if there is one, else stderr (e.g. for a bad flag).
       module_function def exit_detail(stdout, stderr)
-        failure_reason(stdout) || stderr.lines.map(&:strip).reject(&:empty?).first || 'no error output'
+        failure_reason(stdout) || stderr.lines.map(&:strip).reject(&:empty?).first || NO_ERROR_OUTPUT
       end
 
       # Warnings about an agent: one for the tool calls OpenCode rejected

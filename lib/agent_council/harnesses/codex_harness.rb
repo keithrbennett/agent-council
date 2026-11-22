@@ -161,7 +161,7 @@ module AgentCouncil
         reason = failure_reason(stdout)
         return reason if reason
 
-        stderr.lines.map(&:strip).reject(&:empty?).first || 'no error output'
+        stderr.lines.map(&:strip).reject(&:empty?).first || NO_ERROR_OUTPUT
       end
 
       # Warnings about an agent, failed or not, each listing at most

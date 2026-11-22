@@ -61,10 +61,11 @@ RSpec.describe AgentCouncil::Harnesses::PiHarness do
     it 'works with only its own file required' do
       lib = File.expand_path('../../lib', __dir__)
       script = "require 'agent_council/harnesses/pi_harness'; " \
-               "print AgentCouncil::Harnesses::PiHarness.argv('p', 'm').last"
+               "print AgentCouncil::Harnesses::PiHarness.argv('p', 'm').last, " \
+               "AgentCouncil::Harnesses::PiHarness.exit_detail('', '')"
       out, err, status = Open3.capture3(RbConfig.ruby, '-I', lib, '-e', script)
       expect(status).to be_success, err
-      expect(out).to eq(AgentCouncil::Harnesses.scaffold_text)
+      expect(out).to eq(AgentCouncil::Harnesses.scaffold_text + 'no error output')
     end
 
     it 'appends the shared scaffolding to the system prompt' do

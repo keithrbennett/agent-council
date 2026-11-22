@@ -18,6 +18,7 @@
 #   it exits (as node does with its compile cache), so a scratch dir
 #   removed before the agent has exited would be left behind.
 # - deaf: survives SIGTERM, so must be killed.
+# - any other name: waits, and dies by any signal that stops it.
 require 'spec_helper'
 require 'fileutils'
 require 'json'
@@ -134,13 +135,13 @@ RSpec.describe 'agent-council end to end' do
   # fake agents still running once agent-council has exited, then kills
   # everything, so a regression fails the spec instead of hanging it. env:
   # extra child environment (a nil value unsets the variable). args:
-  # agent-council's arguments.
-  def run_council(started: 0, ignoring_hup: false, env: {}, args: %w[prompt.md config.yml])
+  # agent-council's arguments. out: where its stdout goes.
+  def run_council(started: 0, ignoring_hup: false, env: {}, args: %w[prompt.md config.yml], out: out_path)
     env = { 'PATH' => "#{bin_dir}#{File::PATH_SEPARATOR}#{ENV.fetch('PATH')}", 'TMPDIR' => child_tmp, **env }
     exe = File.join(project_root, 'exe', 'agent-council')
     cmd = [RbConfig.ruby, '-I', File.join(project_root, 'lib'), exe, *args]
     cmd = ['sh', '-c', 'trap "" HUP; exec "$@"', 'sh', *cmd] if ignoring_hup # as nohup does
-    pid = Process.spawn(env, *cmd, chdir: work_dir, pgroup: true, out: out_path, err: err_path)
+    pid = Process.spawn(env, *cmd, chdir: work_dir, pgroup: true, out: out, err: err_path)
     status = nil
     begin
       if block_given?
@@ -220,13 +221,108 @@ RSpec.describe 'agent-council end to end' do
 
   def leftover_scratch_dirs = Dir.children(child_tmp).grep(/\Aagent-council-/)
 
+  # Its pid line is flushed, so it shows while the run goes on, even with
+  # stdout a file, and so are its finish lines, which wait for every agent
+  # to start.
+  it 'lets one agent be stopped by its printed pid, the others going on' do
+    write_config(%w[hangs hangs])
+    pid_of = ->(n) { File.read(out_path)[/^  - pid (\d+)  ##{n} hangs \/ m#{n}$/, 1] }
+
+    status = run_council(started: 2) do
+      wait_until(5, 'the pid lines') { pid_of.(1) && pid_of.(2) }
+      Process.kill('TERM', -Integer(pid_of.(2)))
+      wait_until(5, "#2's finish line") { File.read(out_path).include?('✗') }
+      expect(File.read(out_path)).not_to match(/✗ \S+  #1/) # #1 still running
+      Process.kill('TERM', -Integer(pid_of.(1)))
+    end
+
+    expect(status.exitstatus).to eq(1), output_report
+    expect(out).to match(/^Started Agents:\n(  - pid \d+  #[12] .*\n){2}\nFinished Agents:\n  ✗ /),
+      output_report
+    expect(out).to match(%r{^  ✗ \d\d:\d\d:\d\d  #2 hangs / m2\n      pi was stopped by SIGTERM$}),
+      output_report
+    expect(out.index(/✗ \S+  #2/)).to be < out.index(/✗ \S+  #1/), output_report
+    analysts = JSON.parse(File.read(reports('run.json').first))['analysts']
+    expect(analysts.map { |entry| entry['error'] }).to eq(['pi was stopped by SIGTERM'] * 2)
+  end
+
+  it 'consolidates the other reports when one agent is stopped by its pid' do
+    write_config(%w[done hangs], consolidator: 'done')
+
+    status = run_council(started: 1) do
+      wait_until(5, 'the pid line') { File.read(out_path)[/^  - pid (\d+)  #2 hangs/] }
+      Process.kill('TERM', -Integer(File.read(out_path)[/^  - pid (\d+)  #2 hangs/, 1]))
+    end
+
+    expect(status.exitstatus).to eq(1), output_report
+    expect(out).to include('--- Reviews complete (1/2 succeeded', '--- Consolidation complete ---'),
+      output_report
+  end
+
+  # Once its stdout's reader has gone, as with `| head`, agent-council
+  # can't print, but goes on: dying would lose run.json and leave its
+  # agents running. Every write after the pipe closes fails (the finish
+  # lines, the Reviews table, the summary), and run.json comes after them.
+  it 'goes on when its output pipe closes while agents run' do
+    write_config(%w[hangs hangs])
+    reader, writer = IO.pipe
+    seen = +''
+    pid_of = ->(n) { seen[/^  - pid (\d+)  ##{n} hangs/, 1] }
+
+    status = run_council(started: 2, out: writer) do
+      writer.close
+      wait_until(5, 'the pid lines') do
+        chunk = reader.read_nonblock(4096, exception: false)
+        seen << chunk if chunk.is_a?(String)
+        pid_of.(1) && pid_of.(2)
+      end
+      reader.close
+      [2, 1].each { |n| Process.kill('TERM', -Integer(pid_of.(n))) }
+    end
+
+    expect(status.exitstatus).to eq(1), err
+    analysts = JSON.parse(File.read(reports('run.json').first))['analysts']
+    expect(analysts.map { |entry| entry['error'] }).to eq(['pi was stopped by SIGTERM'] * 2)
+    expect(err).not_to match(/EPIPE|Broken pipe/i)
+    expect(survivors).to be_empty
+  end
+
+  # As with `| true`: every write fails, from the first (MRI fails on the
+  # flush it makes before spawning the first agent, JRuby on the first
+  # write).
+  it 'runs and consolidates with its output pipe closed from the start' do
+    write_config(%w[done done], consolidator: 'done')
+    reader, writer = IO.pipe
+    reader.close
+
+    status = run_council(out: writer)
+    writer.close
+
+    expect(status.exitstatus).to eq(0), err
+    run = JSON.parse(File.read(reports('run.json').first))
+    expect([*run['analysts'], *run['consolidations']].map { |entry| entry['ok'] }).to eq([true] * 3), err
+    expect(reports('*consolidated*.md').size).to eq(1)
+    expect(err).not_to match(/EPIPE|Broken pipe/i)
+
+    File.delete(reports('*consolidated*.md').first)
+    reader, writer = IO.pipe
+    reader.close
+    run_dir = Dir.glob('agent-council-reports/*/*', base: work_dir).first
+    expect(run_council(out: writer, args: ['--consolidate', run_dir]).exitstatus).to eq(0), err
+    writer.close
+    expect(reports('*consolidated*.md').size).to eq(1)
+    expect(err).not_to match(/EPIPE|Broken pipe/i)
+  end
+
   it 'reports progress and consolidates on an uninterrupted run' do
     write_config(%w[done done], consolidator: 'done')
 
     status = run_council
 
     expect(status.exitstatus).to eq(0), output_report
+    expect(out.scan(/^  - pid \d+  #[12] done \/ m[12]$/).size).to eq(2), output_report # spawned
     expect(out.scan(/^  ✓ \d\d:\d\d:\d\d  #[12] done/).size).to eq(2), output_report # progress
+    expect(out).to match(%r{^Consolidation Report \(in [^)]+\):\n  - pid \d+  done / c\n}), output_report
     reviews_rows = out.scan(/^  ✓   \d\d:\d\d:\d\d  #[12] done \/ m[12]  #{usage_cell}$/)
     expect(reviews_rows.size).to eq(2), output_report
     expect(out).to include('--- Reviews complete (2/2 succeeded; 2.4k in (400 cached) / 400 out, $0.04) ---',
@@ -236,7 +332,7 @@ RSpec.describe 'agent-council end to end' do
       "Working Dir: #{File.realpath(work_dir)}\nConfig:      config.yml\nPrompt:      prompt.md\n"
     ), output_report
     expect(out).to match(%r{^Prompt:      prompt\.md\nRun Dir:     agent-council-reports/\S+$}), output_report
-    expect(out).to include("Review Agents (2):\n  #1 pi / done / m1\n  #2 pi / done / m2\n")
+    expect(out).to include("Configured Review Agents (2):\n  #1 pi / done / m1\n  #2 pi / done / m2\n")
     expect(out).to include("Consolidator Agent:\n  pi / done / c\n")
     expect(reports('reviews/*.md').size).to eq(2)
     expect(reports('*consolidated*.md').size).to eq(1)
@@ -313,7 +409,7 @@ RSpec.describe 'agent-council end to end' do
       '(from 1 of 2 agents)) ---',
       '--- Consolidation complete ---'
     )
-    # The progress line, with its error on a line of its own.
+    # The finish line, with its error on a line of its own.
     expect(out).to match(/^  ✗ \d\d:\d\d:\d\d  #2 fails \/ m2\n      pi exited 1: boom$/), output_report
     expect(out).to match(failed_result('#2 fails / m2')), output_report
     consolidated = File.read(reports('*consolidated*.md').first, encoding: 'UTF-8')
@@ -611,6 +707,7 @@ RSpec.describe 'agent-council end to end' do
         "Consolidator Agent:\n  pi / done / c\n",
         "Consolidation Report (in #{run_dir}, from 2 reviews):\n"
       )
+      expect(out).to match(%r{from 2 reviews\):\n  - pid \d+  done / c\n}), output_report
       expect(Dir.glob('agent-council-reports/*/*', base: work_dir)).to eq([run_dir])
       expect(reviews_snapshot).to eq(reviews)
       consolidated = reports('*consolidated*.md')
@@ -743,7 +840,7 @@ RSpec.describe 'agent-council end to end' do
     run_dir = run_dirs.first
     expect(taken.map { |name| "#{name}-2" }).to include(run_dir)
     expect(out).to include("Run Dir:     #{File.join('agent-council-reports', run_dir)}")
-    expect(out.index('Run Dir:')).to be < out.index('Review Progress:') # printed at startup
+    expect(out.index('Run Dir:')).to be < out.index('Started Agents:') # printed at startup
     day, run_name = run_dir.split('/')
     [*reports('reviews/*.md'), *reports('*consolidated*.md')].each do |path|
       expect(path).to start_with(File.join(work_dir, 'agent-council-reports', run_dir, ''))
@@ -818,7 +915,9 @@ RSpec.describe 'agent-council end to end' do
     expect_died_by(status, 'INT')
     expect(monotonic_now - interrupted_at).to be < grace
     expect_quiet_interrupt
-    expect(out).to match(%r{\nConsolidation Report \(in agent-council-reports/[^)]+\):\n\z}), output_report
+    # The signal may arrive before or after the consolidator's pid line.
+    heading = %r{\nConsolidation Report \(in agent-council-reports/[^)]+\):\n}
+    expect(out).to match(/#{heading}(  - pid \d+  dies \/ c\n)?\z/), output_report
     expect(reports('reviews/*.md').size).to eq(1)
     expect(leftover_scratch_dirs).to be_empty
     expect_agents_terminated(1)

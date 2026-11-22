@@ -2,6 +2,20 @@
 
 ## 0.4.0 (unreleased)
 
+- Each agent's process ID is printed as it starts, on a `- pid` line under
+  a new `Started Agents:` heading (or, for the consolidator, under its
+  `Consolidation Report` heading), so a running agent can be found, or
+  stopped while the others go on: see "Stopping one agent" in
+  `RUNAWAY_AGENTS.md`. The lines printed as agents finish, once under
+  `Review Progress:`, now come under `Finished Agents:`, and the
+  configured agents are listed under `Configured Review Agents (N):`,
+  not `Review Agents (N):`.
+- An agent stopped by a signal is reported as, e.g., `pi was stopped by
+  SIGTERM`, not `pi exited : …`.
+- The lines printed while agents run show at once when output goes to a
+  file or a pipe. If the pipe closes (e.g. `| head`), the run goes on,
+  discarding the rest of its output, rather than ending and leaving its
+  agents running.
 - A fourth harness: an entry with `harness: opencode` runs under the
   OpenCode CLI (`opencode run`, tested with 1.19.6), with the provider
   and model the entry names and the credentials `opencode auth login`

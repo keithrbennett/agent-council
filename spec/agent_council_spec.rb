@@ -219,8 +219,8 @@ RSpec.describe AgentCouncil do
       end
 
       it 'explains a failure that exited nonzero from its stream, not its stderr' do
-        stub_capture3(claude_fixture('not_logged_in'), instance_double(Process::Status, success?: false,
-          exitstatus: 1))
+        stub_capture3(claude_fixture('not_logged_in'), instance_double(Process::Status,
+          success?: false, signaled?: false, exitstatus: 1))
         _label, ok, detail = described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', index: 1)
         expect(ok).to be(false)
         expect(detail).to eq('claude exited 1: Not logged in · Please run /login')
@@ -228,7 +228,8 @@ RSpec.describe AgentCouncil do
 
       it 'keeps terminal escapes out of a failure, whether or not it exited 0' do
         stream = "#{JSON.generate('type' => 'result', 'is_error' => true, 'result' => "bad\e[2J\rmodel")}\n"
-        stub_capture3(stream, instance_double(Process::Status, success?: false, exitstatus: 1))
+        stub_capture3(stream,
+          instance_double(Process::Status, success?: false, signaled?: false, exitstatus: 1))
         _label, _ok, detail = described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', index: 1)
         expect(detail).to eq('claude exited 1: bad [2J model')
 
@@ -293,7 +294,8 @@ RSpec.describe AgentCouncil do
         denial = { 'tool_name' => 'Bash', 'tool_input' => { 'command' => 'git diff' } }
         stream = "#{JSON.generate('type' => 'result', 'is_error' => true,
           'errors' => ['Reached maximum number of turns (3)'], 'permission_denials' => [denial] * 3)}\n"
-        stub_capture3(stream, instance_double(Process::Status, success?: false, exitstatus: 1))
+        stub_capture3(stream,
+          instance_double(Process::Status, success?: false, signaled?: false, exitstatus: 1))
         _label, ok, detail, _usage, warnings =
           described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', index: 1)
         expect(ok).to be(false)
@@ -302,8 +304,8 @@ RSpec.describe AgentCouncil do
       end
 
       it 'returns no warnings for a failed agent with nothing refused' do
-        stub_capture3(claude_fixture('not_logged_in'), instance_double(Process::Status, success?: false,
-          exitstatus: 1))
+        stub_capture3(claude_fixture('not_logged_in'), instance_double(Process::Status,
+          success?: false, signaled?: false, exitstatus: 1))
         result = described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', index: 1)
         expect(result.size).to eq(5)
         expect(result.last).to eq([])
@@ -427,7 +429,7 @@ RSpec.describe AgentCouncil do
     end
 
     it 'returns the usage of a failed agent too' do
-      stub_capture3('', instance_double(Process::Status, success?: false, exitstatus: 1))
+      stub_capture3('', instance_double(Process::Status, success?: false, signaled?: false, exitstatus: 1))
       allow(pi_harness).to receive(:usage).and_return({ 'input' => 5, 'output' => 6 })
 
       _label, ok, _detail, usage = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
@@ -437,7 +439,7 @@ RSpec.describe AgentCouncil do
     end
 
     it "cuts a failure's reason to 300 characters, and gives one when cleanup leaves none" do
-      status = instance_double(Process::Status, success?: false, exitstatus: 1)
+      status = instance_double(Process::Status, success?: false, signaled?: false, exitstatus: 1)
       detail_for = ->(stderr) {
         allow(Open3).to receive(:capture3).and_return(['', stderr, status])
         described_class.run_agent(agent, 'prompt', run_dir, 'prefix')[2]
@@ -448,7 +450,8 @@ RSpec.describe AgentCouncil do
 
     it 'explains a failure whose stderr has an invalid byte' do
       allow(Open3).to receive(:capture3)
-        .and_return(['', "boom \xFF\n".b, instance_double(Process::Status, success?: false, exitstatus: 1)])
+        .and_return(['', "boom \xFF\n".b,
+          instance_double(Process::Status, success?: false, signaled?: false, exitstatus: 1)])
       _label, ok, detail = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
       expect(ok).to be(false)
       expect(detail).to eq("pi exited 1: boom \uFFFD")
@@ -468,7 +471,7 @@ RSpec.describe AgentCouncil do
     end
 
     it 'deletes the scratch dir after a failed agent' do
-      stub_capture3('', instance_double(Process::Status, success?: false, exitstatus: 1))
+      stub_capture3('', instance_double(Process::Status, success?: false, signaled?: false, exitstatus: 1))
 
       _label, ok, detail = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
 
@@ -1354,6 +1357,19 @@ RSpec.describe AgentCouncil do
   describe '.relative_path' do
     it 'returns paths relative to the current working directory when possible' do
       expect(described_class.relative_path(File.join(Dir.pwd, 'reports', 'x'))).to eq('reports/x')
+    end
+  end
+
+  describe '.exit_description' do
+    def status_of(script) = Process.wait2(Process.spawn('sh', '-c', script)).last
+
+    it 'gives an exit status' do
+      expect(described_class.exit_description(status_of('exit 3'))).to eq('exited 3')
+    end
+
+    # As when the user stops the agent with kill -TERM -PID.
+    it 'names the signal that stopped the process, which has no exit status' do
+      expect(described_class.exit_description(status_of('kill -TERM $$'))).to eq('was stopped by SIGTERM')
     end
   end
 
