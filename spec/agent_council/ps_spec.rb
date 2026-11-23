@@ -3,8 +3,10 @@
 # Focused tests for lib/agent_council/ps.rb and exe/agent-council-ps. Run
 # with: rspec
 require 'spec_helper'
+require 'fileutils'
 require 'open3'
 require 'stringio'
+require 'tmpdir'
 require 'agent_council/ps'
 
 RSpec.describe AgentCouncil::Ps do
@@ -31,9 +33,29 @@ RSpec.describe AgentCouncil::Ps do
     PS
   end
   let(:processes) { described_class.parse_ps(ps_output) }
+  # A working directory with a script, bin/agent-council, in it.
+  let(:dir) do
+    Dir.mktmpdir(nil, tmp_root).tap do |dir|
+      FileUtils.mkdir_p(File.join(dir, 'bin'))
+      FileUtils.touch(File.join(dir, 'bin', 'agent-council'))
+    end
+  end
+  let(:script) { File.join(dir, 'bin', 'agent-council') }
+
+  after { FileUtils.rm_rf(dir) }
+
+  # Where to make temporary directories: the system's, unless its path has
+  # a space in it, which a retitled run's script's path can't have.
+  def tmp_root = Dir.tmpdir.include?(' ') ? '/tmp' : Dir.tmpdir
 
   def report(**options)
     described_class.report(processes, cwd: ->(_pid) { '/proj' }, **options)
+  end
+
+  # Whether an Entry with these ps args and, as on Linux, /proc argv (or
+  # none, as on macOS) is a run, in dir.
+  def council?(args, argv = nil, cwd: ->(_pid) { dir })
+    described_class.agent_council?(described_class::Entry.new(1, 0, 1, 0, 0, 0, args, argv), cwd: cwd)
   end
 
   it 'parses ps durations, with days and macOS fractions' do
@@ -62,6 +84,118 @@ RSpec.describe AgentCouncil::Ps do
       .to all(be(true))
     expect(['ruby -r agent-council -e sleep', 'ruby -e agent-council', 'ruby -I agent-council x.rb',
       'ruby'].map(&council)).to all(be(false))
+  end
+
+  it 'finds a run under bundle exec: retitled, under MRI, or run by bundle, under JRuby' do
+    # MRI: the title, which /proc's argv holds as one string, with
+    # arguments that may contain "/".
+    title = "#{script} /tmp/prompt.md -o tmp/council reports"
+    expect(council?(title)).to be(true)
+    expect(council?(title, [title])).to be(true)
+    expect(council?('bin/agent-council p.md', ['bin/agent-council p.md'])).to be(true) # relative
+    expect(council?('my_tool /tmp/agent-council', ['my_tool /tmp/agent-council'])).to be(false)
+    # A last argument whose basename looks like an interpreter's.
+    %w[/tmp/ruby /tmp/ruby3.4 jruby].each do |last|
+      title = "#{script} p.md #{last}"
+      expect(council?(title)).to be(true)
+      expect(council?(title, [title])).to be(true)
+    end
+    # JRuby: bundle runs the script.
+    expect(council?('java -cp : org.jruby.Main -S bundle exec ./agent-council p.md')).to be(true)
+    expect(council?('ruby /g/bin/bundle exec --keep-file-descriptors exe/agent-council')).to be(true)
+    expect(council?('ruby /g/bin/bundle exec --gemfile Gemfile exe/agent-council')).to be(true)
+    expect(council?('ruby /g/bin/bundle exec --gemfile agent-council rake')).to be(false)
+    expect(council?('ruby /g/bin/bundler exec exe/agent-council')).to be(true)
+    expect(council?('ruby /g/bin/bundle exec rake')).to be(false)
+    expect(council?('ruby /g/bin/bundle exec')).to be(false)
+  end
+
+  it "finds a run under RVM's executable-hooks wrapper: retitled, under MRI, or run by it, under JRuby" do
+    title = '/home/u/.rvm/rubies/ruby-4.0.7/bin/ruby /home/u/.rvm/gems/ruby-4.0.7/bin/agent-council p.md'
+    expect(council?(title, [title])).to be(true)
+    expect(council?('ruby -I lib exe/agent-council', ['ruby -I lib exe/agent-council'])).to be(true)
+    expect(council?('ruby exe/agent-council-ps', ['ruby exe/agent-council-ps'])).to be(false)
+    expect(council?('ruby -e agent-council', ['ruby -e agent-council'])).to be(false)
+    # Under JRuby, which doesn't retitle, it's shown as java running it.
+    hooks = '/home/u/.rvm/gems/jruby-10.1.0.0/bin/jruby_executable_hooks'
+    bin = '/home/u/.rvm/gems/jruby-10.1.0.0/bin'
+    ["java -Xss2048k org.jruby.main.Main #{hooks} #{bin}/agent-council p.md",
+      "java -cp : org.jruby.Main #{hooks} #{bin}/bundle exec #{bin}/agent-council p.md",
+      'ruby /x/ruby_executable_hooks /x/agent-council'].each do |args|
+      expect(council?(args, args.split)).to be(true)
+    end
+    ["java org.jruby.main.Main #{hooks} #{bin}/rake", "java org.jruby.main.Main #{hooks}"].each do |args|
+      expect(council?(args, args.split)).to be(false)
+    end
+    expect(council?('vim /tmp/agent-council notes.md')).to be(false)
+  end
+
+  it "takes a Bundler title, where /proc gives it, only if it starts with an existing file's path" do
+    # A script named "agent-council backup", and a program in a directory
+    # named "agent-council work". Without /proc, as on macOS, they're
+    # taken for runs, as documented.
+    FileUtils.touch(File.join(dir, 'agent-council backup'))
+    FileUtils.mkdir_p(File.join(dir, 'agent-council work', 'bin'))
+    FileUtils.touch(File.join(dir, 'agent-council work', 'bin', 'tool'))
+    ["#{dir}/agent-council backup p.md", "#{dir}/agent-council work/bin/tool"].each do |title|
+      expect(council?(title, [title])).to be(false)
+      expect(council?(title)).to be(true)
+    end
+    expect(council?('/nonexistent/agent-council p.md', ['/nonexistent/agent-council p.md'])).to be(false)
+    # A limitation, as documented: with a file named agent-council in the
+    # same directory, they're taken for runs on Linux too.
+    FileUtils.touch(File.join(dir, 'agent-council'))
+    ["#{dir}/agent-council backup p.md", "#{dir}/agent-council work/bin/tool"].each do |title|
+      expect(council?(title, [title])).to be(true)
+    end
+  end
+
+  it "doesn't find a script whose path has a space in it, where its words are split at spaces" do
+    spaced = "#{dir}/my gems/agent-council"
+    FileUtils.mkdir_p(File.dirname(spaced))
+    FileUtils.touch(spaced)
+    expect(council?("ruby #{spaced} p.md")).to be(false) # as on macOS
+    expect(council?("#{spaced} p.md", ["#{spaced} p.md"])).to be(false) # Bundler's title, under MRI
+    # Under JRuby, which doesn't retitle, /proc's arguments keep it whole.
+    jruby = ['java', '-cp', ':', 'org.jruby.Main', '-S', 'bundle', 'exec', spaced, 'p.md']
+    expect(council?(jruby.join(' '), jruby)).to be(true)
+  end
+
+  it "finds JRuby runs by either of JRuby's main classes" do
+    %w[org.jruby.Main org.jruby.main.Main].each do |main|
+      entry = described_class::Entry.new(1, 0, 1, 0, 0, 0, "java -Xss2048k #{main} /g/bin/agent-council p.md")
+      expect(described_class.agent_council?(entry)).to be(true)
+    end
+  end
+
+  it "doesn't fail on a path that can't be expanded, such as ~ and an unknown user" do
+    title = '~nosuchuser12/agent-council p.md'
+    expect(council?(title, [title], cwd: ->(_pid) { '/tmp' })).to be(false)
+  end
+
+  it "doesn't take a Bundler title's relative path for a run's if the working directory can't be read" do
+    expect(council?('bin/agent-council p.md', ['bin/agent-council p.md'], cwd: ->(_pid) {})).to be(false)
+  end
+
+  it "asks for a working directory only for a Bundler title's relative path, and once per process" do
+    calls = []
+    cwd = ->(pid) do
+      calls << pid
+      dir
+    end
+    # Without /proc's arguments, as on macOS, none is asked for.
+    described_class.runs(processes, cwd: cwd)
+    expect(calls).to be_empty
+    titled = described_class.parse_ps(<<~PS)
+      10   1  10  01:00 00:00:00 1024 bin/agent-council p.md
+      11   1  11  01:00 00:00:00 1024 #{script} p.md
+      12   1  12  01:00 00:00:00 1024 ruby exe/agent-council p.md
+    PS
+    titled[10].argv = ['bin/agent-council p.md']
+    titled[11].argv = ["#{script} p.md"]
+    titled[12].argv = %w[ruby exe/agent-council p.md]
+    expect(described_class.report(titled, cwd: cwd).grep(/\Aagent-council pid/).size).to eq(3)
+    expect(calls).to eq([10, 11, 12]) # 10 for its title; each for its heading
   end
 
   it 'uses the exact arguments, where /proc gives them, so a path with a space is found' do
@@ -109,6 +243,22 @@ RSpec.describe AgentCouncil::Ps do
       ['pi', '']])
   end
 
+  it 'splits a model into provider and model only for OpenCode, whose --model gives both' do
+    claude = described_class::Entry.new(1, 0, 1, 0, 0, 0, 'claude -p --model anthropic/claude-x')
+    expect(described_class.model_label(claude)).to eq('anthropic/claude-x')
+  end
+
+  it "names an agent by its command when it isn't a harness's" do
+    agent = described_class::Entry.new(5, 1, 5, 0, 0, 2048, 'node server.js')
+    expect(described_class.agent_line(agent, nil,
+      0)).to eq('  - pid 5  node  running 00:00:00  cpu 00:00:00  2 MB')
+  end
+
+  it 'rounds durations to the second, as agent-council does' do
+    expect(described_class.format_duration(59.6)).to eq('00:01:00')
+    expect(described_class.format_duration(90_061)).to eq('25:01:01')
+  end
+
   it 'reports each agent and the commands it is running' do
     previous = described_class.parse_ps(ps_output.sub('00:03:12 215040', '00:03:11 215040'))
     lines = report(previous: previous, interval: 2, pids: [200])
@@ -136,6 +286,8 @@ RSpec.describe AgentCouncil::Ps do
 
   it 'says when no run is found' do
     expect(described_class.report({})).to eq(['No running agent-council found.'])
+    expect(described_class.report({},
+      pids: [30, 31])).to eq(['No running agent-council, or agent of one, has pid 30 or 31.'])
   end
 
   it 'reads CPU ticks from /proc/PID/stat, whatever the command name' do
@@ -195,6 +347,94 @@ RSpec.describe AgentCouncil::Ps do
     expect(described_class.terminal_width(terminal)).to eq(100)
     terminal = instance_double(IO, tty?: true, winsize: [24, 132])
     expect(described_class.terminal_width(terminal)).to eq(132)
+    terminal = instance_double(IO, tty?: true)
+    allow(terminal).to receive(:winsize).and_raise(Errno::ENOTTY)
+    expect(described_class.terminal_width(terminal)).to eq(100)
+  end
+
+  # The real thing, as far as the process tree goes: a stand-in
+  # agent-council, run as the e2e specs run it, spawns an agent through
+  # WorkerPool, and the agent a command. Yields the run's [council,
+  # agents] and the agent's commands once all three show, or fails.
+  # retitle: a title the stand-in gives itself first, as Bundler under
+  # bundle exec or RVM's executable-hooks wrapper does, with SCRIPT for
+  # its path.
+  def with_real_run(retitle: nil)
+    Dir.mktmpdir(nil, tmp_root) do |tmp|
+      dir = File.join(tmp, 'council')
+      Dir.mkdir(dir)
+      script = File.join(dir, 'agent-council')
+      File.write(script, <<~RUBY)
+        #{"Process.setproctitle(#{retitle.inspect}.sub('SCRIPT', __FILE__))" if retitle}
+        require 'agent_council/worker_pool'
+        AgentCouncil::WorkerPool.new(grace: 1).capture3({}, 'sh', '-c', 'sleep 300; :', stdin_data: '')
+      RUBY
+      council = Process.spawn(RbConfig.ruby, '-I', File.expand_path('../../lib', __dir__), script,
+        pgroup: true)
+      agent_pids = []
+      begin
+        run = commands = nil
+        deadline = described_class.monotonic_now + 30
+        while described_class.monotonic_now < deadline
+          processes = described_class.ps_snapshot
+          agent_pids |= described_class.children(processes, council).map(&:pid)
+          run = described_class.runs(processes, pids: [council]).first
+          commands = described_class.descendants(processes, run[1].first.pid) if run && run[1].any?
+          break if commands&.any?
+
+          sleep 0.1
+        end
+        expect(commands).to be_truthy.and(be_any), "no run with its agent and command found: #{run.inspect}"
+        yield run, commands
+      ensure
+        # The agents seen, and any not yet seen, each leading its group;
+        # then the stand-in, which leads its own. It's stopped first, so
+        # that it can't start an agent after the last look.
+        begin
+          Process.kill('STOP', council)
+          agent_pids |= described_class.children(described_class.ps_snapshot, council).map(&:pid)
+        rescue
+          nil
+        end
+        [*agent_pids, council].each do |pid|
+          Process.kill('KILL', -pid)
+        rescue Errno::ESRCH, Errno::EPERM
+          nil
+        end
+        Process.wait(council)
+      end
+    end
+  end
+
+  it 'finds a real run, its agent (spawned as WorkerPool spawns one), and its command' do
+    with_real_run do |(council, agents), commands|
+      expect(agents.map(&:args)).to eq(['sh -c sleep 300; :'])
+      expect(commands.map { |process, depth| [process.args, depth] }).to eq([['sleep 300', 1]])
+      # As on macOS, with only ps's command line.
+      council.argv = nil
+      expect(described_class.agent_council?(council)).to be(true)
+    end
+  end
+
+  {
+    'as Bundler does under bundle exec'      => ['SCRIPT /tmp/p.md /tmp/ruby',
+      %r{\A/\S+/council/agent-council /tmp/p.md /tmp/ruby\z}],
+    "as RVM's executable-hooks wrapper does" => ['ruby SCRIPT p.md',
+      %r{\Aruby /\S+/council/agent-council p.md\z}],
+  }.each do |how, (retitle, shown)|
+    it "finds a real run that retitled itself, #{how}" do
+      skip "JRuby's setproctitle doesn't change what ps shows" if RUBY_ENGINE == 'jruby'
+
+      with_real_run(retitle: retitle) do |(council, _agents), _commands|
+        # Linux's ps shows the new title; whether others' do is unknown.
+        unless File.exist?('/proc') || council.args.match?(shown)
+          skip "this system's ps doesn't show a process's new title"
+        end
+        expect(council.args).to match(shown)
+        # On Linux, /proc holds the title as one string.
+        expect(council.argv).to eq([council.args]) if council.argv
+      end
+    end
   end
 
   describe '.run' do
@@ -217,7 +457,7 @@ RSpec.describe AgentCouncil::Ps do
 
     it 'exits 1 when no run is found' do
       expect(run(%w[999])).to eq(1)
-      expect(out.string).to eq("No running agent-council found.\n")
+      expect(out.string).to eq("No running agent-council, or agent of one, has pid 999.\n")
     end
 
     it 'watching, prints the first frame before waiting the interval, then refreshes' do
@@ -234,6 +474,19 @@ RSpec.describe AgentCouncil::Ps do
       out, _err, status = Open3.capture3(RbConfig.ruby, exe, '--help')
       expect(status).to be_success
       expect(out).to start_with('Usage: agent-council-ps')
+    end
+
+    # A ps that fails comes first on PATH; the rest of PATH stays, since
+    # JRuby's launcher needs it. (ps_snapshot's spec covers a missing ps.)
+    it 'exits 1 with a message when ps fails' do
+      Dir.mktmpdir do |dir|
+        File.write(File.join(dir, 'ps'), "#!/bin/sh\nexit 3\n")
+        File.chmod(0o755, File.join(dir, 'ps'))
+        path = "#{dir}#{File::PATH_SEPARATOR}#{ENV.fetch('PATH')}"
+        _out, err, status = Open3.capture3({ 'PATH' => path }, RbConfig.ruby, exe)
+        expect(status.exitstatus).to eq(1)
+        expect(err).to include('agent-council-ps: ps failed')
+      end
     end
 
     it 'exits 2 with a message on a bad argument' do

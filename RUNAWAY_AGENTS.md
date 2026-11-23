@@ -57,7 +57,8 @@ A limit is easy to write; a good default is not:
 
 Before stopping an agent that is taking longer than expected, you can
 check what it is doing with `agent-council-ps`, which the gem
-installs next to `agent-council`. Run it in another terminal:
+installs next to `agent-council`. Run it in another terminal; its
+list comes after a second, the time it measures CPU use over:
 
 ```
 $ agent-council-ps
@@ -88,21 +89,43 @@ For each agent it shows:
 Above, agent #2 has been waiting 41 minutes for a test run to finish.
 
 - `-w` or `--watch` refreshes the list every 5 seconds until Ctrl-C.
-  To choose the interval, attach it: `-w30` or `--watch=30`.
+  To choose the interval, attach it: `-w30` or `--watch=30`. In
+  `-w 30`, 30 is taken for a process ID.
 - Process IDs limit the list to the runs that have those IDs, or that
   have agents with those IDs: `agent-council-ps 48212`.
 - Several runs, including runs in the same directory, are listed
-  separately, each with its own agents. agent-council-ps doesn't show each
-  run's run dir, which can't be told reliably from outside the
+  separately, each with its own agents. `agent-council-ps` doesn't show
+  each run's run dir, which can't be told reliably from outside the
   process. The `Run Dir:` line that the run printed when it started
   gives it.
+- A run is recognized by its command: Ruby (MRI or JRuby) running a
+  script named exactly `agent-council`, or a process whose command
+  starts with that script, as Bundler retitles one. The installed
+  command (including under RVM, whose wrapper runs it, and under MRI
+  retitles it `ruby`, the script, and its arguments), a checkout's
+  `exe/agent-council`, and `bundle exec agent-council` all qualify. A
+  run started some other way, such as through a copy of the script
+  under another name, isn't listed.
+- A run whose script's path has a space in it is listed only on Linux,
+  and not if it was retitled under MRI, by `bundle exec` or by RVM's
+  wrapper. (Installed gems' paths normally have none.)
+- A process whose command's first word (split at spaces) is a path
+  whose last part is `agent-council` is taken for a run that Bundler
+  retitled. On Linux, that path must name an existing file; a relative
+  one is looked up from the run's working directory, which can't be
+  read for another user's run, so such a run isn't listed. On macOS,
+  where it would take an `lsof` to check, it needn't. So, say, a script
+  named `agent-council backup`, or a program in a directory named
+  `agent-council work`, is listed as a run on macOS, and on Linux too if
+  a file named `agent-council` is also in that directory.
 
 What it can't show: it reads only what the operating system shows
-(through `ps`, and `lsof` on macOS), so it can't see an agent's
-conversation with its model, which goes only to agent-council. Low CPU
-use is normal for an agent waiting on its model. An agent that has no
-long-running command, and whose sibling agents finished long ago, may
-be stuck in a loop with its model, and only stopping it will end that.
+(through `ps`, plus `/proc` on Linux and `lsof` on macOS), so it can't
+see an agent's conversation with its model, which goes only to
+agent-council. Low CPU use is normal for an agent waiting on its model.
+An agent that has no long-running command, and whose sibling agents
+finished long ago, may be stuck in a loop with its model, and only
+stopping it will end that.
 
 ## Stopping one agent
 

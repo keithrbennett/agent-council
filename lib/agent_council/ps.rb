@@ -38,13 +38,26 @@ module AgentCouncil
     # Ruby interpreters agent-council may run under, by command name: MRI
     # (possibly versioned, e.g. ruby3.4), or JRuby, whose launcher runs java.
     RUBY = /\A(ruby[\d.]*|jruby)\z/
-    JRUBY_MAIN = 'org.jruby.Main'
+    # JRuby's main class: org.jruby.main.Main from 10.1, org.jruby.Main
+    # before.
+    JRUBY_MAINS = %w[org.jruby.main.Main org.jruby.Main].freeze
+
+    # RVM's executable-hooks wrapper, which runs installed gems' commands
+    # under RVM: ruby_executable_hooks, or under JRuby,
+    # jruby_executable_hooks.
+    EXECUTABLE_HOOKS = /\A\w*_executable_hooks\z/
 
     # Ruby options whose argument can be the next word (Ruby's and JRuby's
     # alike), so that word isn't taken for the script.
     RUBY_OPTIONS_WITH_ARGUMENT = %w[-C -E -I -r --encoding --external-encoding --internal-encoding].freeze
 
-    NO_RUNS = 'No running agent-council found.'
+    # What the report says when it finds no run to show: none at all, or
+    # none with the pids asked for.
+    module_function def no_runs_line(pids)
+      return 'No running agent-council found.' if pids.empty?
+
+      "No running agent-council, or agent of one, has pid #{pids.join(' or ')}."
+    end
 
     DEFAULT_WATCH_SECONDS = 5
 
@@ -69,8 +82,11 @@ module AgentCouncil
 
       Options:
         -w, --watch  refresh every #{DEFAULT_WATCH_SECONDS} seconds until Ctrl-C; -wSECONDS
-                     or --watch=SECONDS to choose the interval (e.g. -w30)
+                     or --watch=SECONDS to choose the interval (e.g. -w30). The
+                     interval must be attached: in "-w 30", 30 is a PID.
         -h, --help   show this help
+
+      The first list comes after a second, the time CPU use is sampled over.
 
       To stop one agent and let the run go on: kill -TERM -PID
       See RUNAWAY_AGENTS.md in the gem for more.
@@ -164,34 +180,118 @@ module AgentCouncil
 
     # Whether process is agent-council: a Ruby interpreter running the
     # agent-council script (as its shebang or a binstub runs it), or under
-    # JRuby, java running org.jruby.Main with it. Only the script is
-    # checked, so a process merely mentioning agent-council, such as an
-    # agent whose system prompt names it, or agent-council-ps itself, isn't
-    # taken for it.
-    module_function def agent_council?(process)
-      tokens = process.tokens
-      ruby_args =
-        if RUBY.match?(process.command_name)
-          tokens.drop(1)
-        elsif process.command_name == 'java' && (main = tokens.index(JRUBY_MAIN))
-          tokens.drop(main + 1)
-        else
-          return false
+    # JRuby, java running JRuby's main class with it; under either, it may
+    # run it through `bundle exec`. Only the script is checked, a word whose
+    # basename is exactly agent-council, so a process merely mentioning
+    # agent-council, such as an agent whose system prompt names it, or
+    # agent-council-ps itself, isn't taken for it.
+    #
+    # Under MRI, `bundle exec` loads the script into Bundler's own process
+    # and retitles it with the script's path and arguments, so a process
+    # whose command starts with the script's path is one too; see
+    # bundler_title?. RVM's executable-hooks wrapper, which runs installed
+    # gems' commands under RVM, retitles its process too, as "ruby",
+    # the script's path, and its arguments; under JRuby, it's shown as
+    # run (see ruby_script_index).
+    #
+    # A retitled process's exact arguments (from /proc, as on Linux) are
+    # its title, one string, which is split at spaces. Where there's no
+    # /proc, as on macOS, or it can't be read (argv is nil), the words are
+    # ps's command line split at spaces. In either case, a script whose
+    # path has a space in it isn't found; only a process's exact
+    # arguments, not retitled, keep it whole. Without /proc, any command
+    # starting with a path whose basename is agent-council is taken for a
+    # run Bundler retitled. cwd: gives a process's working directory (see
+    # bundler_title?).
+    module_function def agent_council?(process, cwd: method(:process_cwd))
+      return true if process.argv && bundler_title?(process, cwd)
+
+      tokens = process.argv&.size == 1 ? process.argv.first.split : process.tokens
+      command = File.basename(tokens.first.to_s)
+      offset =
+        if RUBY.match?(command)
+          1
+        elsif command == 'java' && (main = tokens.index { |token| JRUBY_MAINS.include?(token) })
+          main + 1
         end
-      File.basename(ruby_script(ruby_args).to_s) == 'agent-council'
+      return process.argv.nil? && script?(tokens.first) unless offset
+
+      index = ruby_script_index(tokens.drop(offset))
+      !index.nil? && script?(tokens[offset + index])
     end
 
-    # The script in a Ruby interpreter's arguments: the first word that
-    # isn't an option or an option's argument; nil if there's none, or if
-    # -e gives the code to run instead.
-    module_function def ruby_script(args)
-      args = args.dup
-      while (arg = args.shift)
-        return args.first if arg == '--'
-        return nil if arg.start_with?('-e')
-        return arg unless arg.start_with?('-')
+    module_function def script?(word) = File.basename(word.to_s) == 'agent-council'
 
-        args.shift if RUBY_OPTIONS_WITH_ARGUMENT.include?(arg)
+    # Whether a process's exact arguments (from /proc, as on Linux) are a
+    # title Bundler gave it: one string, starting with the path of an
+    # existing file named agent-council (relative to the process's working
+    # directory, if not absolute, so not if that can't be read, as for
+    # another user's process). It's split at spaces, so a script whose
+    # path has a space in it isn't found. The file must exist, so that,
+    # say, a script named `agent-council backup`, or a program at
+    # `.../agent-council work/bin/tool`, isn't taken for one, unless a file
+    # named agent-council is in the same directory as well (a limitation
+    # RUNAWAY_AGENTS.md documents). It's checked before the interpreter,
+    # since the basename of the whole title is its last argument's, which
+    # may look like an interpreter's (as in "/x/agent-council p.md
+    # /tmp/ruby").
+    module_function def bundler_title?(process, cwd)
+      path = process.argv.first.to_s.split.first
+      script?(path) && existing_file?(path, process, cwd)
+    end
+
+    # Whether path names an existing file, relative to the process's
+    # working directory if not absolute. A path that can't be expanded,
+    # such as one starting with "~" and an unknown user's name, doesn't.
+    module_function def existing_file?(path, process, cwd)
+      dir = cwd.call(process.pid) unless path.start_with?('/')
+      return false unless path.start_with?('/') || dir
+
+      File.file?(File.expand_path(path, dir || '/'))
+    rescue ArgumentError
+      false
+    end
+
+    # The index in a Ruby interpreter's arguments of its script: the first
+    # word that isn't an option or an option's argument, or if that's
+    # bundle running exec (as JRuby shows `bundle exec`, not retitling its
+    # process), the script it runs (see bundle_exec_command_index); nil if
+    # there's none, or if -e gives the code to run instead. RVM's wrapper
+    # (see EXECUTABLE_HOOKS), which JRuby shows too, is passed over: the
+    # script is the word after it, or the one bundle exec runs.
+    module_function def ruby_script_index(args)
+      index = 0
+      while index < args.size
+        arg = args[index]
+        return (index + 1 if index + 1 < args.size) if arg == '--'
+        return nil if arg.start_with?('-e')
+
+        unless arg.start_with?('-')
+          # RVM's wrapper runs the script it's given.
+          index += 1 if EXECUTABLE_HOOKS.match?(File.basename(arg))
+          return nil unless index < args.size
+          return index unless bundle_exec?(args, index)
+
+          return bundle_exec_command_index(args, index + 2)
+        end
+        index += RUBY_OPTIONS_WITH_ARGUMENT.include?(arg) ? 2 : 1
+      end
+      nil
+    end
+
+    # Whether args[index] is bundle (or bundler) and the word after it exec.
+    module_function def bundle_exec?(args, index)
+      %w[bundle bundler].include?(File.basename(args[index])) && args[index + 1] == 'exec'
+    end
+
+    # The index in args of the command `bundle exec` runs, the first word
+    # from index on that isn't one of exec's options (such as
+    # --keep-file-descriptors) or --gemfile's argument; nil if none.
+    module_function def bundle_exec_command_index(args, index)
+      while index < args.size
+        return index unless args[index].start_with?('-')
+
+        index += args[index] == '--gemfile' ? 2 : 1
       end
       nil
     end
@@ -223,23 +323,28 @@ module AgentCouncil
 
     # "provider / model" from an agent's command line, as far as it shows
     # them: OpenCode's gives one "provider/model", and Claude Code's and
-    # Codex's the model alone. pi replaces its command line with "pi", so
-    # a pi agent's gives neither (and this returns "").
+    # Codex's the model alone (which may itself contain a "/"). pi replaces
+    # its command line with "pi", so a pi agent's gives neither (and this
+    # returns "").
     module_function def model_label(process)
       args = process.args
       model = args[/(?:\A|\s)--model\s+(\S+)/, 1]
       provider = args[/(?:\A|\s)--provider\s+(\S+)/, 1]
-      provider, model = model.split('/', 2) if provider.nil? && model&.include?('/')
+      if provider.nil? && model&.include?('/') && harness_name(process) == Harnesses::OpenCodeHarness::NAME
+        provider, model = model.split('/', 2)
+      end
       [provider, model].compact.join(' / ')
     end
 
     # The agent-council processes to show and their agents: [[council,
     # [agent, ...]], ...]. An agent is a child leading its own process group.
     # pids: only the runs that have one of these pids, or an agent with one
-    # (all if empty).
-    module_function def runs(processes, pids: [])
+    # (all if empty). cwd: as for agent_council?; it's called at most once
+    # per process.
+    module_function def runs(processes, pids: [], cwd: method(:process_cwd))
+      cwd = memoized(cwd)
       result = processes.each_value.select do |process|
-        agent_council?(process)
+        agent_council?(process, cwd: cwd)
       end.sort_by(&:pid).map do |council|
         [council, children(processes, council.pid).select { |child| child.pgid == child.pid }.sort_by(&:pid)]
       end
@@ -248,9 +353,21 @@ module AgentCouncil
       result.select { |council, agents| [council, *agents].map(&:pid).intersect?(pids) }
     end
 
-    # HH:MM:SS, as agent-council prints durations (hours may exceed 23).
+    # A callable's results, by argument; see memoized.
+    Memo = Struct.new(:callable, :results) do
+      def call(arg) = results.fetch(arg) { results[arg] = callable.call(arg) }
+    end
+
+    # callable, called at most once per argument; callable itself if it's
+    # already memoized, so that passing one on doesn't wrap it again.
+    module_function def memoized(callable)
+      callable.is_a?(Memo) ? callable : Memo.new(callable, {})
+    end
+
+    # HH:MM:SS, rounded to the second, as agent-council prints durations
+    # (hours may exceed 23).
     module_function def format_duration(seconds)
-      seconds = seconds.to_i
+      seconds = seconds.round
       format('%02d:%02d:%02d', seconds / 3600, (seconds % 3600) / 60, seconds % 60)
     end
 
@@ -270,10 +387,12 @@ module AgentCouncil
 
     # The report's lines for one snapshot. previous and interval (seconds
     # between them) give recent CPU use; width cuts command lines.
+    # selected: the runs to show, by default those runs finds.
     module_function def report(processes, pids: [], previous: nil, interval: 0, width: 100,
-      cwd: method(:process_cwd))
-      selected = runs(processes, pids: pids)
-      return [NO_RUNS] if selected.empty?
+      cwd: method(:process_cwd), selected: nil)
+      cwd = memoized(cwd)
+      selected ||= runs(processes, pids: pids, cwd: cwd)
+      return [no_runs_line(pids)] if selected.empty?
 
       selected.flat_map do |council, agents|
         run_lines(processes, council, agents, previous, interval, width, cwd.call(council.pid))
@@ -359,11 +478,13 @@ module AgentCouncil
     end
 
     # Prints one snapshot, with CPU use over a second, and returns the exit
-    # status: 0, or 1 if no run was found. Watching, it prints the first
-    # after that second too, then one every watch seconds, with CPU use
-    # since the last, until interrupted (Interrupt is raised to the caller).
-    # snapshot and pause are seams for the specs.
-    module_function def run(argv, out: $stdout, snapshot: method(:ps_snapshot), pause: method(:sleep))
+    # status: 0, or 1 if no run was found (or none with the pids asked
+    # for). Watching, it prints the first after that second too, then one
+    # every watch seconds, with CPU use since the last, until interrupted
+    # (Interrupt is raised to the caller). snapshot, pause, and cwd are
+    # seams for the specs.
+    module_function def run(argv, out: $stdout, snapshot: method(:ps_snapshot), pause: method(:sleep),
+      cwd: method(:process_cwd))
       watch, pids = parse_args(argv)
       previous = snapshot.call
       previous_at = monotonic_now
@@ -371,15 +492,17 @@ module AgentCouncil
       loop do
         processes = snapshot.call
         now = monotonic_now
+        snapshot_cwd = memoized(cwd)
+        selected = runs(processes, pids: pids, cwd: snapshot_cwd)
         lines = report(processes, pids: pids, previous: previous, interval: now - previous_at,
-          width: terminal_width(out))
+          width: terminal_width(out), cwd: snapshot_cwd, selected: selected)
         if watch
           out.print("\e[H\e[2J") if out.tty?
           out.puts("#{Time.now.strftime('%H:%M:%S')}, every #{format('%g', watch)}s; Ctrl-C to stop")
         end
         out.puts(lines)
         out.flush
-        return lines == [NO_RUNS] ? 1 : 0 unless watch
+        return selected.empty? ? 1 : 0 unless watch
 
         previous = processes
         previous_at = now

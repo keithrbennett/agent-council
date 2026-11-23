@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-# Kept free of other project requires so both executables can load it:
-# pi-models doesn't load lib/agent_council.rb.
+# Kept free of other project requires so every executable can load it:
+# pi-models and agent-council-ps don't load lib/agent_council.rb.
 
 require 'rbconfig'
 

@@ -147,10 +147,11 @@ config copies, found through its reports' front matter (§12).
 
 `agent-council-ps` is a separate, read-only command for a run in
 progress: it lists each running agent-council, its agents, and the
-commands they are running, read from `ps`. It runs outside
-agent-council and needs nothing from it beyond the process tree (each
-agent is a child leading its own process group, §7), so it can't see
-agents' event streams, and it doesn't try to find a run's run dir. See
+commands they are running, read from `ps` (and on Linux, `/proc`). It
+runs outside agent-council and needs nothing from it beyond the process
+tree (each agent is a child leading its own process group, §7), so it
+can't see agents' event streams, and it doesn't try to find a run's run
+dir. See
 [RUNAWAY_AGENTS.md](RUNAWAY_AGENTS.md#seeing-what-an-agent-is-doing).
 
 ---
@@ -540,8 +541,9 @@ framework.
 ## 17. Dependencies
 
 The tool itself uses only the Ruby standard library (`yaml`, `json`, `open3`, `optparse`, `fileutils`, `tmpdir`, `shellwords`, ...); tests use RSpec. Beyond the harnesses, it runs only standard system
-commands: `agent-council-ps` reads `ps`, and on macOS, which has no
-`/proc`, `lsof` for a process's working directory.
+commands: `agent-council-ps` reads `ps`, and on Linux, `/proc` for
+processes' exact arguments, CPU time, and working directories, or on
+macOS, which has no `/proc`, `lsof` for a process's working directory.
 
 New gems are added only if they solve a meaningful problem that would otherwise require substantial code.
 
