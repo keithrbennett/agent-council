@@ -22,6 +22,21 @@ jobs:
           bundler-cache: true
       - run: bundle exec rspec
 
+  # The jobs above run on Linux. This one runs the suite on macOS, where
+  # ps's output, lsof (macOS has no /proc), signals and process groups, and
+  # temp paths (/var is a symlink to /private/var) differ. One Ruby is
+  # enough: the matrix above covers Ruby versions.
+  macos:
+    runs-on: macos-latest
+    name: RSpec (macOS, Ruby 4.0)
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '4.0'
+          bundler-cache: true
+      - run: bundle exec rspec
+
   # The Gemfile allows simplecov >= 1.0, < 2.0. A normal `bundle install` only
   # exercises whatever Bundler resolves today (usually the newest), so this job
   # pins simplecov to each end of that range and runs the suite there.
