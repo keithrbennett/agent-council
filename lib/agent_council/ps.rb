@@ -47,9 +47,19 @@ module AgentCouncil
     # jruby_executable_hooks.
     EXECUTABLE_HOOKS = /\A\w*_executable_hooks\z/
 
-    # Ruby options whose argument can be the next word (Ruby's and JRuby's
-    # alike), so that word isn't taken for the script.
-    RUBY_OPTIONS_WITH_ARGUMENT = %w[-C -E -I -r --encoding --external-encoding --internal-encoding].freeze
+    # Ruby options whose argument can be the next word (MRI's, and the
+    # ones JRuby shares with it), so that word isn't taken for the script.
+    RUBY_OPTIONS_WITH_ARGUMENT = %w[
+      -C -E -I -r --backtrace-limit --crash-report --disable --dump --enable --encoding
+      --external-encoding --internal-encoding --parser
+    ].freeze
+
+    # Bundler's command, by name: bundle or bundler, possibly versioned
+    # (e.g. bundle3.4), as RUBY allows ruby3.4.
+    BUNDLE = /\Abundler?[\d.]*\z/
+    # The word that runs a given version of a gem's command, as in
+    # `bundle _4.0.19_ exec`.
+    GEM_VERSION_SELECTOR = /\A_\S+_\z/
 
     # What the report says when it finds no run to show: none at all, or
     # none with the pids asked for.
@@ -231,10 +241,7 @@ module AgentCouncil
     # say, a script named `agent-council backup`, or a program at
     # `.../agent-council work/bin/tool`, isn't taken for one, unless a file
     # named agent-council is in the same directory as well (a limitation
-    # RUNAWAY_AGENTS.md documents). It's checked before the interpreter,
-    # since the basename of the whole title is its last argument's, which
-    # may look like an interpreter's (as in "/x/agent-council p.md
-    # /tmp/ruby").
+    # RUNAWAY_AGENTS.md documents).
     module_function def bundler_title?(process, cwd)
       path = process.argv.first.to_s.split.first
       script?(path) && existing_file?(path, process, cwd)
@@ -270,18 +277,23 @@ module AgentCouncil
           # RVM's wrapper runs the script it's given.
           index += 1 if EXECUTABLE_HOOKS.match?(File.basename(arg))
           return nil unless index < args.size
-          return index unless bundle_exec?(args, index)
+          return index unless (exec = bundle_exec_index(args, index))
 
-          return bundle_exec_command_index(args, index + 2)
+          return bundle_exec_command_index(args, exec + 1)
         end
         index += RUBY_OPTIONS_WITH_ARGUMENT.include?(arg) ? 2 : 1
       end
       nil
     end
 
-    # Whether args[index] is bundle (or bundler) and the word after it exec.
-    module_function def bundle_exec?(args, index)
-      %w[bundle bundler].include?(File.basename(args[index])) && args[index + 1] == 'exec'
+    # If args[index] is Bundler's command (see BUNDLE) running exec,
+    # possibly with a version first (see GEM_VERSION_SELECTOR), the index
+    # of exec; else nil.
+    module_function def bundle_exec_index(args, index)
+      return unless BUNDLE.match?(File.basename(args[index]))
+
+      index += 1 if GEM_VERSION_SELECTOR.match?(args[index + 1].to_s)
+      index + 1 if args[index + 1] == 'exec'
     end
 
     # The index in args of the command `bundle exec` runs, the first word

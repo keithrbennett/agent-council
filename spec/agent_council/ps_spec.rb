@@ -80,10 +80,17 @@ RSpec.describe AgentCouncil::Ps do
   it "skips Ruby options' arguments to find the script" do
     council = ->(args) { described_class.agent_council?(described_class::Entry.new(1, 0, 1, 0, 0, 0, args)) }
     expect(['ruby -I lib exe/agent-council p.md', 'ruby -E UTF-8 -Ilib /g/agent-council',
-      'ruby -- agent-council', 'java -cp : org.jruby.Main -I lib /g/bin/agent-council'].map(&council))
+      'ruby -- agent-council', 'java -cp : org.jruby.Main -I lib /g/bin/agent-council',
+      'ruby --backtrace-limit 20 ./agent-council p.md',
+      'ruby --disable gems --parser prism exe/agent-council',
+      'ruby3.4 --enable frozen-string-literal exe/agent-council',
+      'java org.jruby.main.Main --disable gems exe/agent-council',
+      'ruby -- -x/agent-council'].map(&council)) # after --, even a word starting with - is the script
       .to all(be(true))
     expect(['ruby -r agent-council -e sleep', 'ruby -e agent-council', 'ruby -I agent-council x.rb',
-      'ruby'].map(&council)).to all(be(false))
+      'ruby', 'ruby --crash-report /tmp/agent-council other.rb', 'ruby /x/my-agent-council',
+      'ruby-lsp /x/agent-council', 'java org.jruby.ext.Tool /g/bin/agent-council'].map(&council))
+      .to all(be(false))
   end
 
   it 'finds a run under bundle exec: retitled, under MRI, or run by bundle, under JRuby' do
@@ -106,6 +113,12 @@ RSpec.describe AgentCouncil::Ps do
     expect(council?('ruby /g/bin/bundle exec --gemfile Gemfile exe/agent-council')).to be(true)
     expect(council?('ruby /g/bin/bundle exec --gemfile agent-council rake')).to be(false)
     expect(council?('ruby /g/bin/bundler exec exe/agent-council')).to be(true)
+    # Versioned: Bundler's command (e.g. bundle3.4), or a version selector.
+    expect(council?('java org.jruby.main.Main -S bundle _4.0.19_ exec ./agent-council p.md')).to be(true)
+    expect(council?('ruby /usr/bin/bundle3.4 exec exe/agent-council')).to be(true)
+    expect(council?('ruby /usr/bin/bundler3.4 _2.7.1_ exec exe/agent-council')).to be(true)
+    expect(council?('ruby /g/bin/bundle _4.0.19_ exec rake')).to be(false)
+    expect(council?('ruby /g/bin/bundlex exec exe/agent-council')).to be(false)
     expect(council?('ruby /g/bin/bundle exec rake')).to be(false)
     expect(council?('ruby /g/bin/bundle exec')).to be(false)
   end
@@ -142,6 +155,10 @@ RSpec.describe AgentCouncil::Ps do
       expect(council?(title)).to be(true)
     end
     expect(council?('/nonexistent/agent-council p.md', ['/nonexistent/agent-council p.md'])).to be(false)
+    # A directory named agent-council isn't the script.
+    FileUtils.mkdir_p(File.join(dir, 'sub', 'agent-council'))
+    title = "#{dir}/sub/agent-council p.md"
+    expect(council?(title, [title])).to be(false)
     # A limitation, as documented: with a file named agent-council in the
     # same directory, they're taken for runs on Linux too.
     FileUtils.touch(File.join(dir, 'agent-council'))
