@@ -2,20 +2,21 @@
 
 ## 0.4.0 (unreleased)
 
-- A new command, `agent-council-ps`, run in another terminal, shows
-  what a run's agents are doing, for when one is taking longer than
-  expected: each running agent-council, its agents by the process IDs
-  it printed, with each one's harness (and model, except for pi), how
-  long it has run, its CPU use, and its memory, and the commands each
-  agent is running. `-w` refreshes it until Ctrl-C. Runs started
-  directly (including under RVM), from a checkout, or with `bundle
-  exec`, under MRI or JRuby, are listed. Each run (and
-  `--consolidate`) prints the command, with its process ID, before
-  its agents start. See "Seeing what an agent is doing" in
+- **A new command, `agent-council-ps`, shows what a run's agents are
+  doing.** Run it in another terminal when an agent is taking longer
+  than expected. It lists each running agent-council, then its agents,
+  identified by the process IDs it printed, with each agent's harness
+  (and model, except for pi), how long it has run, its CPU use, its
+  memory, and the commands it is running. `-w` refreshes it until
+  Ctrl-C. Runs started directly (including under RVM), from a checkout,
+  or with `bundle exec`, under MRI or JRuby, are listed. Each run (and
+  `--consolidate`) prints the command, with its process ID, before its
+  agents start. See "Seeing what an agent is doing" in
   `RUNAWAY_AGENTS.md`, which also says which runs aren't listed and
   shows a coding assistant diagnosing a slow agent from its output.
-- Each agent's process ID is printed as it starts, on a `- pid` line under
-  a new `Started Agents:` heading (or, for the consolidator, under its
+- **Agents' process IDs are printed as they start, and several headings
+  are renamed.** Each process ID goes on a `- pid` line under a new
+  `Started Agents:` heading (or, for the consolidator, under its
   `Consolidation Report` heading), so a running agent can be found, or
   stopped while the others go on: see "Stopping one agent" in
   `RUNAWAY_AGENTS.md`. The lines printed as agents finish, once under
@@ -23,17 +24,18 @@
   configured agents are listed under `Configured Review Agents (N):`
   and `Configured Consolidator Agent:`, not `Review Agents (N):` and
   `Consolidator Agent:`.
-- An agent stopped by a signal is reported as, e.g., `pi was stopped by
-  SIGTERM`, not `pi exited : …`.
-- The lines printed while agents run show at once when output goes to a
-  file or a pipe. If the pipe closes (e.g. `| head`), the run goes on,
-  discarding the rest of its output, rather than ending and leaving its
-  agents running.
-- A fourth harness: an entry with `harness: opencode` runs under the
-  OpenCode CLI (`opencode run`, tested with 1.19.6), with the provider
-  and model the entry names and the credentials `opencode auth login`
-  saved. Like pi, it reaches many providers, so a council can compare a
-  model under both. See "Choosing a harness" in the README.
+- **A clearer message when a signal stops an agent.** It now reads,
+  e.g., `pi was stopped by SIGTERM`, not `pi exited : …`.
+- **The lines printed while agents run now show at once when output
+  goes to a file or a pipe.** And if the pipe closes (e.g. `| head`),
+  the run goes on, discarding the rest of its output, rather than
+  ending and leaving its agents running.
+- **A fourth harness: OpenCode.** An entry with `harness: opencode` runs
+  under the OpenCode CLI (`opencode run`, tested with 1.19.6), with the
+  provider and model the entry names and the credentials
+  `opencode auth login` saved. Like pi, it reaches many providers, so a
+  council can compare a model under both. See "Choosing a harness" in
+  the README.
   - OpenCode agents run as an interactive session would: your OpenCode
     config, plugins, and MCP servers apply, and so do the project's
     `AGENTS.md` files and `opencode.json`. Through
@@ -46,14 +48,15 @@
     subagents' usage is missing from them.
   - On Ctrl-C, OpenCode agents don't stop the commands they started
     within the grace period, so those may keep running.
-- The review-latest-commit and review-pull-request sample prompts ask
-  agents to keep their test runs light, since several run at once on
-  one machine: the tests relevant to the change rather than the whole
-  suite, under one language version or interpreter, not several.
-- The review-latest-commit sample prompt tells agents not to report
-  what the repository's `REVIEW_NOTES.md`, if it has one, records as an
-  accepted risk or non-issue, unless the changes make it worse or its
-  reasoning no longer holds.
+- **The review-latest-commit and review-pull-request sample prompts ask
+  agents to keep their test runs light**: the tests relevant to the
+  change rather than the whole suite, under one language version or
+  interpreter, not several, since several agents run at once on one
+  machine.
+- **The review-latest-commit sample prompt respects `REVIEW_NOTES.md`.**
+  It tells agents not to report what that file, if the repository has
+  one, records as an accepted risk or non-issue, unless the
+  changes make it worse or its reasoning no longer holds.
 
 ## 0.3.0 (2026-11-20)
 
@@ -78,10 +81,10 @@
     `pi-models` still passes `--no-mcp`.
   - Claude Code agents' refused MCP calls are warnings, as other
     refused calls already were.
-- A third harness: an entry with `harness: codex` runs under the OpenAI
-  Codex CLI (`codex exec`, tested with 0.167.0), billed however your
-  `codex` login is (a ChatGPT plan or an API key). See "Choosing a
-  harness" in the README.
+- **A third harness: Codex.** An entry with `harness: codex` runs under
+  the OpenAI Codex CLI (`codex exec`, tested with 0.167.0), billed
+  however your `codex` login is (a ChatGPT plan or an API key). See
+  "Choosing a harness" in the README.
   - Codex agents run as an interactive session would: your Codex config
     applies, its `sandbox_mode` included, and so do the project's
     `AGENTS.md` files. `codex exec` never asks for approval, whatever
@@ -106,106 +109,117 @@
     total cost (`total_usage`'s `cost` in `run.json`) is left out when a
     Codex agent reported usage; see the known-cost item below.
   - `mixed-harness.yml` gains a Codex analyst.
-- `codemode`, which every pi agent now gets, MCP servers or not, gives
+- **pi agents can call other models, and those calls are counted.**
+  `codemode`, which every pi agent now gets, MCP servers or not, gives
   scripts pi's `models` API (`models.classify`,
   `models.generateImages`), which can send what a script passes it to
   any model pi has credentials for, billed to you. pi agents' usage now
-  includes what their tools report, so such calls are counted. See "pi
-  agents can call other models" in the README's Safety section.
-- A run that mixes agents with and without a known cost (such as Codex
-  agents, which have none) now shows the cost of the analysts whose
-  cost is known in the console summary ("$1.00 for the 2 of 3 agents
-  with a known cost"), and `run.json` records the same for every entry,
-  consolidations included, as `known_cost` and `known_cost_runs`.
-- The scaffolding gains a rule: agents must not act outside the machine
-  (post, comment, send messages, or change remote data) with any tool,
-  MCP tools included. Reading remote information is still allowed.
+  includes what their tools report. See "pi agents can call other
+  models" in the README's Safety section.
+- **Runs that mix agents with and without a known cost now show a
+  partial cost.** The console summary gives the cost of the analysts
+  whose cost is known, leaving out those, such as Codex agents, that
+  report none ("$1.00 for the 2 of 3 agents with a known cost"), and
+  `run.json` records the same for every entry, consolidations included,
+  as `known_cost` and `known_cost_runs`.
+- **The scaffolding now tells agents not to act outside the machine**:
+  not to post, comment, send messages, or change remote data with any
+  tool, MCP tools included. Reading remote
+  information is still allowed.
 
 ## 0.2.0 (2026-11-19)
 
-- `--gem-dir` prints the root directory of the agent-council application,
-  which holds its documentation and examples, and exits.
-- `--project-url` prints the project's GitHub URL and exits.
-- `code-review-agents.md`, a sample code-review ensemble, is removed;
-  model offerings change too often to keep it current. To get a current
+- **A new option, `--gem-dir`, prints the root directory of the
+  agent-council application and exits.** That directory holds its
+  documentation and examples.
+- **A new option, `--project-url`, prints the project's GitHub URL and
+  exits.**
+- **The sample code-review ensemble is removed.** Model offerings change
+  too often to keep `code-review-agents.md` current. To get a current
   recommendation, run `examples/prompts/recommend-model-ensemble-prompt.md`.
-- `USE_CASES.md`, a catalog of what agent-council can be used for, is
-  added, and the README gains a "What makes a good fit" section.
-- Costs are now described as estimates (for pi agents, from pi's price
-  table), not what you're billed. A new README section, "How far to
-  trust the cost", says why they can be far off: subscription pricing,
-  price tables, stopped agents recording no usage, and token counting.
-- A README section, "Claude Code's sandbox", covers Claude Code's own
-  Bash sandbox, which Claude Code's settings turn on, and which the
-  analyzed repository's settings can turn on or off: it leaves the
-  repository writable, commands in `sandbox.excludedCommands` run
-  outside it, an agent's request to run a command outside it was refused
-  in a check, and agent-council doesn't notice other sandbox trouble. On
-  Linux, a `bwrap` blocked by AppArmor makes every command fail (an
-  alias can't fix it for agents), and a `TMPDIR` too long for the
-  sandbox to start leaves commands unsandboxed by default.
-- The scaffolding tells agents to use `$TMPDIR` for scratch space
-  instead of giving the scratch directory's path, which Claude Code's
-  sandbox makes read-only (`$TMPDIR` is a writable directory inside it).
-  The scaffolding is now identical for every agent. agent-council also
-  sets each agent's `CLAUDE_CODE_TMPDIR` to its scratch directory, so
-  the sandbox's `$TMPDIR` stays inside it, whatever your own setting.
-- The state-of-the-codebase and test-coverage-analysis sample prompts
-  no longer tell agents to write their report to a file in the project;
-  like the other samples, they deliver it as the final message, which
-  agent-council saves. The state-of-the-codebase prompt no longer
-  compares with earlier reports.
-- pi is now run with `--no-mcp`, both for agents and by `pi-models`, so
-  the MCP servers configured for pi's built-in MCP support no longer
-  start. Their tools were already unavailable to agents; a server that
-  did something merely by starting no longer does it. An extension that
-  provides its own MCP support isn't affected. This requires pi 1.0.4 or
-  later.
-- The test-coverage-analysis sample prompt uses only the cov-loupe CLI,
-  since agents have no MCP tools.
-- Agents and the consolidator can run under Claude Code, alongside pi
-  agents in the same config: each entry's `harness` value names its
-  harness, `pi` or `claude`, and an unknown name is rejected at startup
-  (with `--consolidate`, only the consolidator's, since no analysts run).
-  A Claude Code entry's `provider` only labels the agent. Claude Code
-  agents bill however `claude` does at your terminal, to a subscription
-  login or an API key; agent-council sets nothing for billing. Of Claude
-  Code's built-in tools, agents get only `Read`, `Grep`, `Glob`, and
-  `Bash`; they get no MCP servers, and they load `CLAUDE.md`, settings,
-  hooks, plugins, and auto memory as an interactive session would,
-  including the analyzed repository's own hooks. A tool call Claude Code
-  refuses (e.g. under a `permissions.deny` rule) is reported as a warning,
-  also shown in the report's metadata table (where the consolidator sees
-  it) and recorded in `run.json`; the report is kept, and an agent that
-  fails anyway still gets the warning. Only configs that use Claude Code
-  need the `claude` CLI.
-- **Breaking:** every agent and consolidator entry must give `harness`,
-  `provider`, and `model`; there are no defaults. To update a 0.1.0
-  config, add `harness: pi` to each entry. To `--consolidate` a run made
-  by 0.1.0, add `harness: pi` to the consolidator in the run's config
-  copy; its reports and `run.json` are still read as pi's.
-- Config errors list every bad entry at once, each named by its key
-  (e.g. `'agents' entry #2` or `'consolidator'`) with every problem it
-  has (missing or blank keys, values that aren't strings, an unknown
-  harness), and say what a misshapen `agents` list or entry is instead
-  (e.g. a consolidator given as a list).
-- The startup header of a run and of `--consolidate` now begins with a
-  `Working Dir:` line giving the working directory, which the relative
-  paths after it are shown against. The labels after it are realigned to
-  match.
-- `RUNAWAY_AGENTS.md` is added. agent-council has no time limit, and
-  this explains why there isn't a built-in one yet and how to limit a
-  whole run with the `timeout` command (with a shell function that
-  wraps it), including its pitfalls: Ctrl-C needs `--foreground`, a
-  limit that runs out too soon throws away work, and whether time asleep
-  counts depends on the `timeout` you have.
-- The README shows a sample run's console output, in a new "What a run
-  prints" section.
-- The review-latest-commit sample prompt has agents begin their report
-  with the full hash and subject of the commit reviewed.
-- The docs and messages use "run" only for a whole agent-council run,
-  and "agent" for one agent's part in it; e.g. a failure now reads
-  "… exited 0 but the agent failed". `run.json` is unchanged.
+- **A new catalog of use cases.** `USE_CASES.md` lists what
+  agent-council can be used for, and the README gains a "What makes a
+  good fit" section.
+- **Costs are now described as estimates, not what you're billed.** For
+  pi agents, they come from pi's price table. A new README section, "How
+  far to trust the cost", says why they can be far off: subscription
+  pricing, price tables, stopped agents recording no usage, and token
+  counting.
+- **A new README section, "Claude Code's sandbox".** It covers
+  Claude Code's own Bash sandbox, which Claude Code's settings turn on,
+  and which the analyzed repository's settings can turn on or off: it
+  leaves the repository writable, commands in
+  `sandbox.excludedCommands` run outside it, an agent's request to run
+  a command outside it was refused in a check, and agent-council
+  doesn't notice other sandbox trouble. On Linux, a `bwrap` blocked by
+  AppArmor makes every command fail (an alias can't fix it for agents),
+  and a `TMPDIR` too long for the sandbox to start leaves commands
+  unsandboxed by default.
+- **Agents are told to use `$TMPDIR` for scratch space, not the scratch
+  directory's path, which Claude Code's sandbox makes read-only.**
+  Under that sandbox, `$TMPDIR` is a writable directory inside the
+  scratch directory; elsewhere, it is the scratch directory itself. The
+  scaffolding is now identical for every agent. agent-council also sets
+  each agent's `CLAUDE_CODE_TMPDIR` to its scratch directory, so the
+  sandbox's `$TMPDIR` stays inside it, whatever your own setting.
+- **Two sample prompts no longer tell agents to write a report file
+  into the project, and one no longer compares with earlier reports.**
+  Like the other samples, the state-of-the-codebase and
+  test-coverage-analysis prompts now have agents deliver their report
+  as the final message, which agent-council saves. The comparison with
+  earlier reports is dropped from the state-of-the-codebase prompt.
+- **pi is now run with `--no-mcp`, both for agents and by
+  `pi-models`.** The MCP servers configured for pi's built-in MCP
+  support therefore no longer start. Their tools were already
+  unavailable to agents; a server that did something merely by starting
+  no longer does it. An extension that provides its own MCP support
+  isn't affected. This requires pi 1.0.4 or later.
+- **The test-coverage-analysis sample prompt uses only the cov-loupe
+  CLI**, since agents have no MCP tools.
+- **A second harness: Claude Code.** Agents and the consolidator can run
+  under Claude Code, alongside pi agents in the same config: each
+  entry's `harness` value names its harness, `pi` or `claude`, and an
+  unknown name is rejected at startup (with `--consolidate`, only the
+  consolidator's, since no analysts run). A Claude Code entry's
+  `provider` only labels the agent. Claude Code agents bill however
+  `claude` does at your terminal, to a subscription login or an API key;
+  agent-council sets nothing for billing. Of Claude Code's built-in
+  tools, agents get only `Read`, `Grep`, `Glob`, and `Bash`; they get no
+  MCP servers, and they load `CLAUDE.md`, settings, hooks, plugins, and
+  auto memory as an interactive session would, including the analyzed
+  repository's own hooks. A tool call Claude Code refuses (e.g. under a
+  `permissions.deny` rule) is reported as a warning, also shown in the
+  report's metadata table (where the consolidator sees it) and recorded
+  in `run.json`; the report is kept, and an agent that fails anyway
+  still gets the warning. Only configs that use Claude Code need the
+  `claude` CLI.
+- **Breaking: a 0.1.0 config needs `harness: pi` added to each
+  entry.** Every agent and consolidator entry must give `harness`,
+  `provider`, and `model`; there are no defaults. To `--consolidate` a
+  run made by 0.1.0, add `harness: pi` to the consolidator in the run's
+  config copy; its reports and `run.json` are still read as pi's.
+- **Config errors are all reported at once.** They list every bad entry,
+  each named by its key (e.g. `'agents' entry #2` or `'consolidator'`)
+  with every problem it has (missing or blank keys, values that aren't
+  strings, an unknown harness), and say what a misshapen `agents` list
+  or entry is instead (e.g. a consolidator given as a list).
+- **The startup header shows the working directory.** The header of a
+  run and of `--consolidate` now begins with a `Working Dir:` line, and
+  the relative paths after it are shown against that directory. The
+  labels after it are realigned to match.
+- **A new guide to runaway agents.** agent-council has no time limit,
+  and `RUNAWAY_AGENTS.md` explains why there isn't a built-in one yet
+  and how to limit a whole run with the `timeout` command (with a shell
+  function that wraps it), including its pitfalls: Ctrl-C needs
+  `--foreground`, a limit that runs out too soon throws away work, and
+  whether time asleep counts depends on the `timeout` you have.
+- **The README shows what a run prints.** A new section, "What a run
+  prints", gives a sample run's console output.
+- **The review-latest-commit sample prompt has agents begin their
+  report with the full hash and subject of the commit reviewed.**
+- **"Run" now means only a whole agent-council run.** The docs and
+  messages use "agent" for one agent's part in it; e.g. a failure now
+  reads "… exited 0 but the agent failed". `run.json` is unchanged.
 
 ## 0.1.0 (2026-11-09)
 
@@ -231,14 +245,15 @@ The console shows token usage per agent and in total.
 
 ### Usage
 
-- Runs go under `./agent-council-reports`, or under the directory given
-  with `-o` / `--output-dir`.
-- `--consolidate RUN_DIR` runs just the consolidation of a finished run,
-  writing into that run directory.
-- `AGENT_COUNCIL_OPTS` holds arguments inserted before the command-line
-  ones.
-- Sample prompts and configs are included under `examples/`.
-- The `pi-models` helper lists the provider/model pairs available to pi.
+- **Runs go under `./agent-council-reports`**, or under the directory
+  given with `-o` / `--output-dir`.
+- **`--consolidate RUN_DIR`** runs just the consolidation of a finished
+  run, writing into that run directory.
+- **`AGENT_COUNCIL_OPTS`** holds arguments inserted before the
+  command-line ones.
+- **Sample prompts and configs** are included under `examples/`.
+- **The `pi-models` helper** lists the provider/model pairs available to
+  pi.
 
 ### Safety
 
@@ -248,11 +263,11 @@ the README before running it.
 
 ### Requirements
 
-- Ruby 3.3 or later, or JRuby 10 or later (where SIGQUIT is left to the
-  JVM, so it doesn't stop a run).
-- The [pi](https://github.com/earendil-works/pi) CLI.
-- Native Windows is not supported; on Windows, run agent-council inside
-  WSL.
+- **Ruby 3.3 or later, or JRuby 10 or later** (where SIGQUIT is left to
+  the JVM, so it doesn't stop a run).
+- **The [pi](https://github.com/earendil-works/pi) CLI.**
+- **Native Windows is not supported**; on Windows, run agent-council
+  inside WSL.
 
 Install with `gem install agent-council`. New to Ruby? See
 [Install agent-council from scratch](INSTALL.md).
