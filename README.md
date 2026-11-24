@@ -288,16 +288,46 @@ AC_HOME=$(agent-council --gem-dir)
 
 ## Discovering and configuring models
 
+Each harness has its own way to find the models it can use. pi,
+OpenCode, and Codex list theirs:
+
 ```bash
-pi --list-models                 # models of the providers you have credentials for
+# pi: the models of the providers you have credentials for
+pi --list-models
+
+# OpenCode: its models, as provider/model
+opencode models
+opencode models opencode-go      # only one provider's
+opencode models --refresh        # refresh its model catalog, then list
+
+# Codex: its model names (slugs), leaving out the ones it marks hidden
+codex debug models | jq -r '.models[] | select(.visibility != "hide") | .slug'
 ```
 
-`pi --list-models` lists only the models of providers pi has
-credentials for, not its whole catalog, so a provider missing from it
-may just lack credentials. A listed model can still be unusable, e.g.
-one your plan doesn't include. Credentials, and which one pi uses when
-a provider has several, are pi's business; see
-[pi's documentation][pi-docs].
+- **pi.** An entry's `provider` and `model` are a listed model's
+  `provider` and `model` columns. `pi --list-models` lists only the
+  models of providers pi has credentials for, not its whole catalog, so
+  a provider missing from it may just lack credentials. A listed model
+  can still be unusable, e.g. one your plan doesn't include.
+  Credentials, and which one pi uses when a provider has several, are
+  pi's business; see [pi's documentation][pi-docs].
+- **OpenCode.** An entry's `provider` is the part of a listed name
+  before the first `/`, and its `model` the rest. OpenCode keeps a
+  cached catalog of models from models.dev; `--refresh` updates it
+  first, for a model too new to be listed. See [OpenCode's CLI
+  commands](https://opencode.ai/docs/cli/commands), and
+  `opencode models --help` for the options.
+- **Codex.** `codex debug models` prints Codex's model catalog as JSON
+  (the `jq` command above picks out the names); a listed model's `slug`
+  is what an entry's `model` takes. The catalog is Codex's own models,
+  so with a custom `model_provider` in your Codex config, give the
+  names that provider takes instead. It's a debugging command, so its
+  output may change between Codex versions (this was checked with
+  0.171.0).
+- **Claude Code.** `model` is an alias, such as `opus` or `sonnet`, or
+  a full model name; Claude Code's [Model
+  configuration](https://code.claude.com/docs/en/model-config) page
+  lists the aliases.
 
 Edit the config to choose the ensemble. The config is the optional second
 argument; if omitted, `./agent-council.yml` in the current directory is used
@@ -384,7 +414,9 @@ consolidator:
 ```
 
 - **Models.** `model` is any model name or alias `claude --model`
-  accepts. Claude Code takes no provider, so `provider` only labels the
+  accepts (see [Discovering and configuring
+  models](#discovering-and-configuring-models)). Claude Code takes no
+  provider, so `provider` only labels the
   agent: `anthropic`, or e.g. `bedrock` if your `claude` is set up to use
   it.
 - **Billing.** agent-council leaves authentication and billing to Claude
@@ -432,8 +464,10 @@ agents:
     model: gpt-5.6-terra
 ```
 
-- **Models.** `model` is any model name `codex --model` accepts. As with
-  Claude Code, `provider` only labels the agent: Codex uses the
+- **Models.** `model` is any model name `codex --model` accepts (`codex
+  debug models` lists them; see [Discovering and configuring
+  models](#discovering-and-configuring-models)). As with Claude Code,
+  `provider` only labels the agent: Codex uses the
   `model_provider` its own config names.
 - **Billing.** agent-council leaves authentication and billing to Codex:
   an agent bills however `codex` would at your terminal, to your ChatGPT
@@ -492,7 +526,9 @@ agents:
 
 - **Models.** Unlike Claude Code's and Codex's, `provider` is passed:
   the agent runs `--model <provider>/<model>`, so give a provider and a
-  model as `opencode models` lists them, split at the first `/`.
+  model as `opencode models` lists them, split at the first `/` (see
+  [Discovering and configuring
+  models](#discovering-and-configuring-models)).
 - **Billing.** agent-council leaves authentication and billing to
   OpenCode: an agent uses the credentials `opencode auth login` saved.
   Cost is OpenCode's estimate from its own model catalog (see

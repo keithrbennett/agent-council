@@ -2,9 +2,9 @@
 # alongside pi analysts, with a Claude Code consolidator. Claude Code and Codex
 # entries run under your own `claude` and `codex` setups and bill however they
 # do (see "Choosing a harness" in the README); pi and OpenCode entries need
-# credentials for their providers (see `pi --list-models` and
-# `opencode models`). Replace any provider or model you don't
-# have.
+# credentials for their providers. Replace any provider or model you
+# don't have; "Discovering and configuring models" in the README says
+# how to find each harness's models.
 agents:
   - harness: claude
     provider: anthropic
