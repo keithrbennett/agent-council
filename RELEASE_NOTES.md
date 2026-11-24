@@ -9,9 +9,10 @@
   long it has run, its CPU use, and its memory, and the commands each
   agent is running. `-w` refreshes it until Ctrl-C. Runs started
   directly (including under RVM), from a checkout, or with `bundle
-  exec`, under MRI or JRuby, are listed. See "Seeing what an agent is
-  doing" in `RUNAWAY_AGENTS.md`, which also says which runs aren't
-  listed.
+  exec`, under MRI or JRuby, are listed. Each run (and
+  `--consolidate`) prints the command, with its process ID, before
+  its agents start. See "Seeing what an agent is doing" in
+  `RUNAWAY_AGENTS.md`, which also says which runs aren't listed.
 - Each agent's process ID is printed as it starts, on a `- pid` line under
   a new `Started Agents:` heading (or, for the consolidator, under its
   `Consolidation Report` heading), so a running agent can be found, or

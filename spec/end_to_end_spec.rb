@@ -333,7 +333,9 @@ RSpec.describe 'agent-council end to end' do
     ), output_report
     expect(out).to match(%r{^Prompt:      prompt\.md\nRun Dir:     agent-council-reports/\S+$}), output_report
     expect(out).to include("Configured Review Agents (2):\n  #1 pi / done / m1\n  #2 pi / done / m2\n")
-    expect(out).to include("Configured Consolidator Agent:\n  pi / done / c\n")
+    expect(out).to include("Configured Consolidator Agent:\n  pi / done / c\n\n" \
+      "Run this in another terminal to see (sub)process statuses: agent-council-ps #{status.pid}\n\n" \
+      "Started Agents:\n")
     expect(reports('reviews/*.md').size).to eq(2)
     expect(reports('*consolidated*.md').size).to eq(1)
     expect(leftover_scratch_dirs).to be_empty
@@ -704,8 +706,9 @@ RSpec.describe 'agent-council end to end' do
       expect(out).to include(
         "Working Dir: #{File.realpath(work_dir)}\nConfig:      #{run_dir}/config.yml\n" \
           "Prompt:      #{run_dir}/prompt.md\nRun Dir:     #{run_dir}\n",
-        "Configured Consolidator Agent:\n  pi / done / c\n",
-        "Consolidation Report (in #{run_dir}, from 2 reviews):\n"
+        "Configured Consolidator Agent:\n  pi / done / c\n\n" \
+          "Run this in another terminal to see (sub)process statuses: agent-council-ps #{status.pid}\n\n" \
+          "Consolidation Report (in #{run_dir}, from 2 reviews):\n"
       )
       expect(out).to match(%r{from 2 reviews\):\n  - pid \d+  done / c\n}), output_report
       expect(Dir.glob('agent-council-reports/*/*', base: work_dir)).to eq([run_dir])

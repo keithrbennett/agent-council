@@ -858,6 +858,11 @@ module AgentCouncil
     "was stopped by #{name ? "SIG#{name}" : "signal #{status.termsig}"}"
   end
 
+  # Prints how to see what the agents are doing while they run.
+  module_function def puts_ps_hint
+    puts "\nRun this in another terminal to see (sub)process statuses: agent-council-ps #{Process.pid}"
+  end
+
   # Prints the consolidator's pid line as it starts (see ProgressPrinter).
   module_function def puts_spawned(label, pid)
     ProgressPrinter.puts_live([ProgressPrinter.spawned_line(label, pid)])
@@ -1237,6 +1242,7 @@ module AgentCouncil
       puts "  ##{i + 1} #{agent_descriptor(agent)}"
     end
     puts "\nConfigured Consolidator Agent:\n  #{agent_descriptor(consolidator)}" if consolidator
+    puts_ps_hint
     puts "\nStarted Agents:"
     pool = WorkerPool.new(grace: INTERRUPT_GRACE_SECONDS)
     pool.trap_signals
@@ -1381,6 +1387,7 @@ module AgentCouncil
     puts "Prompt:      #{relative_path(prompt_path)}"
     puts "Run Dir:     #{relative_path(run_dir)}"
     puts "\nConfigured Consolidator Agent:\n  #{agent_descriptor(consolidator)}"
+    puts_ps_hint
     puts "\nConsolidation Report (in #{relative_path(run_dir)}, " \
       "from #{reports.size} review#{'s' unless reports.size == 1}):"
     analysts, consolidations = read_run_file(run_dir)

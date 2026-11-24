@@ -57,8 +57,10 @@ A limit is easy to write; a good default is not:
 
 Before stopping an agent that is taking longer than expected, you can
 check what it is doing with `agent-council-ps`, which the gem
-installs next to `agent-council`. Run it in another terminal; its
-list comes after a second, the time it measures CPU use over:
+installs next to `agent-council`. Run it in another terminal (each
+run prints the command to use, with its process ID, before its agents
+start); its list comes after a second, the time it measures CPU use
+over:
 
 ```
 $ agent-council-ps

@@ -668,6 +668,8 @@ Configured Review Agents (4):
 Configured Consolidator Agent:
   pi / anthropic / claude-sonnet-5-5
 
+Run this in another terminal to see (sub)process statuses: agent-council-ps 48200
+
 Started Agents:
   - pid 48211  #1 deepseek / deepseek-flash
   - pid 48212  #2 deepseek / deepseek-flash
@@ -1025,7 +1027,10 @@ relative paths below are shown against), config, prompt, and run
 directory (`Run Dir: agent-council-reports/2026-09-03/09-14-02`), then
 its agents under `Configured Review Agents (N):` and, if there is one,
 `Configured Consolidator Agent:`; these labels also name the harness
-(e.g. `#2 pi / openai / gpt-6.1-sol`).
+(e.g. `#2 pi / openai / gpt-6.1-sol`). A line follows naming the
+`agent-council-ps` command, with the run's process ID, that shows what
+its agents are doing (see [Seeing what an agent is
+doing](RUNAWAY_AGENTS.md#seeing-what-an-agent-is-doing)).
 You can open the run dir while agents are still working, or after a
 Ctrl-C (see [Stopping a run](#stopping-a-run)). Other access patterns:
 
