@@ -668,7 +668,8 @@ Configured Review Agents (4):
 Configured Consolidator Agent:
   pi / anthropic / claude-sonnet-5-5
 
-Run this in another terminal to see (sub)process statuses: agent-council-ps 48200
+Run this in another terminal to see (sub)process statuses:
+agent-council-ps 48200
 
 Started Agents:
   - pid 48211  #1 deepseek / deepseek-flash

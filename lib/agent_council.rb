@@ -862,7 +862,7 @@ module AgentCouncil
 
   # Prints how to see what the agents are doing while they run.
   module_function def puts_ps_hint
-    puts "\nRun this in another terminal to see (sub)process statuses: agent-council-ps #{Process.pid}"
+    puts "\nRun this in another terminal to see (sub)process statuses:\nagent-council-ps #{Process.pid}"
   end
 
   # Prints the consolidator's pid line as it starts (see ProgressPrinter).
