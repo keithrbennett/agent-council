@@ -50,6 +50,16 @@ RSpec.describe AgentCouncil::Harnesses::OpenCodeHarness do
     end
   end
 
+  describe '.model_label' do
+    it 'splits --model at its first "/" into provider and model' do
+      expect(described_class.model_label(%w[opencode run --model zai/org/glm-5])).to eq('zai / org/glm-5')
+    end
+
+    it 'reads a --model without a "/" as the model alone' do
+      expect(described_class.model_label(%w[opencode run --model glm-5])).to eq('glm-5')
+    end
+  end
+
   describe '.env' do
     let(:dir) { Dir.mktmpdir }
     let(:env) { described_class.env(dir) }

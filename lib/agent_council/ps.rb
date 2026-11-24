@@ -334,18 +334,13 @@ module AgentCouncil
     end
 
     # "provider / model" from an agent's command line, as far as it shows
-    # them: OpenCode's gives one "provider/model", and Claude Code's and
-    # Codex's the model alone (which may itself contain a "/"). pi replaces
-    # its command line with "pi", so a pi agent's gives neither (and this
-    # returns "").
+    # them, read by its harness (see Harnesses::Harness.model_label), or,
+    # for a command line that names none (as a harness run some other way
+    # might not), by Harness's default. pi replaces its command line with
+    # "pi", so a pi agent's gives neither (and this returns "").
     module_function def model_label(process)
-      args = process.args
-      model = args[/(?:\A|\s)--model\s+(\S+)/, 1]
-      provider = args[/(?:\A|\s)--provider\s+(\S+)/, 1]
-      if provider.nil? && model&.include?('/') && harness_name(process) == Harnesses::OpenCodeHarness::NAME
-        provider, model = model.split('/', 2)
-      end
-      [provider, model].compact.join(' / ')
+      harness = Harnesses::BY_NAME[harness_name(process)] || Harnesses::Harness
+      harness.model_label(process.tokens)
     end
 
     # The agent-council processes to show and their agents: [[council,

@@ -5,17 +5,17 @@
 # with the shared scaffolding, and how to read
 # its --json event stream afterward.
 #
-# AgentCouncil is harness-agnostic and finds this module through
+# AgentCouncil is harness-agnostic and finds this class through
 # AgentCouncil::Harnesses (lib/agent_council/harnesses.rb), by its NAME.
 # Authentication and billing are left to Codex: an agent bills however
 # codex would at the user's terminal (ChatGPT plan or API key).
 
 require 'json'
-require_relative 'scaffold'
+require_relative 'harness'
 
 module AgentCouncil
   module Harnesses
-    module CodexHarness
+    class CodexHarness < Harness
       NAME = 'codex'
 
       # Invocation for one agent. The substantive prompt is not part of
@@ -33,7 +33,7 @@ module AgentCouncil
       #
       # developer_instructions replaces any the user's config sets; Codex
       # has no way to append to it.
-      module_function def argv(_provider, model)
+      def self.argv(_provider, model)
         [
           NAME, 'exec',
           '--json',                  # JSONL event stream on stdout
@@ -46,55 +46,39 @@ module AgentCouncil
         ]
       end
 
-      # Variables for the agent's process beyond TMPDIR: none.
-      module_function def env(_scratch_dir)
-        {}
-      end
-
       # A TOML basic string (JSON's string escapes are valid TOML ones), so
       # -c reads the value as the string itself, not as TOML to parse.
-      module_function def toml_string(text)
+      def self.toml_string(text)
         JSON.generate(text)
       end
+      private_class_method :toml_string
 
       # --- event stream reading ---
 
-      # The events of a --json stream, in order. Unparseable lines and
-      # non-objects are skipped.
-      module_function def events(jsonl)
-        jsonl.each_line.filter_map do |line|
-          event =
-            begin
-              JSON.parse(line)
-            rescue JSON::ParserError
-              nil
-            end
-          event if event.is_a?(Hash)
-        end
-      end
-
       # The completed items of the given type, in order.
-      module_function def completed_items(jsonl, type)
+      def self.completed_items(jsonl, type)
         events(jsonl).filter_map do |event|
           item = event['item'] if event['type'] == 'item.completed'
           item if item.is_a?(Hash) && item['type'] == type
         end
       end
+      private_class_method :completed_items
 
       # The agent's messages (its text between and after tool calls), in order.
-      module_function def assistant_messages(jsonl)
+      def self.assistant_messages(jsonl)
         completed_items(jsonl, 'agent_message')
       end
 
       # The event that ended the agent's turn: turn.completed or
       # turn.failed. nil if there is none, e.g. for an agent that was killed.
-      module_function def turn_end(jsonl)
+      def self.turn_end(jsonl)
         events(jsonl).reverse_each.detect { |event| %w[turn.completed turn.failed].include?(event['type']) }
       end
+      private_class_method :turn_end
 
       # The final response: the last agent message with text, for an agent
       # whose turn completed. Earlier messages narrate its tool use.
-      module_function def final_response(jsonl)
+      def self.final_response(jsonl)
         return nil unless turn_end(jsonl)&.fetch('type') == 'turn.completed'
 
         message = assistant_messages(jsonl).reverse_each.detect { |m| text_of(m) }
@@ -102,18 +86,19 @@ module AgentCouncil
       end
 
       # A message's text, or nil if it has none.
-      module_function def text_of(item)
+      def self.text_of(item)
         text = item['text']
         text if text.is_a?(String) && !text.strip.empty?
       end
+      private_class_method :text_of
 
-      # Token usage as AgentCouncil expects it (see Harnesses), from the
+      # Token usage as AgentCouncil expects it (see Harness), from the
       # turn.completed event, which totals the turn's requests. Codex's
       # input_tokens is all input, OpenAI's convention, so the cached reads
       # and writes it reports are subtracted from it; reasoning tokens are
       # part of output_tokens. Codex prices nothing, so there is no 'cost'.
       # nil when the turn didn't complete or reports no usage.
-      module_function def usage(jsonl)
+      def self.usage(jsonl)
         turn = turn_end(jsonl)
         usage = turn['usage'] if turn && turn['type'] == 'turn.completed'
         return nil unless usage.is_a?(Hash)
@@ -127,14 +112,10 @@ module AgentCouncil
         totals.values.all?(&:zero?) ? nil : totals
       end
 
-      module_function def count(value)
-        value.is_a?(Numeric) && value.positive? ? value : 0
-      end
-
       # Why the agent produced no usable report, or nil. A failed turn ends
       # with turn.failed, whose error says why (e.g. a model the account
       # can't use); a completed one with no text is reported as such.
-      module_function def error_message(jsonl)
+      def self.error_message(jsonl)
         turn = turn_end(jsonl)
         return 'the stream has no turn.completed or turn.failed event' unless turn
         return failure_reason(jsonl) || 'the turn failed and gave no reason' if turn['type'] == 'turn.failed'
@@ -144,7 +125,7 @@ module AgentCouncil
 
       # The reason a failed turn gives: its turn.failed error message, else
       # the last top-level error event's. nil if neither gives one.
-      module_function def failure_reason(jsonl)
+      def self.failure_reason(jsonl)
         all = events(jsonl)
         failed = all.reverse_each.detect { |event| event['type'] == 'turn.failed' }
         error = failed['error'] if failed
@@ -153,15 +134,13 @@ module AgentCouncil
 
         nonblank(all.filter_map { |event| event['message'] if event['type'] == 'error' }).last
       end
+      private_class_method :failure_reason
 
       # Why an agent that exited nonzero failed. Codex explains a failed
       # turn in the stream, with stderr usually empty, so that comes first;
       # then stderr (e.g. for a bad flag or a crash).
-      module_function def exit_detail(stdout, stderr)
-        reason = failure_reason(stdout)
-        return reason if reason
-
-        stderr.lines.map(&:strip).reject(&:empty?).first || NO_ERROR_OUTPUT
+      def self.exit_detail(stdout, stderr)
+        failure_reason(stdout) || super
       end
 
       # Warnings about an agent, failed or not, each listing at most
@@ -174,7 +153,7 @@ module AgentCouncil
       #   codex exec never asks for approval ("MCP tool call requires
       #   approval, but approval policy is never"), whose results the
       #   report may lack.
-      module_function def warnings(jsonl)
+      def self.warnings(jsonl)
         errors = nonblank(completed_items(jsonl, 'error').map { |item| item['message'] }).uniq
         calls = failed_calls(completed_items(jsonl, 'mcp_tool_call').select do |item|
           item['status'] == 'failed'
@@ -192,14 +171,15 @@ module AgentCouncil
       end
 
       # A warning: label, then entries, at most MAX_LISTED_ERRORS of them.
-      module_function def listing(label, entries)
+      def self.listing(label, entries)
         listed = entries.first(MAX_LISTED_ERRORS).map { |entry| shorten(entry, MAX_ERROR_LENGTH) }
         listed << "and #{entries.size - listed.size} more" if entries.size > listed.size
         "#{label}: #{listed.join('; ')}"
       end
+      private_class_method :listing
 
       # Failed MCP tool calls as distinct "server.tool (reason)" entries.
-      module_function def failed_calls(calls)
+      def self.failed_calls(calls)
         calls.map do |call|
           server, name = nonblank([call['server']]).first, nonblank([call['tool']]).first
           tool = name ? [server, name].compact.join('.') : 'unknown tool'
@@ -208,19 +188,16 @@ module AgentCouncil
           reason.is_a?(String) && !reason.strip.empty? ? "#{tool} (#{reason.strip})" : tool
         end.uniq
       end
+      private_class_method :failed_calls
 
       MAX_LISTED_ERRORS = 5
       MAX_ERROR_LENGTH = 200
 
-      # text, cut to max characters with "..." if longer.
-      module_function def shorten(text, max)
-        text.length > max ? "#{text[0, max]}..." : text
-      end
-
       # The values that are nonblank strings, stripped.
-      module_function def nonblank(values)
+      def self.nonblank(values)
         values.grep(String).map(&:strip).reject(&:empty?)
       end
+      private_class_method :nonblank
     end
   end
 end

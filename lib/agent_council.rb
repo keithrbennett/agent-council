@@ -4,9 +4,9 @@
 # layout, per-agent subprocess execution, and the CLI entry point.
 # Harness-specific behavior lives under AgentCouncil::Harnesses (e.g.
 # AgentCouncil::Harnesses::PiHarness), looked up per agent from its config
-# entry's 'harness' key with Harnesses.module_for. A harness's
+# entry's 'harness' key with Harnesses.class_for. A harness's
 # usage(stdout) returns token counts in the shape documented on
-# PiHarness.usage, or nil when the harness reports none.
+# Harnesses::Harness.usage, or nil when the harness reports none.
 
 require 'json'
 require 'yaml'
@@ -135,18 +135,19 @@ module AgentCouncil
 
   # The variables set for an agent's process: the scratch dir as its
   # TMPDIR, which the scaffolding tells agents to use, and whatever its
-  # harness adds (see Harnesses).
+  # harness adds (see Harnesses::Harness.env).
   module_function def agent_env(scratch_dir, harness)
     harness.env(scratch_dir).merge('TMPDIR' => scratch_dir)
   end
 
   # Returns [label, ok, detail, usage, warnings]; never raises. detail is
   # the report's filename on success, the error otherwise. usage is the
-  # agent's token usage (see Harnesses), or nil; failed agents report it too,
-  # since their tokens were still spent. warnings: the harness's warnings
-  # about the agent (see run_warnings), failed or not, since what the harness
-  # kept the agent from doing may be why it failed; empty if the harness
-  # never ran. Returned, not printed, since this runs in a worker thread.
+  # agent's token usage (see Harnesses::Harness.usage), or nil; failed
+  # agents report it too, since their tokens were still spent. warnings:
+  # the harness's warnings about the agent (see run_warnings), failed or
+  # not, since what the harness kept the agent from doing may be why it
+  # failed; empty if the harness never ran. Returned, not printed, since
+  # this runs in a worker thread.
   # index: the agent's 1-based position in the config's agent list, used to
   # disambiguate repeated provider/model entries in the filename and label;
   # filename: overrides the output name; meta: becomes YAML front matter,
@@ -174,7 +175,7 @@ module AgentCouncil
     # with errors ignored: a child that is still exiting (e.g. one just
     # killed after the Ctrl-C grace period) can still be writing here
     # (node's compile cache, say). That must not surface as an error.
-    harness = Harnesses.module_for(agent)
+    harness = Harnesses.class_for(agent)
     scratch_dir = Dir.mktmpdir('agent-council-')
     argv = harness.argv(provider, model)
     env = agent_env(scratch_dir, harness)
@@ -201,7 +202,8 @@ module AgentCouncil
     unless status.success?
       detail = failure_reason(harness.exit_detail(stdout, stderr))
       # A signal is reason enough; "no error output" would add nothing.
-      reason = [exit_description(status), (detail unless status.signaled? && detail == Harnesses::NO_ERROR_OUTPUT)]
+      detail = nil if status.signaled? && detail == Harnesses::Harness::NO_ERROR_OUTPUT
+      reason = [exit_description(status), detail]
       return [label, false, "#{harness::NAME} #{reason.compact.join(': ')}", usage, warnings]
     end
 
@@ -262,11 +264,11 @@ module AgentCouncil
   # A harness's reason for a failure, as run_agent reports it: a
   # plain_line, since it can quote the model or the CLI, cut to 300
   # characters plus "..." so it doesn't swamp the finish line, the Errors
-  # list, or the consolidation prompt; Harnesses::NO_ERROR_OUTPUT if
+  # list, or the consolidation prompt; Harnesses::Harness::NO_ERROR_OUTPUT if
   # nothing is left.
   module_function def failure_reason(text)
     reason = plain_line(text)
-    return Harnesses::NO_ERROR_OUTPUT if reason.empty?
+    return Harnesses::Harness::NO_ERROR_OUTPUT if reason.empty?
 
     reason.length > 300 ? "#{reason[0, 300]}..." : reason
   end
@@ -660,9 +662,9 @@ module AgentCouncil
     format('%02d:%02d:%02d', total / 3600, total % 3600 / 60, total % 60)
   end
 
-  # Token usage (see Harnesses) as e.g. "1.2M in (900.0k cached) / 30.5k out,
-  # $0.85", where "in" counts all input, cached or not. The cost is left out
-  # when unknown. nil for nil usage.
+  # Token usage (see Harnesses::Harness.usage) as e.g. "1.2M in (900.0k
+  # cached) / 30.5k out, $0.85", where "in" counts all input, cached or
+  # not. The cost is left out when unknown. nil for nil usage.
   module_function def format_usage(usage)
     input, cached, output, cost = usage_figures(usage)
     return nil unless input
@@ -681,7 +683,7 @@ module AgentCouncil
   end
 
   # [input (cached or not), cached input, output, cost (nil when unknown)]
-  # from a usage hash (see Harnesses), or nil for unknown usage.
+  # from a usage hash (see Harnesses::Harness.usage), or nil for unknown usage.
   module_function def usage_figures(usage)
     return nil unless usage.is_a?(Hash)
 
@@ -701,8 +703,8 @@ module AgentCouncil
     dollars < 0.01 ? '<$0.01' : format('$%.2f', dollars)
   end
 
-  # The sum of usage hashes (see Harnesses), ignoring nils (and anything else
-  # not a hash); nil if there are none.
+  # The sum of usage hashes (see Harnesses::Harness.usage), ignoring nils
+  # (and anything else not a hash); nil if there are none.
   # The cost is summed only if every usage has one, so a partial total
   # isn't presented as the whole.
   module_function def sum_usage(usages)
@@ -1480,7 +1482,7 @@ module AgentCouncil
   # executable of every harness the config entries use (validated ones, so
   # each harness is known).
   module_function def abort_unless_harnesses_installed(entries)
-    names = entries.map { |entry| Harnesses.module_for(entry)::NAME }.uniq
+    names = entries.map { |entry| Harnesses.class_for(entry)::NAME }.uniq
     missing = names.reject { |name| executable_on_path?(name) }
     return if missing.empty?
 

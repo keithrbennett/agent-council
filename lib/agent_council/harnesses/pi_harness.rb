@@ -5,15 +5,19 @@
 # its tool allowlist and the shared read-only scaffolding, and how to read
 # pi's JSONL event stream afterward.
 #
-# AgentCouncil is harness-agnostic and finds this module through
+# AgentCouncil is harness-agnostic and finds this class through
 # AgentCouncil::Harnesses (lib/agent_council/harnesses.rb), by its NAME.
 
 require 'json'
-require_relative 'scaffold'
+require_relative 'harness'
 
 module AgentCouncil
   module Harnesses
-    module PiHarness
+    # env, exit_detail, and warnings are Harness's defaults: pi needs no
+    # variables beyond TMPDIR, explains a nonzero exit on stderr, and gives
+    # no warnings, since a failed tool call, MCP calls included, is an
+    # ordinary tool error the agent sees, not a refusal (DESIGN.md §11).
+    class PiHarness < Harness
       NAME = 'pi'
 
       # Analysis toolset (pi's built-in tool names): edit/write (and the
@@ -34,7 +38,7 @@ module AgentCouncil
       # Invocation for one agent. The substantive prompt is not part of argv;
       # it is piped to stdin (byte-identical for every analyst; the
       # consolidator gets its own).
-      module_function def argv(provider, model)
+      def self.argv(provider, model)
         [
           NAME,
           '-p',               # non-interactive: process prompt and exit
@@ -47,22 +51,18 @@ module AgentCouncil
         ]
       end
 
-      # Variables for the agent's process beyond TMPDIR: none.
-      module_function def env(_scratch_dir)
-        {}
-      end
-
       # --- event stream reading ---
 
       # The assistant message from a single pi JSONL line, or nil if the line
       # is not an assistant message_end event.
-      module_function def assistant_message_from_line(line)
+      def self.assistant_message_from_line(line)
         message_from_line(line, %w[assistant])
       end
+      private_class_method :assistant_message_from_line
 
       # The message with one of the given roles from a single pi JSONL line,
       # or nil if the line is not a message_end event for one.
-      module_function def message_from_line(line, roles)
+      def self.message_from_line(line, roles)
         event =
           begin
             JSON.parse(line)
@@ -78,32 +78,35 @@ module AgentCouncil
 
         message
       end
+      private_class_method :message_from_line
 
       # Assistant messages from all message_end events in a pi JSONL stream,
       # in order. Unparseable lines are skipped.
-      module_function def assistant_messages(jsonl)
+      def self.assistant_messages(jsonl)
         jsonl.each_line.filter_map { |line| assistant_message_from_line(line) }
       end
 
-      module_function def response_text(message)
+      def self.response_text(message)
         Array(message['content'])
           .select { |block| block['type'] == 'text' }
           .map { |block| block['text'] }
           .join("\n")
       end
+      private_class_method :response_text
 
       # The final assistant response: per pi's docs, message_end holds the
       # authoritative final message of each turn; the last assistant message_end
       # with actual text is the report (earlier ones belong to tool-use turns).
-      module_function def final_response(jsonl)
+      def self.final_response(jsonl)
         message = saved_message(assistant_messages(jsonl))
         message && response_text(message)
       end
 
       # The message final_response saves: the last one with text.
-      module_function def saved_message(messages)
+      def self.saved_message(messages)
         messages.reverse_each.detect { |m| !response_text(m).empty? }
       end
+      private_class_method :saved_message
 
       # Our usage keys, each mapped to pi's name for it. pi normalizes usage
       # across providers; its input excludes cache reads and writes.
@@ -116,7 +119,7 @@ module AgentCouncil
       # dollars when pi priced the usage. A tool result has usage when the
       # tool called a model itself, e.g. a codemode script's models.classify
       # call. nil when the stream reports no usage, as some providers don't.
-      module_function def usage(jsonl)
+      def self.usage(jsonl)
         messages = jsonl.each_line.filter_map { |line| message_from_line(line, %w[assistant toolResult]) }
         usages = messages.map { |m| m['usage'] }.grep(Hash)
         totals = USAGE_KEYS.transform_values { |key| usages.sum { |u| count(u[key]) } }
@@ -124,10 +127,6 @@ module AgentCouncil
 
         cost = usages.sum { |u| u['cost'].is_a?(Hash) ? count(u['cost']['total']) : 0 }
         cost.positive? ? totals.merge('cost' => cost.round(6)) : totals
-      end
-
-      module_function def count(value)
-        value.is_a?(Numeric) && value.positive? ? value : 0
       end
 
       # Stop reasons meaning a message was cut off, cancelled, or failed, not
@@ -144,7 +143,7 @@ module AgentCouncil
       # message must not be saved just because a text-less message followed it).
       # A non-blank string errorMessage on either wins over a cut-off stopReason on
       # the other, since it says more about what went wrong.
-      module_function def error_message(jsonl)
+      def self.error_message(jsonl)
         messages = assistant_messages(jsonl)
         candidates = [messages.last, saved_message(messages)].compact.uniq
         message = candidates.detect { |m| m['errorMessage'].is_a?(String) && !m['errorMessage'].strip.empty? }
@@ -152,18 +151,6 @@ module AgentCouncil
 
         message = candidates.detect { |m| UNUSABLE_STOP_REASONS.include?(m['stopReason']) }
         message && "stopped early (stopReason: #{message['stopReason']})"
-      end
-
-      # Why an agent that exited nonzero failed: pi explains it on stderr.
-      module_function def exit_detail(_stdout, stderr)
-        stderr.lines.map(&:strip).reject(&:empty?).first || NO_ERROR_OUTPUT
-      end
-
-      # Warnings about an agent that succeeded: none. A failed tool call,
-      # MCP calls included, is an ordinary tool error the agent sees, not a
-      # refusal (DESIGN.md §11).
-      module_function def warnings(_jsonl)
-        []
       end
     end
   end

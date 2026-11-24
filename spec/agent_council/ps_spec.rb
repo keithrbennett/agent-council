@@ -260,9 +260,21 @@ RSpec.describe AgentCouncil::Ps do
       ['pi', '']])
   end
 
-  it 'splits a model into provider and model only for OpenCode, whose --model gives both' do
+  it "reads a model with a \"/\" whole for a harness whose --model isn't provider/model" do
     claude = described_class::Entry.new(1, 0, 1, 0, 0, 0, 'claude -p --model anthropic/claude-x')
     expect(described_class.model_label(claude)).to eq('anthropic/claude-x')
+  end
+
+  it 'reads --provider and --model from a command line that names no harness' do
+    agent = described_class::Entry.new(1, 0, 1, 0, 0, 0, 'node cli.js -p --model m')
+    expect(described_class.model_label(agent)).to eq('m')
+  end
+
+  # Its exact arguments, where /proc gives them, keep a word with a space whole.
+  it "reads an agent's model from its exact arguments where it has them" do
+    argv = ['claude', '-p', '--model', 'my model']
+    agent = described_class::Entry.new(1, 0, 1, 0, 0, 0, argv.join(' '), argv)
+    expect(described_class.model_label(agent)).to eq('my model')
   end
 
   it "names an agent by its command when it isn't a harness's" do

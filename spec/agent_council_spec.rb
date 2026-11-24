@@ -323,15 +323,12 @@ RSpec.describe AgentCouncil do
     end
 
     it "runs and reads the output of the agent's own harness, naming it in the filename and front matter" do
-      other = Module.new do
+      other = Class.new(AgentCouncil::Harnesses::Harness) do
         const_set(:NAME, 'other')
-        module_function def argv(provider, model) = ['sh', '-c', "echo #{provider}-#{model}"]
-        module_function def env(_scratch_dir) = {}
-        module_function def usage(_stdout) = { 'input' => 1, 'output' => 2 }
-        module_function def error_message(_stdout) = nil
-        module_function def final_response(stdout) = "answer from #{stdout.strip}"
-        module_function def warnings(_stdout) = []
-        module_function def exit_detail(_stdout, stderr) = stderr
+        def self.argv(provider, model) = ['sh', '-c', "echo #{provider}-#{model}"]
+        def self.usage(_stdout) = { 'input' => 1, 'output' => 2 }
+        def self.error_message(_stdout) = nil
+        def self.final_response(stdout) = "answer from #{stdout.strip}"
       end
       stub_const('AgentCouncil::Harnesses::BY_NAME', { 'pi' => AgentCouncil::Harnesses::PiHarness,
         'other' => other })
@@ -345,6 +342,24 @@ RSpec.describe AgentCouncil do
       fields, body = described_class.parse_front_matter(File.read(File.join(run_dir, filename)))
       expect(fields['harness']).to eq('other')
       expect(body).to eq("answer from p-m\n")
+    end
+
+    # Harness raises NoMethodError, which run_agent rescues, so a harness
+    # missing a method fails its agent, not the whole run.
+    it 'fails only the agent whose harness lacks a method Harness leaves to it' do
+      other = stub_const('OtherHarness', Class.new(AgentCouncil::Harnesses::Harness) do
+        const_set(:NAME, 'other')
+        def self.argv(provider, model) = ['sh', '-c', "echo #{provider}-#{model}"]
+        def self.usage(_stdout) = nil
+      end)
+      stub_const('AgentCouncil::Harnesses::BY_NAME', { 'pi' => AgentCouncil::Harnesses::PiHarness,
+        'other' => other })
+
+      _label, ok, reason = described_class.run_agent(agent.merge('harness' => 'other'), 'prompt',
+        run_dir, 'prefix', index: 1)
+
+      expect(ok).to be(false)
+      expect(reason).to eq('NoMethodError: OtherHarness must define error_message')
     end
 
     # The env each agent's process got, from a capture3 that succeeds with
@@ -800,7 +815,7 @@ RSpec.describe AgentCouncil do
     end
 
     it 'checks the executable of every harness the config uses, naming each missing one' do
-      other = Module.new.tap { |m| m.const_set(:NAME, 'other-harness') }
+      other = Class.new(AgentCouncil::Harnesses::Harness).tap { |c| c.const_set(:NAME, 'other-harness') }
       stub_const('AgentCouncil::Harnesses::BY_NAME', { 'pi' => AgentCouncil::Harnesses::PiHarness,
         'other' => other })
       File.write('p_prompt.md', 'hi')

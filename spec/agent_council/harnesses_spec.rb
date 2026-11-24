@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
-# Tests for lib/agent_council/harnesses.rb: harness lookup by name and the
-# scaffolding every harness shares (no model calls). Run with: rspec
+# Tests for lib/agent_council/harnesses.rb, harness lookup by name, and
+# for what holds for every harness it lists: the interface, names, argv,
+# env, and model_label; plus the scaffolding every harness appends (no
+# model calls). Harness itself is in harness_spec.rb. Run with: rspec
 require 'spec_helper'
 require 'tmpdir'
 
@@ -18,14 +20,14 @@ RSpec.describe AgentCouncil::Harnesses do
     end
   end
 
-  describe '.module_for' do
-    it "returns the module of the entry's harness" do
-      expect(described_class.module_for({ 'harness' => 'pi' })).to be(AgentCouncil::Harnesses::PiHarness)
-      expect(described_class.module_for({})).to be(AgentCouncil::Harnesses::PiHarness)
+  describe '.class_for' do
+    it "returns the class of the entry's harness" do
+      expect(described_class.class_for({ 'harness' => 'pi' })).to be(AgentCouncil::Harnesses::PiHarness)
+      expect(described_class.class_for({})).to be(AgentCouncil::Harnesses::PiHarness)
     end
 
     it 'raises KeyError for an unknown harness' do
-      expect { described_class.module_for({ 'harness' => 'nope' }) }.to raise_error(KeyError)
+      expect { described_class.class_for({ 'harness' => 'nope' }) }.to raise_error(KeyError)
     end
   end
 
@@ -34,13 +36,41 @@ RSpec.describe AgentCouncil::Harnesses do
     expect(described_class::BY_NAME).not_to be_empty
   end
 
-  # What AgentCouncil calls on every harness (see harnesses.rb).
-  it 'gives every harness the whole interface' do
-    interface = %i[argv env usage error_message exit_detail warnings final_response
-      assistant_messages]
+  # What AgentCouncil calls on every harness (see harness.rb): Harness
+  # gives defaults for the rest, but these each harness must define.
+  it 'gives every harness the methods Harness leaves to it' do
+    required = %i[argv usage error_message final_response assistant_messages]
     described_class::BY_NAME.each_value do |harness|
-      expect(harness).to respond_to(*interface)
+      expect(harness.superclass).to be(described_class::Harness)
+      expect(required.map { |name| harness.method(name).owner })
+        .to all(satisfy { |owner| owner != described_class::Harness.singleton_class })
     end
+  end
+
+  # Helpers are private class methods, so nothing comes to depend on one.
+  # Only the class methods the harness and Harness define are counted:
+  # singleton_methods would also list those of Object (such as Psych's
+  # yaml_tag), and subtracting Object's would miss a helper sharing a name
+  # with one.
+  it 'makes public only the interface' do
+    interface = %i[argv env usage error_message exit_detail warnings final_response
+      assistant_messages model_label]
+    described_class::BY_NAME.each_value do |harness|
+      public = [harness, described_class::Harness].flat_map do |klass|
+        klass.singleton_class.public_instance_methods(false)
+      end
+      expect(public.uniq).to match_array(interface)
+    end
+  end
+
+  # agent-council-ps names an agent's model by its harness's model_label.
+  it "reads back each harness's provider and model from its own argv" do
+    labels = described_class::BY_NAME.transform_values do |harness|
+      harness.model_label(harness.argv('prov', 'org/m'))
+    end
+    # Claude Code and Codex take no provider; OpenCode's --model gives both.
+    expect(labels).to eq('pi' => 'prov / org/m', 'claude' => 'org/m', 'codex' => 'org/m',
+      'opencode' => 'prov / org/m')
   end
 
   # spawn takes String names and values.

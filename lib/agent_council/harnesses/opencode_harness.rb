@@ -5,17 +5,17 @@
 # shared scaffolding, and how to read its --format json event stream
 # afterward.
 #
-# AgentCouncil is harness-agnostic and finds this module through
+# AgentCouncil is harness-agnostic and finds this class through
 # AgentCouncil::Harnesses (lib/agent_council/harnesses.rb), by its NAME.
 # Authentication and billing are left to OpenCode: an agent uses the
 # credentials `opencode auth login` saved, as it would at the user's terminal.
 
 require 'json'
-require_relative 'scaffold'
+require_relative 'harness'
 
 module AgentCouncil
   module Harnesses
-    module OpenCodeHarness
+    class OpenCodeHarness < Harness
       NAME = 'opencode'
 
       # The scaffolding file env writes into the scratch dir: OpenCode reads
@@ -29,12 +29,20 @@ module AgentCouncil
       # --agent pins the agent whose edit permission env denies, whatever
       # default_agent a config names. No --auto: a tool call the user's
       # permissions set to "ask" is refused, since opencode run never asks.
-      module_function def argv(provider, model)
+      def self.argv(provider, model)
         [NAME, 'run', '--format', 'json', '--agent', AGENT, '--model', "#{provider}/#{model}"]
       end
 
       # The agent every OpenCode agent runs as.
       AGENT = 'build'
+
+      # "provider / model" from an agent's command line: its --model gives
+      # both, as provider/model (see argv). The model may itself contain a
+      # "/", so only the first one separates them.
+      def self.model_label(words)
+        model = flag_value(words, '--model')
+        model&.include?('/') ? model.split('/', 2).join(' / ') : super
+      end
 
       # Variables for the agent's process, beside TMPDIR:
       # - OPENCODE_DB, a database in the scratch dir, so the session isn't
@@ -56,7 +64,7 @@ module AgentCouncil
       #   - snapshots off, so the project's files aren't copied into
       #     OpenCode's data dir.
       # Writes the scaffolding file into scratch_dir.
-      module_function def env(scratch_dir)
+      def self.env(scratch_dir)
         scaffold = File.join(scratch_dir, SCAFFOLD_FILE)
         File.write(scaffold, Harnesses.scaffold_text)
         deny = { 'edit' => 'deny' }
@@ -71,31 +79,18 @@ module AgentCouncil
 
       # --- event stream reading ---
 
-      # The events of a --format json stream, in order. Unparseable lines and
-      # non-objects are skipped.
-      module_function def events(jsonl)
-        jsonl.each_line.filter_map do |line|
-          event =
-            begin
-              JSON.parse(line)
-            rescue JSON::ParserError
-              nil
-            end
-          event if event.is_a?(Hash)
-        end
-      end
-
       # The parts of the events of the given type, in order.
-      module_function def parts(jsonl, type)
+      def self.parts(jsonl, type)
         events(jsonl).filter_map do |event|
           part = event['part'] if event['type'] == type
           part if part.is_a?(Hash)
         end
       end
+      private_class_method :parts
 
       # The agent's model requests: one step_finish part each, carrying its
       # tokens and cost.
-      module_function def assistant_messages(jsonl)
+      def self.assistant_messages(jsonl)
         parts(jsonl, 'step_finish')
       end
 
@@ -103,7 +98,7 @@ module AgentCouncil
       # its text parts joined, for an agent that hit no error. Earlier
       # messages narrate its tool use. Synthetic parts, which OpenCode
       # writes itself (e.g. after compacting the session), are skipped.
-      module_function def final_response(jsonl)
+      def self.final_response(jsonl)
         return nil if failure_reason(jsonl)
 
         texts = report_texts(jsonl)
@@ -115,23 +110,25 @@ module AgentCouncil
 
       # The nonblank text parts, less those OpenCode wrote itself
       # (synthetic) or marked ignored.
-      module_function def report_texts(jsonl)
+      def self.report_texts(jsonl)
         parts(jsonl, 'text').select do |part|
           part['text'].is_a?(String) && !part['text'].strip.empty? && !part['synthetic'] && !part['ignored']
         end
       end
+      private_class_method :report_texts
 
       # The ID of the message final_response takes its text from, or nil.
-      module_function def final_response_message_id(jsonl)
+      def self.final_response_message_id(jsonl)
         report_texts(jsonl).last&.fetch('messageID', nil)
       end
+      private_class_method :final_response_message_id
 
-      # Token usage as AgentCouncil expects it (see Harnesses), summed over
+      # Token usage as AgentCouncil expects it (see Harness), summed over
       # the step_finish parts. OpenCode's input excludes cached input;
       # reasoning tokens, counted apart, are added to output. 'cost' is
       # OpenCode's own estimate, from its model catalog.
       # nil when the stream reports no usage.
-      module_function def usage(jsonl)
+      def self.usage(jsonl)
         steps = assistant_messages(jsonl)
         tokens = steps.map { |part| part['tokens'] }.grep(Hash)
         caches = tokens.map { |t| t['cache'] }.grep(Hash)
@@ -145,10 +142,6 @@ module AgentCouncil
         cost.positive? ? totals.merge('cost' => cost.round(6)) : totals
       end
 
-      module_function def count(value)
-        value.is_a?(Numeric) && value.positive? ? value : 0
-      end
-
       # Finish reasons meaning a model request was cut off or failed, not
       # completed (the AI SDK's, which OpenCode reports).
       UNUSABLE_FINISH_REASONS = %w[length content-filter error].freeze
@@ -160,7 +153,7 @@ module AgentCouncil
       # partial report if it was the last one or the report's message,
       # even if a later request (with no text) completed. A stream with no
       # text is left to run_agent, which says what it has.
-      module_function def error_message(jsonl)
+      def self.error_message(jsonl)
         failure = failure_reason(jsonl)
         return failure if failure
 
@@ -179,7 +172,7 @@ module AgentCouncil
       # stop it without the continue_loop_on_deny env sets. nil otherwise.
       # Only the last request's rejected calls are named: an earlier one
       # the agent went on from didn't stop it.
-      module_function def stopped_at_tool_calls(steps, jsonl)
+      def self.stopped_at_tool_calls(steps, jsonl)
         return nil unless steps.last&.fetch('reason', nil) == 'tool-calls'
 
         last_id = steps.last['messageID']
@@ -188,6 +181,7 @@ module AgentCouncil
 
         "stopped when OpenCode refused a tool call its permissions set to ask (#{tools.uniq.join(', ')})"
       end
+      private_class_method :stopped_at_tool_calls
 
       # The error text OpenCode gives a tool call whose permission it rejected.
       REJECTION_PREFIX = 'The user rejected permission'
@@ -195,7 +189,7 @@ module AgentCouncil
       # The tools of the tool calls OpenCode rejected for want of permission,
       # in order, only those of the message with the given ID if one is
       # given.
-      module_function def rejected_tools(jsonl, message_id = nil)
+      def self.rejected_tools(jsonl, message_id = nil)
         parts(jsonl, 'tool_use').filter_map do |part|
           state = part['state'].is_a?(Hash) ? part['state'] : {}
           next unless state['status'] == 'error' && state['error'].to_s.start_with?(REJECTION_PREFIX)
@@ -204,10 +198,11 @@ module AgentCouncil
           part['tool'].is_a?(String) ? part['tool'] : 'unknown tool'
         end
       end
+      private_class_method :rejected_tools
 
       # The last error event's message, else its error's name. nil if the
       # stream has no error event.
-      module_function def failure_reason(jsonl)
+      def self.failure_reason(jsonl)
         event = events(jsonl).reverse_each.detect { |e| e['type'] == 'error' }
         return nil unless event
 
@@ -216,11 +211,12 @@ module AgentCouncil
         [data['message'], error['name']].grep(String).map(&:strip).reject(&:empty?).first ||
           'an error event gave no reason'
       end
+      private_class_method :failure_reason
 
       # Why an agent that exited nonzero failed: the stream's error event
       # if there is one, else stderr (e.g. for a bad flag).
-      module_function def exit_detail(stdout, stderr)
-        failure_reason(stdout) || stderr.lines.map(&:strip).reject(&:empty?).first || NO_ERROR_OUTPUT
+      def self.exit_detail(stdout, stderr)
+        failure_reason(stdout) || super
       end
 
       # Warnings about an agent: one for the tool calls OpenCode rejected
@@ -229,7 +225,7 @@ module AgentCouncil
       # tools. A call a deny rule blocks has another error text, and like
       # other failed tool calls is an ordinary tool error the agent sees
       # and goes on from.
-      module_function def warnings(jsonl)
+      def self.warnings(jsonl)
         tools = rejected_tools(jsonl)
         return [] if tools.empty?
 

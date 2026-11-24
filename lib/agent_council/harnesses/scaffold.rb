@@ -1,16 +1,12 @@
 # frozen_string_literal: true
 
 # AgentCouncil::Harnesses.scaffold_text — the read-only scaffolding every
-# harness appends to its agents' system prompt — and what else every
-# harness module shares. In its own file so each harness module can
-# require it without the harness registry (lib/agent_council/harnesses.rb),
-# which requires the harness modules.
+# harness appends to its agents' system prompt. Required by Harness
+# (harnesses/harness.rb), so each harness has it without the harness
+# registry (lib/agent_council/harnesses.rb), which requires the harnesses.
 
 module AgentCouncil
   module Harnesses
-    # exit_detail's reason when the agent left none.
-    NO_ERROR_OUTPUT = 'no error output'
-
     # Scaffolding appended to every harness's system prompt, identical for
     # every agent. It names the scratch dir as $TMPDIR, not by path: Claude
     # Code's sandbox makes the dir itself read-only and points TMPDIR at a

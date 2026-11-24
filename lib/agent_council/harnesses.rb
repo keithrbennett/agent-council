@@ -1,36 +1,13 @@
 # frozen_string_literal: true
 
 # AgentCouncil::Harnesses — the harnesses agents can run under, by the name
-# a config entry gives in its 'harness' key. What they share, the read-only
+# a config entry gives in its 'harness' key. Each is a subclass of
+# Harness (harnesses/harness.rb), which documents what AgentCouncil calls
+# on one and gives defaults; AgentCouncil looks one up per agent with
+# class_for. What every harness's agents are told, the read-only
 # scaffolding, is in harnesses/scaffold.rb.
-#
-# Each harness is a plain module shaped like PiHarness (NAME, argv, env,
-# usage, error_message, exit_detail, warnings, final_response,
-# assistant_messages), not an adapter framework; AgentCouncil looks one up
-# per agent with module_for. NAME is both the config value and the
-# executable argv runs, which the startup check looks for on PATH. The
-# scaffolding sends agents to $TMPDIR, which run_agent sets to the
-# scratch dir, so a harness must pass TMPDIR through to its tools. It also
-# goes into report filenames unsanitized, so it must be one
-# AgentCouncil.sanitize leaves unchanged (the specs check this).
-#
-# env (scratch_dir) returns the variables the agent's process needs beyond
-# TMPDIR, which run_agent sets (empty for none): String names, each with a
-# String value. It may write files into scratch_dir, which is removed after
-# the agent finishes.
-#
-# exit_detail (stdout, stderr) says why an agent that exited nonzero failed;
-# the caller puts it, and error_message's reason, on one line cut to 300
-# characters (AgentCouncil.failure_reason), so a harness returns the
-# reason whole. warnings returns an Array of messages (empty for none)
-# about an agent, failed or not; the caller prints and records them all, so a
-# harness keeps them few and short.
-#
-# usage returns the agent's token usage as AgentCouncil records it, summed
-# over all its requests: integer 'input' (excluding cached input), 'output',
-# 'cache_read', and 'cache_write', plus 'cost' in US dollars when the
-# harness priced the usage; or nil when the harness reports no usage.
 
+require_relative 'harnesses/harness'
 require_relative 'harnesses/pi_harness'
 require_relative 'harnesses/claude_code_harness'
 require_relative 'harnesses/codex_harness'
@@ -58,9 +35,9 @@ module AgentCouncil
       harness.is_a?(String) ? harness : DEFAULT_NAME
     end
 
-    # The harness module for an entry; KeyError for an unknown name, which
+    # The harness class for an entry; KeyError for an unknown name, which
     # config validation rules out before any agent runs.
-    module_function def module_for(entry)
+    module_function def class_for(entry)
       BY_NAME.fetch(name_of(entry))
     end
   end
