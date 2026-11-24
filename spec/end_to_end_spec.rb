@@ -333,7 +333,7 @@ RSpec.describe 'agent-council end to end' do
     ), output_report
     expect(out).to match(%r{^Prompt:      prompt\.md\nRun Dir:     agent-council-reports/\S+$}), output_report
     expect(out).to include("Configured Review Agents (2):\n  #1 pi / done / m1\n  #2 pi / done / m2\n")
-    expect(out).to include("Consolidator Agent:\n  pi / done / c\n")
+    expect(out).to include("Configured Consolidator Agent:\n  pi / done / c\n")
     expect(reports('reviews/*.md').size).to eq(2)
     expect(reports('*consolidated*.md').size).to eq(1)
     expect(leftover_scratch_dirs).to be_empty
@@ -488,7 +488,7 @@ RSpec.describe 'agent-council end to end' do
 
     expect(status.exitstatus).to eq(0), output_report
     expect(out).to include('#1 pi / done / m1', '#2 claude / anthropic / denied')
-    expect(out).to include("Consolidator Agent:\n  claude / anthropic / split")
+    expect(out).to include("Configured Consolidator Agent:\n  claude / anthropic / split")
     warning = 'Warning: Claude Code refused 1 tool call: Bash (make)'
     expect(out).to match(%r{^  ✓ \S+  #2 anthropic / denied\n      #{Regexp.escape(warning)}$})
     expect(reports('reviews/*').map { |path| File.basename(path)[/_\d\d_.*/] })
@@ -683,7 +683,7 @@ RSpec.describe 'agent-council end to end' do
       status = run_council(args: ['--consolidate', run_dir])
 
       expect(status.exitstatus).to eq(0), output_report
-      expect(out).to include("Consolidator Agent:\n  claude / anthropic / split\n")
+      expect(out).to include("Configured Consolidator Agent:\n  claude / anthropic / split\n")
       expect(out).to include("\n      Warning: Claude Code refused 1 tool call: Bash (make)\n")
       expect(reports('*_consolidated_claude_anthropic_split_findings.md').size).to eq(1), output_report
       run = JSON.parse(File.read(reports('run.json').first))
@@ -704,7 +704,7 @@ RSpec.describe 'agent-council end to end' do
       expect(out).to include(
         "Working Dir: #{File.realpath(work_dir)}\nConfig:      #{run_dir}/config.yml\n" \
           "Prompt:      #{run_dir}/prompt.md\nRun Dir:     #{run_dir}\n",
-        "Consolidator Agent:\n  pi / done / c\n",
+        "Configured Consolidator Agent:\n  pi / done / c\n",
         "Consolidation Report (in #{run_dir}, from 2 reviews):\n"
       )
       expect(out).to match(%r{from 2 reviews\):\n  - pid \d+  done / c\n}), output_report

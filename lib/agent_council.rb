@@ -1236,7 +1236,7 @@ module AgentCouncil
     agents.each_with_index do |agent, i|
       puts "  ##{i + 1} #{agent_descriptor(agent)}"
     end
-    puts "\nConsolidator Agent:\n  #{agent_descriptor(consolidator)}" if consolidator
+    puts "\nConfigured Consolidator Agent:\n  #{agent_descriptor(consolidator)}" if consolidator
     puts "\nStarted Agents:"
     pool = WorkerPool.new(grace: INTERRUPT_GRACE_SECONDS)
     pool.trap_signals
@@ -1380,7 +1380,7 @@ module AgentCouncil
     puts "Config:      #{relative_path(config_path)}"
     puts "Prompt:      #{relative_path(prompt_path)}"
     puts "Run Dir:     #{relative_path(run_dir)}"
-    puts "\nConsolidator Agent:\n  #{agent_descriptor(consolidator)}"
+    puts "\nConfigured Consolidator Agent:\n  #{agent_descriptor(consolidator)}"
     puts "\nConsolidation Report (in #{relative_path(run_dir)}, " \
       "from #{reports.size} review#{'s' unless reports.size == 1}):"
     analysts, consolidations = read_run_file(run_dir)

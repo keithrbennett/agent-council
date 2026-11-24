@@ -665,7 +665,7 @@ Configured Review Agents (4):
   #3 pi / openrouter / deepseek/deepseek-v4.1-flash-1017
   #4 pi / openrouter / deepseek/deepseek-v4.1-flash-1017
 
-Consolidator Agent:
+Configured Consolidator Agent:
   pi / anthropic / claude-sonnet-5-5
 
 Started Agents:
@@ -1023,8 +1023,8 @@ agent-council-reports/
 Each run starts by printing its working directory (`Working Dir:`, which
 relative paths below are shown against), config, prompt, and run
 directory (`Run Dir: agent-council-reports/2026-09-03/09-14-02`), then
-its agents under `Configured Review Agents (N):` and, if configured,
-`Consolidator Agent:`; these labels also name the harness
+its agents under `Configured Review Agents (N):` and, if there is one,
+`Configured Consolidator Agent:`; these labels also name the harness
 (e.g. `#2 pi / openai / gpt-6.1-sol`).
 You can open the run dir while agents are still working, or after a
 Ctrl-C (see [Stopping a run](#stopping-a-run)). Other access patterns:

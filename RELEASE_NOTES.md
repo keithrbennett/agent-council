@@ -18,8 +18,9 @@
   stopped while the others go on: see "Stopping one agent" in
   `RUNAWAY_AGENTS.md`. The lines printed as agents finish, once under
   `Review Progress:`, now come under `Finished Agents:`, and the
-  configured agents are listed under `Configured Review Agents (N):`,
-  not `Review Agents (N):`.
+  configured agents are listed under `Configured Review Agents (N):`
+  and `Configured Consolidator Agent:`, not `Review Agents (N):` and
+  `Consolidator Agent:`.
 - An agent stopped by a signal is reported as, e.g., `pi was stopped by
   SIGTERM`, not `pi exited : …`.
 - The lines printed while agents run show at once when output goes to a
