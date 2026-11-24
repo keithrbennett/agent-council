@@ -40,6 +40,12 @@ Investigate thoroughly before reaching conclusions.
 You are permitted and encouraged to inspect files, run Git commands, execute
 relevant tests and linters, and reproduce suspected defects.
 
+Several agents run this review at the same time on the same machine, so
+keep your test runs light: where you can, run the tests relevant to the
+change rather than the whole suite, and run them under one language
+version or interpreter, not several. If you suspect a defect specific
+to one version or interpreter, run only the relevant tests under it.
+
 **DO NOT EDIT ANY CODE OR TRACKED FILES.**
 
 Tests and linters that generate temporary files or coverage data are

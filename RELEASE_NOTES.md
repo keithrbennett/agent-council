@@ -43,6 +43,10 @@
     subagents' usage is missing from them.
   - On Ctrl-C, OpenCode agents don't stop the commands they started
     within the grace period, so those may keep running.
+- The review-latest-commit and review-pull-request sample prompts ask
+  agents to keep their test runs light, since several run at once on
+  one machine: the tests relevant to the change rather than the whole
+  suite, under one language version or interpreter, not several.
 - The review-latest-commit sample prompt tells agents not to report
   what the repository's `REVIEW_NOTES.md`, if it has one, records as an
   accepted risk or non-issue, unless the changes make it worse or its
