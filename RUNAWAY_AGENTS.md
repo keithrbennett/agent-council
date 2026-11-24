@@ -123,11 +123,75 @@ Above, agent #2 has been waiting 41 minutes for a test run to finish.
 
 What it can't show: it reads only what the operating system shows
 (through `ps`, plus `/proc` on Linux and `lsof` on macOS), so it can't
-see an agent's conversation with its model, which goes only to
-agent-council. Low CPU use is normal for an agent waiting on its model.
-An agent that has no long-running command, and whose sibling agents
-finished long ago, may be stuck in a loop with its model, and only
-stopping it will end that.
+see an agent's conversation with its model. Low CPU use is normal for
+an agent waiting on its model. An agent that has no long-running
+command, and whose sibling agents finished long ago, may be stuck in a
+loop with its model, and only stopping it will end that; or it may be
+working, only slowly. A coding assistant can help tell which.
+
+### Asking a coding assistant to look closer
+
+`agent-council-ps` tells you which process to look at. A coding
+assistant that can run shell commands, such as Claude Code, Codex,
+OpenCode, or pi, can look further: paste that output and ask. For
+example, one OpenCode agent reviewing a commit was still running after
+37 minutes, long after the others had finished:
+
+```
+agent-council pid 2115363, running 00:37:28, in /home/me/project
+  - pid 2115386  opencode  opencode-go / minimax-m3.1-flash  running 00:37:28  cpu 00:00:59 (1% now)  487 MB
+```
+
+Asked "What do you think is happening with this process?", Claude Code
+ran six shell commands and answered (abridged):
+
+> It isn't hung. It's working, just slowly, and the slowdown will get
+> worse the longer it runs.
+>
+> - **No tool is running.** opencode has no child processes. It has one
+>   open HTTPS connection and is waiting on it. It's 27 turns into the
+>   session, and the latest model request started about 75 seconds
+>   before I checked. Low CPU is expected while it waits for the
+>   model's reply.
+> - **Each turn is taking longer.** The first few turns took 3-12
+>   seconds each. They now take 2-2.5 minutes. The reason is shown in
+>   the token totals per turn:
+>
+>   | step | total tokens | reasoning tokens |
+>   |------|--------------|------------------|
+>   | 1    | 11.7k        | 0                |
+>   | 10   | 77k          | 4.5k             |
+>   | 20   | 187k         | 14.4k            |
+>   | 27   | 275k         | 11.6k            |
+>
+>   The model re-reads all its previous turns (about 262k tokens,
+>   mostly cached) on every request. It also writes 10-17k tokens of
+>   reasoning [in each of the later turns], and most of the wait is
+>   that output being generated.
+> - **It's reviewing in small steps.** It's running one-off commands
+>   like `rg -n "harness\." lib/agent_council.rb | head -20`. [...]
+>   each check costs a 2-minute turn.
+> - [...]
+>
+> **Prognosis:** there's no sign it's close to done, and I can't tell
+> how many more steps it will take. If you let it run, it will
+> probably finish, but each new turn will be slower than the last.
+> [...] This model, minimax-m3.1-flash, seems to suit this review
+> prompt poorly. It has cost about $0.01 per step so far, so it's
+> wasting time more than money.
+
+An assistant can see the process, its children, and its connections
+from the operating system, as for any agent. The turn-by-turn figures
+are in the agent's session: while the agent runs, OpenCode keeps it in
+a database in the agent's scratch directory, which is deleted when the
+agent finishes. An assistant can find the database's path in the agent
+process's environment, as `OPENCODE_DB`. (OpenCode 1.2.4 ignored
+`OPENCODE_DB`, saving sessions to your history instead.) pi, Claude
+Code, and Codex agents save no session, so for them an assistant can
+see the process and the commands it runs, but not the conversation.
+
+Having seen the diagnosis, you can stop the agent yourself (see
+[Stopping one agent](#stopping-one-agent)) or ask the assistant to.
 
 ## Stopping one agent
 

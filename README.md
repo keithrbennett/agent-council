@@ -757,9 +757,11 @@ time, run it under the `timeout` command; [`RUNAWAY_AGENTS.md`](RUNAWAY_AGENTS.m
 explains how, the options to use and avoid, and why there's no
 built-in limit yet. It also explains how to [see what an agent is
 doing](RUNAWAY_AGENTS.md#seeing-what-an-agent-is-doing) with
-`agent-council-ps`, which the gem includes, and how to [stop one
-agent](RUNAWAY_AGENTS.md#stopping-one-agent) by the process ID printed
-as it started, letting the others finish.
+`agent-council-ps` (which the gem includes), including an example of
+[asking a coding assistant to look
+closer](RUNAWAY_AGENTS.md#asking-a-coding-assistant-to-look-closer),
+and how to [stop one agent](RUNAWAY_AGENTS.md#stopping-one-agent) by
+the process ID printed as it started, letting the others finish.
 
 ### Consolidating a finished run
 

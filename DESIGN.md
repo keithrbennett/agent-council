@@ -319,7 +319,7 @@ OPENCODE_CONFIG_CONTENT={"instructions":["<scratch>/agent-council-scaffold.md"],
 - `experimental.continue_loop_on_deny`: `opencode run` refuses every `ask` (no `--auto` is passed, as `codex exec` refuses approvals), and by default a refusal ends the session, leaving the model's lead-in as the report. With this, the agent sees the refusal and goes on.
 - `agent.title.disable`: the title agent's request isn't in the stream, so its usage wouldn't be counted.
 - `snapshot: false`: snapshots (for undo) copy the project's files, untracked ones included, into OpenCode's data dir, kept after the run.
-- `OPENCODE_DB` in the scratch dir: the session isn't kept, as under the other harnesses, and concurrent agents don't share one SQLite database. opencode 1.2.4 ignored it.
+- `OPENCODE_DB` in the scratch dir: the session is deleted with the scratch dir when the agent finishes, so it isn't kept (the other harnesses save none), and concurrent agents don't share one SQLite database. opencode 1.2.4 ignored it.
 
 **Context.** OpenCode behaves as in an interactive session started in the analyzed repository: the user's config and plugins apply, and so do the project's `AGENTS.md` files and `opencode.json`, with no trust step. If the project has a `.opencode` directory, OpenCode writes a `.gitignore` there. An inherited `OPENCODE_PERMISSION` is left alone.
 
@@ -554,7 +554,7 @@ New gems are added only if they solve a meaningful problem that would otherwise 
 
 agent-council is at an early stage (0.x), so it does only what its core job needs. Features we hope to add include support for more harnesses and telling a Claude Code agent's billing source (subscription or API key) apart in `run.json` (§11). A missing feature is usually just not built yet.
 
-Worth considering, not decided: an option to keep agents' sessions. Every harness now runs agents without saving their sessions (pi's `--no-session`, Claude Code's `--no-session-persistence`, Codex's `--ephemeral`, OpenCode's `OPENCODE_DB` in the scratch dir), so a council doesn't flood the user's history and concurrent OpenCode agents don't share a database. A user might still want a session, to see what an agent did beyond its report or to recover usage the stream leaves out (OpenCode's subagents). An option for it would apply to every harness, and for OpenCode would keep each agent's own database (in the run directory, say) rather than use the user's.
+Worth considering, not decided: an option to keep agents' sessions. Every harness now runs agents without keeping their sessions (pi's `--no-session`, Claude Code's `--no-session-persistence`, and Codex's `--ephemeral` save none; OpenCode's goes to `OPENCODE_DB` in the scratch dir, deleted when the agent finishes), so a council doesn't flood the user's history and concurrent OpenCode agents don't share a database. A user might still want a session, to see what an agent did beyond its report or to recover usage the stream leaves out (OpenCode's subagents). An option for it would apply to every harness, and for OpenCode would keep each agent's own database (in the run directory, say) rather than use the user's.
 
 `REVIEW_NOTES.md` separately tracks review findings that were considered and don't need to be re-raised: accepted risks and non-issues.
 

@@ -12,7 +12,8 @@
   exec`, under MRI or JRuby, are listed. Each run (and
   `--consolidate`) prints the command, with its process ID, before
   its agents start. See "Seeing what an agent is doing" in
-  `RUNAWAY_AGENTS.md`, which also says which runs aren't listed.
+  `RUNAWAY_AGENTS.md`, which also says which runs aren't listed and
+  shows a coding assistant diagnosing a slow agent from its output.
 - Each agent's process ID is printed as it starts, on a `- pid` line under
   a new `Started Agents:` heading (or, for the consolidator, under its
   `Consolidation Report` heading), so a running agent can be found, or

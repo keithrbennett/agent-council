@@ -45,9 +45,9 @@ module AgentCouncil
       end
 
       # Variables for the agent's process, beside TMPDIR:
-      # - OPENCODE_DB, a database in the scratch dir, so the session isn't
-      #   kept, as under the other harnesses, and concurrent agents don't
-      #   share one database.
+      # - OPENCODE_DB, a database in the scratch dir, so the session is
+      #   deleted with it when the agent finishes (the other harnesses
+      #   save none), and concurrent agents don't share one database.
       # - OPENCODE_CONFIG_CONTENT, which OpenCode merges over the user's and
       #   the project's config (replacing a user's own value):
       #   - the scaffolding, as an instructions file;
