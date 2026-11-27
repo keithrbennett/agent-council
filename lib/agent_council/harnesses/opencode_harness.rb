@@ -112,7 +112,7 @@ module AgentCouncil
       # (synthetic) or marked ignored.
       def self.report_texts(jsonl)
         parts(jsonl, 'text').select do |part|
-          part['text'].is_a?(String) && !part['text'].strip.empty? && !part['synthetic'] && !part['ignored']
+          nonblank_text(part['text']) && !part['synthetic'] && !part['ignored']
         end
       end
       private_class_method :report_texts
@@ -136,10 +136,7 @@ module AgentCouncil
                    'output'      => tokens.sum { |t| count(t['output']) + count(t['reasoning']) },
                    'cache_read'  => caches.sum { |c| count(c['read']) },
                    'cache_write' => caches.sum { |c| count(c['write']) } }
-        return nil if totals.values.all?(&:zero?)
-
-        cost = steps.sum { |part| count(part['cost']) }
-        cost.positive? ? totals.merge('cost' => cost.round(6)) : totals
+        usage_result(totals, steps.sum { |part| count(part['cost']) })
       end
 
       # Finish reasons meaning a model request was cut off or failed, not
@@ -203,12 +200,12 @@ module AgentCouncil
       # The last error event's message, else its error's name. nil if the
       # stream has no error event.
       def self.failure_reason(jsonl)
-        event = events(jsonl).reverse_each.detect { |e| e['type'] == 'error' }
+        event = last_event(jsonl, 'error')
         return nil unless event
 
         error = event['error'].is_a?(Hash) ? event['error'] : {}
         data = error['data'].is_a?(Hash) ? error['data'] : {}
-        [data['message'], error['name']].grep(String).map(&:strip).reject(&:empty?).first ||
+        nonblank([data['message'], error['name']]).first ||
           'an error event gave no reason'
       end
       private_class_method :failure_reason

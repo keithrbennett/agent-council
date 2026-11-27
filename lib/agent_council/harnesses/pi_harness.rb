@@ -8,7 +8,6 @@
 # AgentCouncil is harness-agnostic and finds this class through
 # AgentCouncil::Harnesses (lib/agent_council/harnesses.rb), by its NAME.
 
-require 'json'
 require_relative 'harness'
 
 module AgentCouncil
@@ -53,37 +52,20 @@ module AgentCouncil
 
       # --- event stream reading ---
 
-      # The assistant message from a single pi JSONL line, or nil if the line
-      # is not an assistant message_end event.
-      def self.assistant_message_from_line(line)
-        message_from_line(line, %w[assistant])
+      # The messages of a pi JSONL stream's message_end events with one of
+      # the given roles, in order.
+      def self.messages_with_role(jsonl, *roles)
+        events(jsonl).filter_map do |event|
+          message = event['message'] if event['type'] == 'message_end'
+          message if message.is_a?(Hash) && roles.include?(message['role'])
+        end
       end
-      private_class_method :assistant_message_from_line
-
-      # The message with one of the given roles from a single pi JSONL line,
-      # or nil if the line is not a message_end event for one.
-      def self.message_from_line(line, roles)
-        event =
-          begin
-            JSON.parse(line)
-          rescue JSON::ParserError
-            nil
-          end
-
-        return nil unless event.is_a?(Hash)
-        return nil unless event['type'] == 'message_end'
-
-        message = event['message']
-        return nil unless message.is_a?(Hash) && roles.include?(message['role'])
-
-        message
-      end
-      private_class_method :message_from_line
+      private_class_method :messages_with_role
 
       # Assistant messages from all message_end events in a pi JSONL stream,
-      # in order. Unparseable lines are skipped.
+      # in order.
       def self.assistant_messages(jsonl)
-        jsonl.each_line.filter_map { |line| assistant_message_from_line(line) }
+        messages_with_role(jsonl, 'assistant')
       end
 
       def self.response_text(message)
@@ -120,13 +102,9 @@ module AgentCouncil
       # tool called a model itself, e.g. a codemode script's models.classify
       # call. nil when the stream reports no usage, as some providers don't.
       def self.usage(jsonl)
-        messages = jsonl.each_line.filter_map { |line| message_from_line(line, %w[assistant toolResult]) }
-        usages = messages.map { |m| m['usage'] }.grep(Hash)
+        usages = messages_with_role(jsonl, 'assistant', 'toolResult').map { |m| m['usage'] }.grep(Hash)
         totals = USAGE_KEYS.transform_values { |key| usages.sum { |u| count(u[key]) } }
-        return nil if totals.values.all?(&:zero?)
-
-        cost = usages.sum { |u| u['cost'].is_a?(Hash) ? count(u['cost']['total']) : 0 }
-        cost.positive? ? totals.merge('cost' => cost.round(6)) : totals
+        usage_result(totals, usages.sum { |u| u['cost'].is_a?(Hash) ? count(u['cost']['total']) : 0 })
       end
 
       # Stop reasons meaning a message was cut off, cancelled, or failed, not
@@ -146,7 +124,7 @@ module AgentCouncil
       def self.error_message(jsonl)
         messages = assistant_messages(jsonl)
         candidates = [messages.last, saved_message(messages)].compact.uniq
-        message = candidates.detect { |m| m['errorMessage'].is_a?(String) && !m['errorMessage'].strip.empty? }
+        message = candidates.detect { |m| nonblank_text(m['errorMessage']) }
         return message['errorMessage'] if message
 
         message = candidates.detect { |m| UNUSABLE_STOP_REASONS.include?(m['stopReason']) }

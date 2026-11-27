@@ -55,7 +55,7 @@ module AgentCouncil
       # The agent's result event: the last one, which ends the stream. nil if
       # there is none, e.g. for an agent that was killed.
       def self.result_event(jsonl)
-        events(jsonl).reverse_each.detect { |event| event['type'] == 'result' }
+        last_event(jsonl, 'result')
       end
       private_class_method :result_event
 
@@ -95,11 +95,7 @@ module AgentCouncil
         usage = result && result['usage']
         return nil unless usage.is_a?(Hash)
 
-        totals = USAGE_KEYS.transform_values { |key| count(usage[key]) }
-        return nil if totals.values.all?(&:zero?)
-
-        cost = count(result['total_cost_usd'])
-        cost.positive? ? totals.merge('cost' => cost.round(6)) : totals
+        usage_result(USAGE_KEYS.transform_values { |key| count(usage[key]) }, count(result['total_cost_usd']))
       end
 
       # Why the agent produced no usable report, or nil. A failed agent has a
@@ -114,17 +110,13 @@ module AgentCouncil
         return 'the stream has no result event' unless result
         return error_reason(result) || 'the agent failed and gave no reason' if result['is_error'] == true
 
-        text = result['result']
-        'the result event has no text' unless text.is_a?(String) && !text.strip.empty?
+        'the result event has no text' unless nonblank_text(result['result'])
       end
 
       # The reason a failed agent's result event gives, or nil if it gives none.
       def self.error_reason(result)
-        errors = Array(result['errors']).grep(String).map(&:strip).reject(&:empty?)
-        return errors.join('; ') unless errors.empty?
-
-        text = result['result']
-        text if text.is_a?(String) && !text.strip.empty?
+        errors = nonblank(Array(result['errors']))
+        errors.empty? ? nonblank_text(result['result']) : errors.join('; ')
       end
       private_class_method :error_reason
 
@@ -154,12 +146,11 @@ module AgentCouncil
         denials = result && result['permission_denials']
         return [] unless denials.is_a?(Array) && !denials.empty?
 
-        calls = denials.map { |denial| denied_call(denial) }.uniq
-        listed = calls.first(MAX_LISTED_CALLS).map do |tool, target|
+        calls = denials.map { |denial| denied_call(denial) }.uniq.map do |tool, target|
           target ? "#{tool} (#{shorten(target, MAX_TARGET_LENGTH)})" : tool
         end
-        listed << "and #{calls.size - listed.size} more" if calls.size > listed.size
-        ["Claude Code refused #{denials.size} tool call#{'s' unless denials.size == 1}: #{listed.join('; ')}"]
+        [listing("Claude Code refused #{denials.size} tool call#{'s' unless denials.size == 1}", calls,
+          MAX_LISTED_CALLS)]
       end
 
       # Distinct refused calls named in a warning, so an agent refused many

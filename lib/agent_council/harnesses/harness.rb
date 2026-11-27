@@ -123,6 +123,12 @@ module AgentCouncil
       end
       private_class_method :events
 
+      # The last event of a JSONL stream whose type is one of types, or nil.
+      def self.last_event(jsonl, *types)
+        events(jsonl).reverse_each.detect { |event| types.include?(event['type']) }
+      end
+      private_class_method :last_event
+
       # A token count or cost from a stream: value if it's a positive
       # number, else 0.
       def self.count(value)
@@ -130,11 +136,42 @@ module AgentCouncil
       end
       private_class_method :count
 
+      # What usage returns for totals (our four keys, each a count) and the
+      # cost the harness gave them: nil if every total is zero, else the
+      # totals, with the cost, rounded, if it's positive.
+      def self.usage_result(totals, cost = 0)
+        return nil if totals.values.all?(&:zero?)
+
+        cost.positive? ? totals.merge('cost' => cost.round(6)) : totals
+      end
+      private_class_method :usage_result
+
+      # value if it's a nonblank string (not stripped), else nil.
+      def self.nonblank_text(value)
+        value if value.is_a?(String) && !value.strip.empty?
+      end
+      private_class_method :nonblank_text
+
+      # The values that are nonblank strings, stripped.
+      def self.nonblank(values)
+        values.grep(String).map(&:strip).reject(&:empty?)
+      end
+      private_class_method :nonblank
+
       # text, cut to max characters with "..." if longer.
       def self.shorten(text, max)
         text.length > max ? "#{text[0, max]}..." : text
       end
       private_class_method :shorten
+
+      # A warning: label, then the first max entries, then how many more
+      # there are, if any.
+      def self.listing(label, entries, max)
+        listed = entries.first(max)
+        listed += ["and #{entries.size - max} more"] if entries.size > max
+        "#{label}: #{listed.join('; ')}"
+      end
+      private_class_method :listing
 
       # The first nonblank line of text, stripped, or nil.
       def self.first_line(text)

@@ -72,7 +72,7 @@ module AgentCouncil
       # The event that ended the agent's turn: turn.completed or
       # turn.failed. nil if there is none, e.g. for an agent that was killed.
       def self.turn_end(jsonl)
-        events(jsonl).reverse_each.detect { |event| %w[turn.completed turn.failed].include?(event['type']) }
+        last_event(jsonl, 'turn.completed', 'turn.failed')
       end
       private_class_method :turn_end
 
@@ -81,16 +81,8 @@ module AgentCouncil
       def self.final_response(jsonl)
         return nil unless turn_end(jsonl)&.fetch('type') == 'turn.completed'
 
-        message = assistant_messages(jsonl).reverse_each.detect { |m| text_of(m) }
-        message && text_of(message)
+        assistant_messages(jsonl).filter_map { |message| nonblank_text(message['text']) }.last
       end
-
-      # A message's text, or nil if it has none.
-      def self.text_of(item)
-        text = item['text']
-        text if text.is_a?(String) && !text.strip.empty?
-      end
-      private_class_method :text_of
 
       # Token usage as AgentCouncil expects it (see Harness), from the
       # turn.completed event, which totals the turn's requests. Codex's
@@ -105,11 +97,10 @@ module AgentCouncil
 
         cache_read = count(usage['cached_input_tokens'])
         cache_write = count(usage['cache_write_input_tokens'])
-        totals = { 'input'       => [count(usage['input_tokens']) - cache_read - cache_write, 0].max,
-                   'output'      => count(usage['output_tokens']),
-                   'cache_read'  => cache_read,
-                   'cache_write' => cache_write }
-        totals.values.all?(&:zero?) ? nil : totals
+        usage_result({ 'input'       => [count(usage['input_tokens']) - cache_read - cache_write, 0].max,
+                       'output'      => count(usage['output_tokens']),
+                       'cache_read'  => cache_read,
+                       'cache_write' => cache_write })
       end
 
       # Why the agent produced no usable report, or nil. A failed turn ends
@@ -126,13 +117,11 @@ module AgentCouncil
       # The reason a failed turn gives: its turn.failed error message, else
       # the last top-level error event's. nil if neither gives one.
       def self.failure_reason(jsonl)
-        all = events(jsonl)
-        failed = all.reverse_each.detect { |event| event['type'] == 'turn.failed' }
-        error = failed['error'] if failed
-        reason = error['message'] if error.is_a?(Hash)
-        return reason.strip if reason.is_a?(String) && !reason.strip.empty?
+        error = last_event(jsonl, 'turn.failed')&.fetch('error', nil)
+        reason = nonblank_text(error['message'])&.strip if error.is_a?(Hash)
+        return reason if reason
 
-        nonblank(all.filter_map { |event| event['message'] if event['type'] == 'error' }).last
+        nonblank(events(jsonl).filter_map { |event| event['message'] if event['type'] == 'error' }).last
       end
       private_class_method :failure_reason
 
@@ -158,25 +147,12 @@ module AgentCouncil
         calls = failed_calls(completed_items(jsonl, 'mcp_tool_call').select do |item|
           item['status'] == 'failed'
         end)
-        warnings = []
-        unless errors.empty?
-          warnings << listing("Codex reported #{errors.size == 1 ? 'an error' : 'errors'}",
-            errors)
+        found = { "Codex reported #{errors.size == 1 ? 'an error' : 'errors'}" => errors,
+                  "Codex MCP tool call#{'s' unless calls.size == 1} failed"    => calls }
+        found.reject { |_label, entries| entries.empty? }.map do |label, entries|
+          listing(label, entries.map { |entry| shorten(entry, MAX_ERROR_LENGTH) }, MAX_LISTED_ERRORS)
         end
-        unless calls.empty?
-          warnings << listing("Codex MCP tool call#{'s' unless calls.size == 1} failed",
-            calls)
-        end
-        warnings
       end
-
-      # A warning: label, then entries, at most MAX_LISTED_ERRORS of them.
-      def self.listing(label, entries)
-        listed = entries.first(MAX_LISTED_ERRORS).map { |entry| shorten(entry, MAX_ERROR_LENGTH) }
-        listed << "and #{entries.size - listed.size} more" if entries.size > listed.size
-        "#{label}: #{listed.join('; ')}"
-      end
-      private_class_method :listing
 
       # Failed MCP tool calls as distinct "server.tool (reason)" entries.
       def self.failed_calls(calls)
@@ -184,20 +160,14 @@ module AgentCouncil
           server, name = nonblank([call['server']]).first, nonblank([call['tool']]).first
           tool = name ? [server, name].compact.join('.') : 'unknown tool'
           error = call['error']
-          reason = error['message'] if error.is_a?(Hash)
-          reason.is_a?(String) && !reason.strip.empty? ? "#{tool} (#{reason.strip})" : tool
+          reason = nonblank_text(error['message'])&.strip if error.is_a?(Hash)
+          reason ? "#{tool} (#{reason})" : tool
         end.uniq
       end
       private_class_method :failed_calls
 
       MAX_LISTED_ERRORS = 5
       MAX_ERROR_LENGTH = 200
-
-      # The values that are nonblank strings, stripped.
-      def self.nonblank(values)
-        values.grep(String).map(&:strip).reject(&:empty?)
-      end
-      private_class_method :nonblank
     end
   end
 end
