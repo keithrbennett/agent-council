@@ -1173,12 +1173,7 @@ module AgentCouncil
     end
     analyst_prompt = compose_analyst_prompt(prompt, File.read(ANALYST_FORMAT_PATH, encoding: ENCODING))
 
-    config =
-      begin
-        YAML.safe_load_file(config_path)
-      rescue Psych::Exception => e
-        abort "Invalid YAML in #{config_path}: #{e.message}"
-      end
+    config = load_config(config_path)
     abort "Config file must be a YAML mapping: #{config_path}" unless config.is_a?(Hash)
 
     agents = config['agents']
@@ -1235,10 +1230,7 @@ module AgentCouncil
     # A default config's path is absolute (resolve_config_path makes it
     # so), to show which of the defaults was picked up.
     puts
-    puts "Working Dir: #{Dir.pwd}"
-    puts(argv[1] ? "Config:      #{relative_path(config_path)}" : "Config:      [default] #{config_path}")
-    puts "Prompt:      #{relative_path(prompt_path)}"
-    puts "Run Dir:     #{relative_path(run_dir)}"
+    puts_paths(argv[1] ? relative_path(config_path) : "[default] #{config_path}", prompt_path, run_dir)
     puts "\nConfigured Review Agents (#{agents.size}):"
     agents.each_with_index do |agent, i|
       puts "  ##{i + 1} #{agent_descriptor(agent)}"
@@ -1294,20 +1286,10 @@ module AgentCouncil
         label, _, detail, _, _, warnings = result
         [label, failure_with_warnings(detail, warnings), Harnesses.name_of(agent)]
       end
-      pool.start do
-        timed do
-          run_consolidation(consolidator, prompt, run_dir, file_prefix,
-            meta: report_meta, prompt_path: prompt_path, failures: failures, analyst_runs: analyst_runs,
-            pool: pool)
-        end
-      end
-      (label, ok, detail, usage, meta_name, warnings), elapsed =
-        pool.collect(on_spawn: method(:puts_spawned)).first
-      puts format_result_table([[label, ok, detail, elapsed, usage]])
-      puts warning_lines(warnings)
-      entry = run_entry(consolidator, ok, detail, elapsed, usage, meta_report: meta_name, warnings: warnings)
+      entry = run_and_show_consolidation(pool, consolidator, prompt, run_dir, file_prefix,
+        meta: report_meta, prompt_path: prompt_path, failures: failures, analyst_runs: analyst_runs)
       write_run_file(run_dir, analyst_runs, [entry])
-      puts_consolidation_status(ok)
+      puts_consolidation_status(entry['ok'])
     end
 
     exit(failed.zero? ? 0 : 1)
@@ -1344,12 +1326,7 @@ module AgentCouncil
     abort "Prompt copy not found: #{prompt_path}" unless File.file?(prompt_path)
     abort "Config copy not found: #{config_path}" unless File.file?(config_path)
 
-    config =
-      begin
-        YAML.safe_load_file(config_path)
-      rescue Psych::Exception => e
-        abort "Invalid YAML in #{config_path}: #{e.message}"
-      end
+    config = load_config(config_path)
     consolidator = config['consolidator'] if config.is_a?(Hash)
     abort "No consolidator in #{config_path}; add one to consolidate" unless consolidator
     abort_on_entry_errors({ "'consolidator'" => consolidator }, config_path,
@@ -1384,10 +1361,7 @@ module AgentCouncil
       'run_stamp')
     meta['timestamp'] = iso_timestamp(meta['timestamp']) if meta['timestamp'].is_a?(Time)
 
-    puts "Working Dir: #{Dir.pwd}"
-    puts "Config:      #{relative_path(config_path)}"
-    puts "Prompt:      #{relative_path(prompt_path)}"
-    puts "Run Dir:     #{relative_path(run_dir)}"
+    puts_paths(relative_path(config_path), prompt_path, run_dir)
     puts "\nConfigured Consolidator Agent:\n  #{agent_descriptor(consolidator)}"
     puts_ps_hint
     puts "\nConsolidation Report (in #{relative_path(run_dir)}, " \
@@ -1396,31 +1370,51 @@ module AgentCouncil
     failures = missing_agents(config, reports, analysts)
     pool = WorkerPool.new(grace: INTERRUPT_GRACE_SECONDS)
     pool.trap_signals
-    pool.start do
-      timed do
-        run_consolidation(consolidator, prompt, run_dir, file_prefix,
-          meta: meta, prompt_path: relative_path(prompt_path), failures: failures,
-          analyst_runs: analysts || [], pool: pool)
-      end
-    end
-    (label, ok, detail, usage, meta_name, warnings), elapsed =
-      pool.collect(on_spawn: method(:puts_spawned)).first
-    puts format_result_table([[label, ok, detail, elapsed, usage]])
-    puts warning_lines(warnings)
+    entry = run_and_show_consolidation(pool, consolidator, prompt, run_dir, file_prefix,
+      meta: meta, prompt_path: relative_path(prompt_path), failures: failures, analyst_runs: analysts || [])
     # Added to the run's run.json. Without one (deleted, or unreadable),
     # none is written: a total covering only this consolidation would
     # pass for the run's.
     if analysts
-      entry = run_entry(consolidator, ok, detail, elapsed, usage, meta_report: meta_name, warnings: warnings)
       write_run_file(run_dir, analysts, consolidations + [entry])
     else
       warn "No readable #{RUN_FILENAME} in #{relative_path(run_dir)}, " \
         "so this consolidation won't be recorded in one"
     end
-    puts_consolidation_status(ok)
-    exit(ok ? 0 : 1)
+    puts_consolidation_status(entry['ok'])
+    exit(entry['ok'] ? 0 : 1)
   rescue Interrupt
     exit_interrupted(pool)
+  end
+
+  # The parsed YAML of config_path, aborting if it isn't valid YAML.
+  module_function def load_config(config_path)
+    YAML.safe_load_file(config_path)
+  rescue Psych::Exception => e
+    abort "Invalid YAML in #{config_path}: #{e.message}"
+  end
+
+  # Prints the paths a run, or --consolidate, works with; config is the
+  # Config line's text.
+  module_function def puts_paths(config, prompt_path, run_dir)
+    puts "Working Dir: #{Dir.pwd}"
+    puts "Config:      #{config}"
+    puts "Prompt:      #{relative_path(prompt_path)}"
+    puts "Run Dir:     #{relative_path(run_dir)}"
+  end
+
+  # Runs consolidator in pool, as the only agent it has running (options
+  # are run_consolidation's), prints its result row and any warnings, and
+  # returns its run.json entry (see run_entry).
+  module_function def run_and_show_consolidation(pool, consolidator, prompt, run_dir, file_prefix, **options)
+    pool.start do
+      timed { run_consolidation(consolidator, prompt, run_dir, file_prefix, pool: pool, **options) }
+    end
+    (label, ok, detail, usage, meta_name, warnings), elapsed =
+      pool.collect(on_spawn: method(:puts_spawned)).first
+    puts format_result_table([[label, ok, detail, elapsed, usage]])
+    puts warning_lines(warnings)
+    run_entry(consolidator, ok, detail, elapsed, usage, meta_report: meta_name, warnings: warnings)
   end
 
   # True if name is a plain file name: no directory part or null byte, and
