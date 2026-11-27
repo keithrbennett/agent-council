@@ -6,6 +6,7 @@
 # model calls). Harness itself is in harness_spec.rb. Run with: rspec
 require 'spec_helper'
 require 'tmpdir'
+require 'open3'
 
 RSpec.describe AgentCouncil::Harnesses do
   describe '.name_of' do
@@ -83,6 +84,20 @@ RSpec.describe AgentCouncil::Harnesses do
           name.is_a?(String) && value.is_a?(String)
         })
       end
+    end
+  end
+
+  # In a separate process per harness, so nothing else of agent-council
+  # is loaded: its argv and default exit_detail must come out as they do
+  # here.
+  it 'makes each harness work with only its own file required' do
+    lib = File.expand_path('../../lib', __dir__)
+    described_class::BY_NAME.each_value do |harness|
+      feature = Object.const_source_location(harness.name).first.delete_prefix("#{lib}/").delete_suffix('.rb')
+      script = "require #{feature.dump}; p [#{harness}.argv('p', 'm'), #{harness}.exit_detail('', '')]"
+      out, err, status = Open3.capture3(RbConfig.ruby, '-I', lib, '-e', script)
+      expect(status).to be_success, err
+      expect(out).to eq("#{[harness.argv('p', 'm'), harness.exit_detail('', '')].inspect}\n")
     end
   end
 

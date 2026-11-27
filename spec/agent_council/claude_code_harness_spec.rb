@@ -11,16 +11,13 @@
 # with similar flags (max_turns with --max-turns 1, output_limit with
 # CLAUDE_CODE_MAX_OUTPUT_TOKENS=100). Run with: rspec
 require 'spec_helper'
-require 'json'
 
 RSpec.describe AgentCouncil::Harnesses::ClaudeCodeHarness do
-  def fixture(name)
-    File.read(File.expand_path("../fixtures/claude_code/#{name}.jsonl", __dir__), encoding: 'UTF-8')
-  end
+  def fixture(name) = harness_fixture('claude_code', name)
 
   # A stream of just a result event with the given fields.
   def result_stream(fields)
-    "#{JSON.generate({ 'type' => 'result', 'subtype' => 'success' }.merge(fields))}\n"
+    jsonl_stream({ 'type' => 'result', 'subtype' => 'success' }.merge(fields))
   end
 
   describe '.argv' do
@@ -65,17 +62,6 @@ RSpec.describe AgentCouncil::Harnesses::ClaudeCodeHarness do
     it 'appends the shared scaffolding to the system prompt' do
       expect(argv.last).to eq(AgentCouncil::Harnesses.scaffold_text)
       expect(argv[-2]).to eq('--append-system-prompt')
-    end
-
-    # In a separate process, so nothing else of agent-council is loaded.
-    it 'works with only its own file required' do
-      lib = File.expand_path('../../lib', __dir__)
-      script = "require 'agent_council/harnesses/claude_code_harness'; " \
-               "print AgentCouncil::Harnesses::ClaudeCodeHarness.argv('p', 'm').last, " \
-               "AgentCouncil::Harnesses::ClaudeCodeHarness.exit_detail('', '')"
-      out, err, status = Open3.capture3(RbConfig.ruby, '-I', lib, '-e', script)
-      expect(status).to be_success, err
-      expect(out).to eq(AgentCouncil::Harnesses.scaffold_text + 'no error output')
     end
   end
 

@@ -11,11 +11,7 @@ require 'spec_helper'
 require 'json'
 
 RSpec.describe AgentCouncil::Harnesses::CodexHarness do
-  def fixture(name)
-    File.read(File.expand_path("../fixtures/codex/#{name}.jsonl", __dir__), encoding: 'UTF-8')
-  end
-
-  def stream(*events) = events.map { |event| "#{JSON.generate(event)}\n" }.join
+  def fixture(name) = harness_fixture('codex', name)
 
   def message(text) = { 'type' => 'item.completed', 'item' => { 'type' => 'agent_message', 'text' => text } }
 
@@ -84,7 +80,7 @@ RSpec.describe AgentCouncil::Harnesses::CodexHarness do
     it 'subtracts cache writes from input as well' do
       usage = { 'input_tokens' => 110, 'cached_input_tokens' => 50, 'cache_write_input_tokens' => 10,
                 'output_tokens' => 5 }
-      expect(described_class.usage(stream({ 'type' => 'turn.completed', 'usage' => usage })))
+      expect(described_class.usage(jsonl_stream({ 'type' => 'turn.completed', 'usage' => usage })))
         .to eq('input' => 50, 'output' => 5, 'cache_read' => 50, 'cache_write' => 10)
     end
 
@@ -131,7 +127,7 @@ RSpec.describe AgentCouncil::Harnesses::CodexHarness do
     def error_item(text) = { 'type' => 'item.completed', 'item' => { 'type' => 'error', 'message' => text } }
 
     it 'cuts each listed error to 200 characters' do
-      expect(described_class.warnings(stream(error_item('x' * 5000))))
+      expect(described_class.warnings(jsonl_stream(error_item('x' * 5000))))
         .to eq(["Codex reported an error: #{'x' * 200}..."])
     end
 
@@ -144,13 +140,13 @@ RSpec.describe AgentCouncil::Harnesses::CodexHarness do
     def failed_call(server, tool, message = nil) = mcp_call(server, tool, 'failed', message)
 
     it 'counts repeated failed calls once, for the label too' do
-      jsonl = stream(failed_call('s', 'a', 'no'), failed_call('s', 'a', 'no'))
+      jsonl = jsonl_stream(failed_call('s', 'a', 'no'), failed_call('s', 'a', 'no'))
       expect(described_class.warnings(jsonl)).to eq(['Codex MCP tool call failed: s.a (no)'])
     end
 
     it 'warns of errors and failed MCP calls separately, ignoring calls that succeeded' do
       ok = mcp_call('s', 'ok', 'completed')
-      jsonl = stream(error_item('e'), failed_call('s', 'a', 'no'), failed_call('s', 'a', 'no'),
+      jsonl = jsonl_stream(error_item('e'), failed_call('s', 'a', 'no'), failed_call('s', 'a', 'no'),
         failed_call('s', 'b'), ok)
       expect(described_class.warnings(jsonl))
         .to eq(['Codex reported an error: e', 'Codex MCP tool calls failed: s.a (no); s.b'])
@@ -158,36 +154,36 @@ RSpec.describe AgentCouncil::Harnesses::CodexHarness do
 
     it 'lists at most five failed calls, naming an unknown tool and skipping a blank reason' do
       calls = %w[a b c d e f].map { |tool| failed_call('s', tool, 'r' * 300) }
-      jsonl = stream(*calls, failed_call(nil, nil, '  '))
+      jsonl = jsonl_stream(*calls, failed_call(nil, nil, '  '))
       listed = %w[a b c d e].map { |tool| "#{"s.#{tool} (#{'r' * 300})"[0, 200]}..." }
       expect(described_class.warnings(jsonl))
         .to eq(["Codex MCP tool calls failed: #{listed.join('; ')}; and 2 more"])
     end
 
     it 'names a call missing its server by its tool, and one missing its tool as unknown' do
-      jsonl = stream(failed_call('', 't'), failed_call('s', ' '), failed_call(nil, nil))
+      jsonl = jsonl_stream(failed_call('', 't'), failed_call('s', ' '), failed_call(nil, nil))
       expect(described_class.warnings(jsonl)).to eq(['Codex MCP tool calls failed: t; unknown tool'])
     end
 
     it 'lists at most five distinct errors in one warning' do
-      jsonl = stream(*%w[a b a c d e f g].map { |text| error_item(text) })
+      jsonl = jsonl_stream(*%w[a b a c d e f g].map { |text| error_item(text) })
       expect(described_class.warnings(jsonl)).to eq(['Codex reported errors: a; b; c; d; e; and 2 more'])
     end
   end
 
   describe '.error_message' do
     it 'flags a stream with no turn end, as for a killed agent' do
-      expect(described_class.error_message(stream(message('partial')))).to include('no turn.completed')
-      expect(described_class.final_response(stream(message('partial')))).to be_nil
+      expect(described_class.error_message(jsonl_stream(message('partial')))).to include('no turn.completed')
+      expect(described_class.final_response(jsonl_stream(message('partial')))).to be_nil
     end
 
     it 'flags a completed turn with no text' do
-      jsonl = stream(message('  '), { 'type' => 'turn.completed', 'usage' => {} })
+      jsonl = jsonl_stream(message('  '), { 'type' => 'turn.completed', 'usage' => {} })
       expect(described_class.error_message(jsonl)).to eq('the agent gave no final message')
     end
 
     it 'falls back to an error event when turn.failed gives no reason' do
-      jsonl = stream({ 'type' => 'error', 'message' => 'boom' }, { 'type' => 'turn.failed' })
+      jsonl = jsonl_stream({ 'type' => 'error', 'message' => 'boom' }, { 'type' => 'turn.failed' })
       expect(described_class.error_message(jsonl)).to eq('boom')
     end
   end
@@ -201,7 +197,7 @@ RSpec.describe AgentCouncil::Harnesses::CodexHarness do
   end
 
   it 'skips unparseable lines' do
-    jsonl = "not json\n[1]\n#{stream(message('ok'), { 'type' => 'turn.completed' })}"
+    jsonl = "not json\n[1]\n#{jsonl_stream(message('ok'), { 'type' => 'turn.completed' })}"
     expect(described_class.final_response(jsonl)).to eq('ok')
   end
 end

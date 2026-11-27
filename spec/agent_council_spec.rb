@@ -214,9 +214,7 @@ RSpec.describe AgentCouncil do
         { 'harness' => 'claude', 'provider' => 'anthropic', 'model' => 'claude-haiku-5-5' }
       end
 
-      def claude_fixture(name)
-        File.read(File.expand_path("fixtures/claude_code/#{name}.jsonl", __dir__), encoding: 'UTF-8')
-      end
+      def claude_fixture(name) = harness_fixture('claude_code', name)
 
       it 'explains a failure that exited nonzero from its stream, not its stderr' do
         stub_capture3(claude_fixture('not_logged_in'), instance_double(Process::Status,

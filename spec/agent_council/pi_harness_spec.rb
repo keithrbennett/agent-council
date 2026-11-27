@@ -57,17 +57,6 @@ RSpec.describe AgentCouncil::Harnesses::PiHarness do
       expect(argv).not_to include('--no-mcp')
     end
 
-    # In a separate process, so nothing else of agent-council is loaded.
-    it 'works with only its own file required' do
-      lib = File.expand_path('../../lib', __dir__)
-      script = "require 'agent_council/harnesses/pi_harness'; " \
-               "print AgentCouncil::Harnesses::PiHarness.argv('p', 'm').last, " \
-               "AgentCouncil::Harnesses::PiHarness.exit_detail('', '')"
-      out, err, status = Open3.capture3(RbConfig.ruby, '-I', lib, '-e', script)
-      expect(status).to be_success, err
-      expect(out).to eq(AgentCouncil::Harnesses.scaffold_text + 'no error output')
-    end
-
     it 'appends the shared scaffolding to the system prompt' do
       expect(argv[argv.index('--append-system-prompt') + 1])
         .to eq(AgentCouncil::Harnesses.scaffold_text)

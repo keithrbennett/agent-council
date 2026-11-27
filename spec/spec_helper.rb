@@ -34,6 +34,14 @@ RSpec.configure do |config|
   end
 end
 
+# A harness's recorded event stream, spec/fixtures/<dir>/<name>.jsonl.
+def harness_fixture(dir, name)
+  File.read(File.expand_path("fixtures/#{dir}/#{name}.jsonl", __dir__), encoding: 'UTF-8')
+end
+
+# events as a JSONL stream, as a harness writes one: a line per event.
+def jsonl_stream(*events) = events.map { |event| "#{JSON.generate(event)}\n" }.join
+
 # Runs the block with the default external encoding Ruby picks under LANG=C
 # (or LANG unset), to check that code reads text as UTF-8 regardless. The
 # library must not depend on the locale, so specs never force it globally.

@@ -14,11 +14,7 @@ require 'tmpdir'
 require 'fileutils'
 
 RSpec.describe AgentCouncil::Harnesses::OpenCodeHarness do
-  def fixture(name)
-    File.read(File.expand_path("../fixtures/opencode/#{name}.jsonl", __dir__), encoding: 'UTF-8')
-  end
-
-  def stream(*events) = events.map { |event| "#{JSON.generate(event)}\n" }.join
+  def fixture(name) = harness_fixture('opencode', name)
 
   def text(message_id, text) = { 'type' => 'text', 'part' => { 'messageID' => message_id, 'text' => text } }
 
@@ -116,7 +112,7 @@ RSpec.describe AgentCouncil::Harnesses::OpenCodeHarness do
 
   describe '.final_response' do
     it 'is nil without text' do
-      expect(described_class.final_response(stream(text('m1', '  ')))).to be_nil
+      expect(described_class.final_response(jsonl_stream(text('m1', '  ')))).to be_nil
     end
 
     it 'is the last message with text in a recorded run' do
@@ -124,27 +120,28 @@ RSpec.describe AgentCouncil::Harnesses::OpenCodeHarness do
     end
 
     it "joins the last message's text parts, skipping earlier messages and blank parts" do
-      jsonl = stream(text('m1', 'narration'), text('m2', 'part one'), text('m2', ' '), text('m2', 'part two'))
+      jsonl = jsonl_stream(text('m1', 'narration'), text('m2', 'part one'), text('m2', ' '),
+        text('m2', 'part two'))
       expect(described_class.final_response(jsonl)).to eq("part one\npart two")
     end
 
     it 'skips ignored parts' do
       ignored = { 'type' => 'text', 'part' => { 'messageID' => 'm2', 'text' => 'x', 'ignored' => true } }
-      expect(described_class.final_response(stream(text('m1', 'report'), ignored))).to eq('report')
+      expect(described_class.final_response(jsonl_stream(text('m1', 'report'), ignored))).to eq('report')
     end
 
     it 'skips synthetic parts, which OpenCode writes itself' do
       synthetic = { 'type' => 'text',
                     'part' => { 'messageID' => 'm2', 'text' => 'Continue', 'synthetic' => true } }
-      expect(described_class.final_response(stream(text('m1', 'report'), synthetic))).to eq('report')
+      expect(described_class.final_response(jsonl_stream(text('m1', 'report'), synthetic))).to eq('report')
     end
 
     it 'is nil after an error, even with earlier text' do
-      expect(described_class.final_response(stream(text('m1', 'partial'), error('boom')))).to be_nil
+      expect(described_class.final_response(jsonl_stream(text('m1', 'partial'), error('boom')))).to be_nil
     end
 
     it 'skips unparseable lines' do
-      expect(described_class.final_response("not json\n[1]\n#{stream(text('m1', 'ok'))}")).to eq('ok')
+      expect(described_class.final_response("not json\n[1]\n#{jsonl_stream(text('m1', 'ok'))}")).to eq('ok')
     end
   end
 
@@ -159,7 +156,7 @@ RSpec.describe AgentCouncil::Harnesses::OpenCodeHarness do
 
     it 'leaves out a zero cost' do
       step = { 'tokens' => { 'input' => 5, 'output' => 1 }, 'cost' => 0 }
-      expect(described_class.usage(stream({ 'type' => 'step_finish', 'part' => step })))
+      expect(described_class.usage(jsonl_stream({ 'type' => 'step_finish', 'part' => step })))
         .to eq('input' => 5, 'output' => 1, 'cache_read' => 0, 'cache_write' => 0)
     end
 
@@ -179,15 +176,16 @@ RSpec.describe AgentCouncil::Harnesses::OpenCodeHarness do
     end
 
     it "falls back to the error's name, then a placeholder" do
-      expect(described_class.error_message(stream({ 'type' => 'error', 'error' => { 'name' => 'Aborted' } })))
-        .to eq('Aborted')
-      expect(described_class.error_message(stream({ 'type' => 'error' })))
+      aborted = { 'type' => 'error', 'error' => { 'name' => 'Aborted' } }
+      expect(described_class.error_message(jsonl_stream(aborted))).to eq('Aborted')
+      expect(described_class.error_message(jsonl_stream({ 'type' => 'error' })))
         .to eq('an error event gave no reason')
     end
 
     %w[length content-filter error].each do |reason|
       it "reports a last request that finished for #{reason}, despite its text" do
-        jsonl = stream(text('m1', 'partial'), { 'type' => 'step_finish', 'part' => { 'reason' => reason } })
+        finish = { 'type' => 'step_finish', 'part' => { 'reason' => reason } }
+        jsonl = jsonl_stream(text('m1', 'partial'), finish)
         expect(described_class.error_message(jsonl)).to eq("stopped early (reason: #{reason})")
       end
     end
@@ -195,14 +193,14 @@ RSpec.describe AgentCouncil::Harnesses::OpenCodeHarness do
     it 'reports a cut-off message whose text is the report, though a later request completed' do
       cut = { 'type' => 'step_finish', 'part' => { 'messageID' => 'm1', 'reason' => 'length' } }
       stop = { 'type' => 'step_finish', 'part' => { 'messageID' => 'm2', 'reason' => 'stop' } }
-      expect(described_class.error_message(stream(text('m1', 'partial'), cut, stop)))
+      expect(described_class.error_message(jsonl_stream(text('m1', 'partial'), cut, stop)))
         .to eq('stopped early (reason: length)')
     end
 
     it 'accepts an earlier cut-off request that a later one completed' do
       cut = { 'type' => 'step_finish', 'part' => { 'messageID' => 'm1', 'reason' => 'length' } }
       stop = { 'type' => 'step_finish', 'part' => { 'messageID' => 'm2', 'reason' => 'stop' } }
-      expect(described_class.error_message(stream(cut, text('m2', 'report'), stop))).to be_nil
+      expect(described_class.error_message(jsonl_stream(cut, text('m2', 'report'), stop))).to be_nil
     end
 
     # run_agent then says whether the stream had any assistant message.
@@ -233,7 +231,7 @@ RSpec.describe AgentCouncil::Harnesses::OpenCodeHarness do
           'status' => 'error', 'error' => described_class::REJECTION_PREFIX
         } } }
       }
-      expect(described_class.warnings(stream(rejected.('read'), rejected.('read'), rejected.('bash'))))
+      expect(described_class.warnings(jsonl_stream(rejected.('read'), rejected.('read'), rejected.('bash'))))
         .to eq(['OpenCode refused 3 tool calls for want of permission (read, bash)'])
     end
 
@@ -243,12 +241,12 @@ RSpec.describe AgentCouncil::Harnesses::OpenCodeHarness do
       } } }
       steps = [{ 'type' => 'step_finish', 'part' => { 'messageID' => 'm1', 'reason' => 'tool-calls' } },
         { 'type' => 'step_finish', 'part' => { 'messageID' => 'm2', 'reason' => 'tool-calls' } }]
-      expect(described_class.error_message(stream(rejected,
+      expect(described_class.error_message(jsonl_stream(rejected,
         *steps))).to eq('stopped early (reason: tool-calls)')
     end
 
     it 'fails a session otherwise ended at tool calls' do
-      jsonl = stream(text('m1', 'lead-in'),
+      jsonl = jsonl_stream(text('m1', 'lead-in'),
         { 'type' => 'step_finish', 'part' => { 'reason' => 'tool-calls' } })
       expect(described_class.error_message(jsonl)).to eq('stopped early (reason: tool-calls)')
     end
