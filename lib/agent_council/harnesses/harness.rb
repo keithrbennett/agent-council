@@ -146,17 +146,19 @@ module AgentCouncil
       end
       private_class_method :usage_result
 
-      # value if it's a nonblank string (not stripped), else nil.
+      # One value: itself, as is (not stripped), if it's a string with
+      # something besides whitespace in it, else nil.
       def self.nonblank_text(value)
         value if value.is_a?(String) && !value.strip.empty?
       end
       private_class_method :nonblank_text
 
-      # The values that are nonblank strings, stripped.
-      def self.nonblank(values)
+      # An array of values: those that are strings with something besides
+      # whitespace in them, stripped, in order.
+      def self.nonblank_strings(values)
         values.grep(String).map(&:strip).reject(&:empty?)
       end
-      private_class_method :nonblank
+      private_class_method :nonblank_strings
 
       # text, cut to max characters with "..." if longer.
       def self.shorten(text, max)

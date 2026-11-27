@@ -205,7 +205,7 @@ module AgentCouncil
 
         error = event['error'].is_a?(Hash) ? event['error'] : {}
         data = error['data'].is_a?(Hash) ? error['data'] : {}
-        nonblank([data['message'], error['name']]).first ||
+        nonblank_strings([data['message'], error['name']]).first ||
           'an error event gave no reason'
       end
       private_class_method :failure_reason

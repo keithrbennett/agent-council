@@ -115,7 +115,7 @@ module AgentCouncil
 
       # The reason a failed agent's result event gives, or nil if it gives none.
       def self.error_reason(result)
-        errors = nonblank(Array(result['errors']))
+        errors = nonblank_strings(Array(result['errors']))
         errors.empty? ? nonblank_text(result['result']) : errors.join('; ')
       end
       private_class_method :error_reason

@@ -121,7 +121,8 @@ module AgentCouncil
         reason = nonblank_text(error['message'])&.strip if error.is_a?(Hash)
         return reason if reason
 
-        nonblank(events(jsonl).filter_map { |event| event['message'] if event['type'] == 'error' }).last
+        messages = events(jsonl).filter_map { |event| event['message'] if event['type'] == 'error' }
+        nonblank_strings(messages).last
       end
       private_class_method :failure_reason
 
@@ -143,7 +144,7 @@ module AgentCouncil
       #   approval, but approval policy is never"), whose results the
       #   report may lack.
       def self.warnings(jsonl)
-        errors = nonblank(completed_items(jsonl, 'error').map { |item| item['message'] }).uniq
+        errors = nonblank_strings(completed_items(jsonl, 'error').map { |item| item['message'] }).uniq
         calls = failed_calls(completed_items(jsonl, 'mcp_tool_call').select do |item|
           item['status'] == 'failed'
         end)
@@ -157,7 +158,7 @@ module AgentCouncil
       # Failed MCP tool calls as distinct "server.tool (reason)" entries.
       def self.failed_calls(calls)
         calls.map do |call|
-          server, name = nonblank([call['server']]).first, nonblank([call['tool']]).first
+          server, name = [call['server'], call['tool']].map { |value| nonblank_text(value)&.strip }
           tool = name ? [server, name].compact.join('.') : 'unknown tool'
           error = call['error']
           reason = nonblank_text(error['message'])&.strip if error.is_a?(Hash)
