@@ -1970,7 +1970,8 @@ RSpec.describe AgentCouncil do
       Dir.mktmpdir do |dir|
         File.write(File.join(dir, meta_name), text)
         allow(File).to receive(:rename).and_call_original
-        allow(File).to receive(:rename).with("#{File.join(dir, meta_name)}.tmp", File.join(dir, meta_name))
+        allow(File).to receive(:rename)
+          .with("#{File.join(dir, meta_name)}.#{Process.pid}.tmp", File.join(dir, meta_name))
           .and_raise(Errno::ENOSPC)
 
         result = nil

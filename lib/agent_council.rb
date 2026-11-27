@@ -314,6 +314,10 @@ module AgentCouncil
 
   # --- report front matter ---
 
+  # A report's YAML front matter block, with the YAML itself captured, and
+  # the blank line after it, if any.
+  FRONT_MATTER_REGEX = /\A---\n(.+?)\n---\n\n?/m
+
   module_function def with_front_matter(fields, body)
     header = YAML.dump(fields.transform_keys(&:to_s)).delete_prefix("---\n").chomp
     # Documented format: ISO 8601 timestamps, with or without a UTC offset,
@@ -332,7 +336,7 @@ module AgentCouncil
   # [fields, body] from a report file, or [nil, nil] if it has no YAML
   # front matter block (or the block cannot be safe-loaded).
   module_function def parse_front_matter(text)
-    match = text.match(/\A---\n(.+?)\n---\n\n?/m)
+    match = text.match(FRONT_MATTER_REGEX)
     return [nil, nil] unless match
 
     fields =
@@ -415,8 +419,7 @@ module AgentCouncil
   # <model>", for the findings file's legend.
   module_function def full_label(fields)
     index = fields['agent_index']
-    parts = [Harnesses.name_of(fields), fields['provider'], fields['model']].join(' / ')
-    index ? "##{index} #{parts}" : parts
+    index ? "##{index} #{agent_descriptor(fields)}" : agent_descriptor(fields)
   end
 
   # [[findings, meta], nil] if text can be split on its marker line, else
@@ -476,7 +479,7 @@ module AgentCouncil
     unsplit_name = consolidated_filename(file_prefix, consolidator)
     findings_name = consolidated_filename(file_prefix, consolidator, 'findings')
     content = File.read(path, encoding: ENCODING)
-    front = content[/\A---\n.+?\n---\n\n?/m] || ''
+    front = content[FRONT_MATTER_REGEX] || ''
     body = content.delete_prefix(front)
     # The header run_agent put before the model's text must still be there,
     # or it would end up in the findings file.
@@ -502,10 +505,7 @@ module AgentCouncil
                  "provider, model):\n\n#{legend}\n\n#{findings}")
     end
     # Replaced atomically, so the whole report survives a failed write.
-    temp = "#{path}.tmp"
-    written << File.basename(temp)
-    File.write(temp, "#{front}#{head}\n#{meta.lstrip}")
-    File.rename(temp, path)
+    atomic_write(path, "#{front}#{head}\n#{meta.lstrip}")
     [findings_name, filename]
   rescue => e
     # A failed split must not fail the consolidation, whose model call is
@@ -747,9 +747,9 @@ module AgentCouncil
   # Writes the run dir's run.json: every analyst's and consolidation's
   # entry (see run_entry), their total usage, how many entries it covers
   # (those that reported usage), and the summed cost of the entries whose
-  # cost is known, with how many they are (see known_cost). Replaced atomically, so a
-  # reader or a Ctrl-C never sees it half written. A failure to write it is
-  # only warned about: the reports are what matter.
+  # cost is known, with how many they are (see known_cost). Replaced
+  # atomically (see atomic_write). A failure to write it is only warned
+  # about: the reports are what matter.
   module_function def write_run_file(run_dir, analysts, consolidations)
     usages = (analysts + consolidations).map { |entry| entry['usage'] }
     cost, cost_runs = known_cost(usages)
@@ -757,12 +757,22 @@ module AgentCouncil
       'total_usage' => sum_usage(usages), 'total_usage_runs' => usages.grep(Hash).size,
       'known_cost' => cost, 'known_cost_runs' => cost_runs }
     path = File.join(run_dir, RUN_FILENAME)
-    temp = "#{path}.#{Process.pid}.tmp"
-    File.write(temp, "#{JSON.pretty_generate(data)}\n")
-    File.rename(temp, path)
+    atomic_write(path, "#{JSON.pretty_generate(data)}\n")
   rescue SystemCallError => e
-    FileUtils.rm_f(temp) if temp
     warn "Could not write #{relative_path(path)}: #{e.message}"
+  end
+
+  # Writes content to path by way of a temporary file beside it, renamed
+  # into place, so a reader or a Ctrl-C never sees it half written and a
+  # failed write leaves what was there before. The temporary file is
+  # removed if the write or rename fails, and the error raised.
+  module_function def atomic_write(path, content)
+    temp = "#{path}.#{Process.pid}.tmp"
+    File.write(temp, content)
+    File.rename(temp, path)
+  rescue
+    FileUtils.rm_f(temp)
+    raise
   end
 
   # [analysts, consolidations] from a run dir's run.json, or nil if it is
@@ -987,7 +997,8 @@ module AgentCouncil
   end
 
   # "harness / provider / model" for a validated config entry, printed at
-  # startup so it is clear which agents are still running later.
+  # startup so it is clear which agents are still running later (or for a
+  # report's front matter, which has the same keys; see full_label).
   module_function def agent_descriptor(entry)
     "#{Harnesses.name_of(entry)} / #{entry['provider']} / #{entry['model']}"
   end
