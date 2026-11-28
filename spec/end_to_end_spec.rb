@@ -133,6 +133,15 @@ RSpec.describe 'agent-council end to end' do
     end
   end
 
+  # Ruby options that make an agent-council process measure its coverage
+  # too (see end_to_end_coverage.rb), when this one measures its own. Not
+  # under JRuby, whose coverage this suite doesn't report.
+  def coverage_options
+    return [] unless RUBY_ENGINE == 'ruby' && defined?(SimpleCovSetup) && SimpleCovSetup.started?
+
+    ['-r', File.join(project_root, 'spec', 'end_to_end_coverage.rb')]
+  end
+
   # Runs agent-council in its own process group and returns its exit status.
   # With a block, waits until `started` fake agents are waiting, then yields
   # the group's pid for signalling. Afterwards, records in `survivors` the
@@ -143,7 +152,7 @@ RSpec.describe 'agent-council end to end' do
   def run_council(started: 0, ignoring_hup: false, env: {}, args: %w[prompt.md config.yml], out: out_path)
     env = { 'PATH' => "#{bin_dir}#{File::PATH_SEPARATOR}#{ENV.fetch('PATH')}", 'TMPDIR' => child_tmp, **env }
     exe = File.join(project_root, 'exe', 'agent-council')
-    cmd = [RbConfig.ruby, '-I', File.join(project_root, 'lib'), exe, *args]
+    cmd = [RbConfig.ruby, *coverage_options, '-I', File.join(project_root, 'lib'), exe, *args]
     cmd = ['sh', '-c', 'trap "" HUP; exec "$@"', 'sh', *cmd] if ignoring_hup # as nohup does
     pid = Process.spawn(env, *cmd, chdir: work_dir, pgroup: true, out: out, err: err_path)
     status = nil

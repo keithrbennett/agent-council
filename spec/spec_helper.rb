@@ -3,16 +3,31 @@
 # Enable SimpleCov for this project (coverage output in ./coverage). This must
 # run before the library is required so that its files are tracked.
 begin
-  require 'simplecov'
+  require 'fileutils'
+  require_relative 'simplecov_setup'
   require 'simplecov-cobertura'
-  SimpleCov.enable_coverage :branch
-  SimpleCov.start do
-    # Report only lib/, including files no spec loads.
-    cover 'lib/**/*.rb'
-    formatter SimpleCov::Formatter::MultiFormatter.new([
-      SimpleCov::Formatter::HTMLFormatter,
-      SimpleCov::Formatter::CoberturaFormatter,
-    ])
+  SimpleCov.command_name 'RSpec'
+  SimpleCov.formatter SimpleCov::Formatter::MultiFormatter.new([
+    SimpleCov::Formatter::HTMLFormatter,
+    SimpleCov::Formatter::CoberturaFormatter,
+  ])
+  SimpleCovSetup.start
+  # SimpleCov merges every result stored in the last merge_timeout seconds
+  # and never deletes one. Each end-to-end run stores one of its own, so
+  # without this an earlier run's results would count toward this one (and
+  # pile up). Deleted after start, which sets the root the path is under.
+  FileUtils.rm_f(SimpleCov::ResultMerger.resultset_path)
+  # The merged result's name joins every stored result's name, so each
+  # formatter's "Coverage report generated for" line would list every
+  # end-to-end <pid>. Count them instead. SimpleCov.result is memoized, so
+  # the default exit task formats this same, renamed result.
+  format_result = SimpleCov.at_exit
+  SimpleCov.at_exit do
+    result = SimpleCov.result
+    if result && (runs = result.command_name.scan(/\bend-to-end \d+/).size).positive?
+      result.command_name = "RSpec and #{runs} end-to-end runs"
+    end
+    format_result.call
   end
 rescue LoadError
   warn 'SimpleCov not available; skipping coverage'
