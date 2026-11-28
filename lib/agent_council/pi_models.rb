@@ -2,6 +2,7 @@
 
 require 'json'
 require 'open3'
+require_relative 'platform'
 
 module AgentCouncil
   # Reads and formats the models available to pi.
@@ -180,6 +181,44 @@ module AgentCouncil
     # Empty for an empty list, so shell loops and `wc -l` see no models.
     module_function def format_as_ids(models)
       models.map { |model| "#{model.provider}/#{model.id}\n" }.join
+    end
+
+    # The pi-models command (exe/pi-models): prints the models in the format
+    # asked for and exits 0, or exits 1 on an unknown option or a failure
+    # talking to pi.
+    module_function def main(argv)
+      AgentCouncil.abort_if_native_windows('pi-models')
+      argv = argv.dup
+      help_output = argv.delete('-h') || argv.delete('--help')
+      json_output = argv.delete('--json') || argv.delete('-j')
+      ids_output = argv.delete('--ids') || argv.delete('-i')
+      argv.delete('--table') || argv.delete('-t') # table is the default format; accepted for explicitness
+
+      if help_output
+        puts help_text
+        exit
+      end
+
+      unless argv.empty?
+        warn "pi-models: unknown option(s): #{argv.join(' ')}"
+        warn "Try 'pi-models --help' for usage."
+        exit 1
+      end
+
+      begin
+        models = fetch_models
+      rescue Error => e
+        warn "pi-models: #{e.message}"
+        exit 1
+      end
+
+      if json_output
+        puts format_as_json(models)
+      elsif ids_output
+        print format_as_ids(models)
+      else
+        puts format_as_table(models)
+      end
     end
   end
 end

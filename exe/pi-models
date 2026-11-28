@@ -1,39 +1,9 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-require_relative '../lib/agent_council/platform'
-
-AgentCouncil.abort_if_native_windows('pi-models')
+# pi-models — executable entry point; the command is AgentCouncil::PiModels.main
+# (lib/agent_council/pi_models.rb).
 
 require_relative '../lib/agent_council/pi_models'
 
-help_output = ARGV.delete('-h') || ARGV.delete('--help')
-json_output = ARGV.delete('--json') || ARGV.delete('-j')
-ids_output = ARGV.delete('--ids') || ARGV.delete('-i')
-ARGV.delete('--table') || ARGV.delete('-t') # table is the default format; accepted for explicitness
-
-if help_output
-  puts AgentCouncil::PiModels.help_text
-  exit
-end
-
-unless ARGV.empty?
-  warn "pi-models: unknown option(s): #{ARGV.join(' ')}"
-  warn "Try 'pi-models --help' for usage."
-  exit 1
-end
-
-begin
-  models = AgentCouncil::PiModels.fetch_models
-rescue AgentCouncil::PiModels::Error => e
-  warn "pi-models: #{e.message}"
-  exit 1
-end
-
-if json_output
-  puts AgentCouncil::PiModels.format_as_json(models)
-elsif ids_output
-  print AgentCouncil::PiModels.format_as_ids(models)
-else
-  puts AgentCouncil::PiModels.format_as_table(models)
-end
+AgentCouncil::PiModels.main(ARGV)

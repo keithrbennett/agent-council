@@ -265,25 +265,70 @@ RSpec.describe AgentCouncil::PiModels do
     end
   end
 
+  describe '.main' do
+    def main(*argv) = described_class.main(argv)
+
+    before { allow(described_class).to receive(:fetch_models).and_return(models) }
+
+    it 'prints help and exits 0 without invoking pi, whatever else is given' do
+      expect { main('--json', '-h', '--bogus') }
+        .to exit_with(0)
+        .and output(described_class.help_text).to_stdout
+      expect(described_class).not_to have_received(:fetch_models)
+    end
+
+    it 'prints a table by default and with --table or -t' do
+      [[], ['--table'], ['-t']].each do |argv|
+        expect { main(*argv) }.to output(described_class.format_as_table(models)).to_stdout
+      end
+    end
+
+    it 'prints JSON with --json or -j, and ids with --ids or -i' do
+      expect { main('--json') }.to output(described_class.format_as_json(models)).to_stdout
+      expect { main('-j') }.to output(described_class.format_as_json(models)).to_stdout
+      expect { main('--ids') }.to output(described_class.format_as_ids(models)).to_stdout
+      expect { main('-i') }.to output(described_class.format_as_ids(models)).to_stdout
+    end
+
+    it "leaves the caller's argv as it was" do
+      argv = ['--json']
+      expect { described_class.main(argv) }.to output.to_stdout
+      expect(argv).to eq(['--json'])
+    end
+
+    it 'exits 1 on an unknown option, without invoking pi' do
+      expect { main('--json', '--bogus', 'x') }
+        .to exit_with(1)
+        .and output(<<~ERR).to_stderr
+          pi-models: unknown option(s): --bogus x
+          Try 'pi-models --help' for usage.
+        ERR
+      expect(described_class).not_to have_received(:fetch_models)
+    end
+
+    it 'exits 1 with the message when talking to pi fails' do
+      allow(described_class).to receive(:fetch_models).and_raise(described_class::Error, 'pi exited (1)')
+      expect { main }
+        .to exit_with(1)
+        .and output("pi-models: pi exited (1)\n").to_stderr
+    end
+
+    it 'aborts on native Windows, pointing to WSL' do
+      allow(AgentCouncil).to receive(:windows?).and_return(true)
+      expect { main('--help') }
+        .to exit_with(1)
+        .and output(/\Api-models does not support native Windows; please run it inside WSL\.\n/).to_stderr
+    end
+  end
+
   describe 'the pi-models executable' do
-    it 'prints help and exits without invoking pi' do
+    it 'runs PiModels.main: prints help and exits without invoking pi' do
       executable = File.expand_path('../../exe/pi-models', __dir__)
       out, err, status = Open3.capture3(RbConfig.ruby, executable, '--help')
 
       expect(status).to be_success, err
       expect(out).to eq(described_class.help_text)
       expect(err).to be_empty
-    end
-
-    it 'aborts on native Windows, pointing to WSL' do
-      allow(AgentCouncil).to receive(:windows?).and_return(true)
-      # Runs in-process, so give the script an ARGV it can't do harm with if
-      # the abort ever stops coming first (--help would just exit 0).
-      stub_const('ARGV', ['--help'])
-      executable = File.expand_path('../../exe/pi-models', __dir__)
-      expect { load executable }
-        .to exit_with(1)
-        .and output(/\Api-models does not support native Windows; please run it inside WSL\.\n/).to_stderr
     end
   end
 end

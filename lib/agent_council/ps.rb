@@ -11,6 +11,7 @@ require 'io/console'
 require 'open3'
 require_relative 'harnesses'
 require_relative 'plain_line'
+require_relative 'platform'
 
 module AgentCouncil
   module Ps
@@ -515,6 +516,28 @@ module AgentCouncil
         previous_at = now
         pause.call(watch)
       end
+    end
+
+    # The agent-council-ps command (exe/agent-council-ps). Exits with #run's
+    # status, 2 on a bad command line, 1 on another Error (ps failing), and 0
+    # when interrupted, as Ctrl-C ends watching.
+    module_function def main(argv)
+      AgentCouncil.abort_if_native_windows('agent-council-ps')
+      if argv.include?('-h') || argv.include?('--help')
+        puts HELP
+        exit
+      end
+
+      exit run(argv)
+    rescue UsageError => e
+      warn "agent-council-ps: #{e.message}"
+      warn "Try 'agent-council-ps --help' for usage."
+      exit 2
+    rescue Error => e
+      warn "agent-council-ps: #{e.message}"
+      exit 1
+    rescue Interrupt
+      exit 0
     end
 
     module_function def monotonic_now = ::Process.clock_gettime(::Process::CLOCK_MONOTONIC)

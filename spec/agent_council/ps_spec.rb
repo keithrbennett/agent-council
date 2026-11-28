@@ -495,35 +495,53 @@ RSpec.describe AgentCouncil::Ps do
     end
   end
 
-  describe 'exe/agent-council-ps' do
-    let(:exe) { File.expand_path('../../exe/agent-council-ps', __dir__) }
+  describe '.main' do
+    def main(*argv) = described_class.main(argv)
 
-    it 'prints its help' do
-      out, _err, status = Open3.capture3(RbConfig.ruby, exe, '--help')
-      expect(status).to be_success
-      expect(out).to start_with('Usage: agent-council-ps')
+    it 'prints its help and exits 0 without running' do
+      allow(described_class).to receive(:run)
+      expect { main('-w', '--help') }.to exit_with(0).and output(described_class::HELP).to_stdout
+      expect(described_class).not_to have_received(:run)
     end
 
-    # A ps that fails comes first on PATH; the rest of PATH stays, since
-    # JRuby's launcher needs it. (ps_snapshot's spec covers a missing ps.)
-    it 'exits 1 with a message when ps fails' do
-      Dir.mktmpdir do |dir|
-        File.write(File.join(dir, 'ps'), "#!/bin/sh\nexit 3\n")
-        File.chmod(0o755, File.join(dir, 'ps'))
-        path = "#{dir}#{File::PATH_SEPARATOR}#{ENV.fetch('PATH')}"
-        _out, err, status = Open3.capture3({ 'PATH' => path }, RbConfig.ruby, exe)
-        expect(status.exitstatus).to eq(1)
-        expect(err).to include('agent-council-ps: ps failed')
-      end
+    it "exits with run's status" do
+      allow(described_class).to receive(:run).with(%w[401]).and_return(1)
+      expect { main('401') }.to exit_with(1)
     end
 
     it 'exits 2 with a message on a bad argument' do
-      _out, err, status = Open3.capture3(RbConfig.ruby, exe, '--bogus')
-      expect(status.exitstatus).to eq(2)
-      expect(err).to eq(<<~ERR)
-        agent-council-ps: unknown argument: --bogus
-        Try 'agent-council-ps --help' for usage.
-      ERR
+      expect { main('--bogus') }
+        .to exit_with(2)
+        .and output(<<~ERR).to_stderr
+          agent-council-ps: unknown argument: --bogus
+          Try 'agent-council-ps --help' for usage.
+        ERR
+    end
+
+    it 'exits 1 with a message on another error, as when ps fails' do
+      allow(described_class).to receive(:run).and_raise(described_class::Error, 'ps failed (exit 3)')
+      expect { main }.to exit_with(1).and output("agent-council-ps: ps failed (exit 3)\n").to_stderr
+    end
+
+    it 'exits 0 when interrupted, as Ctrl-C ends watching' do
+      allow(described_class).to receive(:run).and_raise(Interrupt)
+      expect { main('-w') }.to exit_with(0)
+    end
+
+    it 'aborts on native Windows, pointing to WSL' do
+      allow(AgentCouncil).to receive(:windows?).and_return(true)
+      expect { main('--help') }
+        .to exit_with(1)
+        .and output(/\Aagent-council-ps does not support native Windows; please run it inside WSL/).to_stderr
+    end
+  end
+
+  describe 'exe/agent-council-ps' do
+    it 'runs Ps.main: prints its help' do
+      exe = File.expand_path('../../exe/agent-council-ps', __dir__)
+      out, _err, status = Open3.capture3(RbConfig.ruby, exe, '--help')
+      expect(status).to be_success
+      expect(out).to eq(described_class::HELP)
     end
   end
 end
