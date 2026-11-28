@@ -178,6 +178,14 @@ RSpec.describe AgentCouncil::PiModels do
       end
     end
 
+    # E.g. EACCES. A non-executable pi on PATH gives ENOENT instead (it's
+    # skipped in the search), so the spawn failure is stubbed.
+    it 'raises a clear error when pi cannot be started for another reason' do
+      allow(Open3).to receive(:popen3).and_raise(Errno::EACCES, 'pi')
+      expect { described_class.fetch_models }
+        .to raise_error(described_class::Error, 'pi could not be started: Permission denied - pi')
+    end
+
     it 'reports the exit status instead of crashing when pi exits before reading stdin' do
       with_fake_pi("echo 'boom' >&2; exit 9") do
         expect { described_class.fetch_models }

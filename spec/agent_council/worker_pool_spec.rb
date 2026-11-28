@@ -105,6 +105,16 @@ RSpec.describe AgentCouncil::WorkerPool do
       expect([out, err, status.exitstatus]).to eq(['in', "y\n", 3])
     end
 
+    # As an agent that fails at once does (e.g. on an unknown model): its
+    # own error must be what's reported, not Errno::EPIPE. The child
+    # closes its stdin at once, and the input is larger than a pipe
+    # buffer, so the write is still going when it does, and gets EPIPE.
+    it 'returns the status and output of a child that exits without reading stdin' do
+      script = 'exec 0<&-; echo gone >&2; exit 3'
+      out, err, status = pool.capture3({}, 'sh', '-c', script, stdin_data: 'x' * 1_000_000)
+      expect([out, err, status.exitstatus]).to eq(['', "gone\n", 3])
+    end
+
     it 'returns output as UTF-8 under a non-UTF-8 locale' do
       out, err, = with_us_ascii_locale do
         pool.capture3({}, 'sh', '-c', 'printf é; printf ✓ >&2', stdin_data: '')

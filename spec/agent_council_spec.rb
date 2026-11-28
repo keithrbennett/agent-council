@@ -118,6 +118,13 @@ RSpec.describe AgentCouncil do
       expect(described_class.display_source_path('/home/someone-else/c.yml'))
         .to eq('/home/someone-else/c.yml')
     end
+
+    # As with HOME unset and no passwd entry for the user.
+    it 'leaves the path absolute when the home directory cannot be found' do
+      allow(Dir).to receive(:home).and_raise(ArgumentError, "couldn't find login name")
+      expect(described_class.display_source_path('/home/someone/.agent-council.yml'))
+        .to eq('/home/someone/.agent-council.yml')
+    end
   end
 
   describe '.resolve_config_path' do
@@ -514,6 +521,29 @@ RSpec.describe AgentCouncil do
       expect(Dir.children(run_dir)).to be_empty
     end
 
+    it 'fails, saving no report, when the agent answered without text' do
+      message = { role: 'assistant', content: [{ type: 'thinking', thinking: 'Hmm.' }], stopReason: 'stop' }
+      stub_capture3(jsonl_stream({ type: 'message_end', message: message }), succeeded)
+
+      _label, ok, detail = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
+
+      expect(ok).to be(false)
+      expect(detail).to eq('pi exited 0 but final assistant message had no text content ' \
+        '(model may have answered in reasoning only)')
+      expect(Dir.children(run_dir)).to be_empty
+    end
+
+    it 'fails, saving no report, when the stream has no assistant message' do
+      message = { role: 'user', content: [{ type: 'text', text: 'Question?' }] }
+      stub_capture3(jsonl_stream({ type: 'message_end', message: message }), succeeded)
+
+      _label, ok, detail = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
+
+      expect(ok).to be(false)
+      expect(detail).to eq('pi exited 0 but no assistant message in pi event stream')
+      expect(Dir.children(run_dir)).to be_empty
+    end
+
     # As when a dying child writes into the dir while it's being removed.
     it 'ignores errors removing the scratch dir' do
       skip 'root can remove an unwritable dir' if Process.uid.zero?
@@ -595,6 +625,49 @@ RSpec.describe AgentCouncil do
       expect { described_class.main(['--project-url']) }
         .to exit_with(0)
         .and output("#{described_class::PROJECT_URL}\n").to_stdout
+    end
+
+    it 'prints the error and usage and exits 1 for an unknown option' do
+      expect { described_class.main(['--no-such-option']) }
+        .to exit_with(1)
+        .and output("invalid option: --no-such-option\n#{described_class.option_parser}").to_stderr
+    end
+
+    [[], %w[a.md b.yml c]].each do |args|
+      it "prints usage and exits 1 when given #{args.size} positional arguments" do
+        expect { described_class.main(args) }
+          .to exit_with(1)
+          .and output(described_class.option_parser.to_s).to_stderr
+      end
+    end
+
+    # The finish line is held until every agent has started; a worker that
+    # raises must not take it with it.
+    it 'prints the finish lines it holds, then re-raises, when a worker raises' do
+      File.write('p_prompt.md', 'hi')
+      File.write('config.yml', YAML.dump('agents' => [pi_entry, pi_entry.merge('model' => 'm2')]))
+      allow(described_class).to receive(:abort_unless_harnesses_installed)
+      first_finished = Queue.new
+      allow(AgentCouncil::ProgressPrinter).to receive(:new).and_wrap_original do |new, *args, **opts|
+        new.call(*args, **opts).tap do |printer|
+          allow(printer).to receive(:finished).and_wrap_original do |finished, *finished_args|
+            finished.call(*finished_args)
+            first_finished << true
+          end
+        end
+      end
+      allow(described_class).to receive(:run_agent) do |*, index:, **|
+        next ['#1 p / m', true, 'report.md', nil, []] if index == 1
+
+        # So #1's line is held when #2 raises.
+        raise 'timed out waiting for #1 to finish' unless first_finished.pop(timeout: 5)
+
+        raise 'worker bug'
+      end
+
+      expect { described_class.main(['p_prompt.md', 'config.yml']) }
+        .to raise_error(RuntimeError, 'worker bug')
+        .and output(%r{\nFinished Agents:\n  ✓ \S+  #1 p / m\n}).to_stdout
     end
 
     it 'has a PROJECT_URL matching the gemspec homepage' do
