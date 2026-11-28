@@ -34,6 +34,9 @@ RSpec.configure do |config|
   end
 end
 
+# Matches a block that exits (raises SystemExit) with status.
+def exit_with(status) = raise_error(SystemExit) { |e| expect(e.status).to eq(status) }
+
 # A harness's recorded event stream, spec/fixtures/<dir>/<name>.jsonl.
 def harness_fixture(dir, name)
   File.read(File.expand_path("fixtures/#{dir}/#{name}.jsonl", __dir__), encoding: 'UTF-8')

@@ -274,7 +274,7 @@ RSpec.describe AgentCouncil::PiModels do
       stub_const('ARGV', ['--help'])
       executable = File.expand_path('../../exe/pi-models', __dir__)
       expect { load executable }
-        .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+        .to exit_with(1)
         .and output(/\Api-models does not support native Windows; please run it inside WSL\.\n/).to_stderr
     end
   end

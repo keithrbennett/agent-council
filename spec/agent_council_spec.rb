@@ -185,6 +185,8 @@ RSpec.describe AgentCouncil do
     let(:pi_harness) { AgentCouncil::Harnesses::PiHarness }
     let(:run_dir) { Dir.mktmpdir }
     let(:scratch_dirs) { [] }
+    let(:succeeded) { instance_double(Process::Status, success?: true) }
+    let(:exited1) { instance_double(Process::Status, success?: false, signaled?: false, exitstatus: 1) }
 
     after { FileUtils.remove_entry(run_dir) }
 
@@ -216,52 +218,53 @@ RSpec.describe AgentCouncil do
 
       def claude_fixture(name) = harness_fixture('claude_code', name)
 
+      def run_claude(index: 1, **options)
+        described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', index: index, **options)
+      end
+
       it 'explains a failure that exited nonzero from its stream, not its stderr' do
-        stub_capture3(claude_fixture('not_logged_in'), instance_double(Process::Status,
-          success?: false, signaled?: false, exitstatus: 1))
-        _label, ok, detail = described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', index: 1)
+        stub_capture3(claude_fixture('not_logged_in'), exited1)
+        _label, ok, detail = run_claude
         expect(ok).to be(false)
         expect(detail).to eq('claude exited 1: Not logged in · Please run /login')
       end
 
       it 'keeps terminal escapes out of a failure, whether or not it exited 0' do
-        stream = "#{JSON.generate('type' => 'result', 'is_error' => true, 'result' => "bad\e[2J\rmodel")}\n"
-        stub_capture3(stream,
-          instance_double(Process::Status, success?: false, signaled?: false, exitstatus: 1))
-        _label, _ok, detail = described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', index: 1)
+        stream = jsonl_stream('type' => 'result', 'is_error' => true, 'result' => "bad\e[2J\rmodel")
+        stub_capture3(stream, exited1)
+        _label, _ok, detail = run_claude
         expect(detail).to eq('claude exited 1: bad [2J model')
 
-        stub_capture3(stream, instance_double(Process::Status, success?: true))
-        _label, _ok, detail = described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', index: 1)
+        stub_capture3(stream, succeeded)
+        _label, _ok, detail = run_claude
         expect(detail).to eq('claude exited 0 but the agent failed: bad [2J model')
       end
 
       it 'still reads warnings when the stream has an invalid byte' do
         denial = { 'tool_name' => 'Bash', 'tool_input' => { 'command' => 'echo BAD' } }
-        stream = "#{JSON.generate('type' => 'result', 'is_error' => false, 'result' => 'report',
-          'permission_denials' => [denial])}\n".sub('BAD', "\xFF").b
-        stub_capture3(stream, instance_double(Process::Status, success?: true))
-        *, warnings = described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', index: 1)
+        stream = jsonl_stream('type' => 'result', 'is_error' => false, 'result' => 'report',
+          'permission_denials' => [denial]).sub('BAD', "\xFF").b
+        stub_capture3(stream, succeeded)
+        *, warnings = run_claude
         expect(warnings).to eq(["Claude Code refused 1 tool call: Bash (echo \uFFFD)"])
       end
 
       # Returned as recorded in run.json, so no reader of it gets the escape.
       it "returns warnings with no terminal escapes from a refused call's command" do
         denial = { 'tool_name' => 'Bash', 'tool_input' => { 'command' => "echo \e[2Jx" } }
-        stream = "#{JSON.generate('type' => 'result', 'is_error' => false, 'result' => 'report',
-          'permission_denials' => [denial])}\n"
-        stub_capture3(stream, instance_double(Process::Status, success?: true))
-        *, warnings = described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', index: 1)
+        stream = jsonl_stream('type' => 'result', 'is_error' => false, 'result' => 'report',
+          'permission_denials' => [denial])
+        stub_capture3(stream, succeeded)
+        *, warnings = run_claude
         expect(warnings).to eq(['Claude Code refused 1 tool call: Bash (echo [2Jx)'])
       end
 
       # Returned, not printed: run_agent runs in a worker thread.
       it 'keeps the report of an agent with refused tool calls, returning a warning of them' do
-        stub_capture3(claude_fixture('denied'), instance_double(Process::Status, success?: true))
+        stub_capture3(claude_fixture('denied'), succeeded)
         _label, ok, filename, _usage, warnings = nil
         expect do
-          _label, ok, filename, _usage, warnings =
-            described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', index: 1)
+          _label, ok, filename, _usage, warnings = run_claude
         end.to output('').to_stdout.and output('').to_stderr
         expect(ok).to be(true)
         expect(filename).to eq('prefix_01_claude_anthropic_claude-haiku-5-5.md')
@@ -270,51 +273,45 @@ RSpec.describe AgentCouncil do
 
       # So report readers, and the consolidator, which reads the reports, see them.
       it "passes the warnings to the header, for the report's byline" do
-        stub_capture3(claude_fixture('denied'), instance_double(Process::Status, success?: true))
+        stub_capture3(claude_fixture('denied'), succeeded)
         header = ->(fields) { described_class.byline_table(fields, claude_agent) }
-        _label, ok, filename =
-          described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', header: header)
+        _label, ok, filename = run_claude(header: header)
         expect(ok).to be(true)
         expect(File.read(File.join(run_dir, filename)))
           .to include('| warnings | Claude Code refused 1 tool call: Bash (cat README.md) |')
       end
 
       it 'treats a harness returning nil for its warnings as having none' do
-        stub_capture3(claude_fixture('success'), instance_double(Process::Status, success?: true))
+        stub_capture3(claude_fixture('success'), succeeded)
         allow(AgentCouncil::Harnesses::ClaudeCodeHarness).to receive(:warnings).and_return(nil)
-        _label, ok, _filename, _usage, warnings =
-          described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', index: 1)
+        _label, ok, _filename, _usage, warnings = run_claude
         expect(ok).to be(true)
         expect(warnings).to eq([])
       end
 
       it "returns a failed agent's warnings, since they may be why it failed" do
         denial = { 'tool_name' => 'Bash', 'tool_input' => { 'command' => 'git diff' } }
-        stream = "#{JSON.generate('type' => 'result', 'is_error' => true,
-          'errors' => ['Reached maximum number of turns (3)'], 'permission_denials' => [denial] * 3)}\n"
-        stub_capture3(stream,
-          instance_double(Process::Status, success?: false, signaled?: false, exitstatus: 1))
-        _label, ok, detail, _usage, warnings =
-          described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', index: 1)
+        stream = jsonl_stream('type' => 'result', 'is_error' => true,
+          'errors' => ['Reached maximum number of turns (3)'], 'permission_denials' => [denial] * 3)
+        stub_capture3(stream, exited1)
+        _label, ok, detail, _usage, warnings = run_claude
         expect(ok).to be(false)
         expect(detail).to eq('claude exited 1: Reached maximum number of turns (3)')
         expect(warnings).to eq(['Claude Code refused 3 tool calls: Bash (git diff)'])
       end
 
       it 'returns no warnings for a failed agent with nothing refused' do
-        stub_capture3(claude_fixture('not_logged_in'), instance_double(Process::Status,
-          success?: false, signaled?: false, exitstatus: 1))
-        result = described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', index: 1)
+        stub_capture3(claude_fixture('not_logged_in'), exited1)
+        result = run_claude
         expect(result.size).to eq(5)
         expect(result.last).to eq([])
       end
 
       it 'keeps an agent whose report is saved a success when its warnings cannot be read' do
-        stub_capture3(claude_fixture('success'), instance_double(Process::Status, success?: true))
+        stub_capture3(claude_fixture('success'), succeeded)
         allow(AgentCouncil::Harnesses::ClaudeCodeHarness).to receive(:warnings)
           .and_raise(TypeError, "bad\e[2J\nx")
-        _label, ok, _filename, _usage, warnings =
-          described_class.run_agent(claude_agent, 'prompt', run_dir, 'prefix', index: 1)
+        _label, ok, _filename, _usage, warnings = run_claude
         expect(ok).to be(true)
         expect(warnings).to eq(["could not read the agent's warnings (TypeError: bad [2J x)"])
       end
@@ -366,7 +363,7 @@ RSpec.describe AgentCouncil do
       envs = []
       allow(Open3).to receive(:capture3) do |env, *_argv, **_opts|
         envs << env
-        ['', '', instance_double(Process::Status, success?: true)]
+        ['', '', succeeded]
       end
       envs
     end
@@ -389,7 +386,7 @@ RSpec.describe AgentCouncil do
     end
 
     it 'deletes the scratch dir after a successful agent' do
-      stub_capture3('', instance_double(Process::Status, success?: true))
+      stub_capture3('', succeeded)
       allow(pi_harness).to receive_messages(error_message: nil, final_response: 'answer')
 
       _label, ok, = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
@@ -400,7 +397,7 @@ RSpec.describe AgentCouncil do
     end
 
     it 'gives the header its HH:MM:SS duration and usage, keeping them out of the front matter' do
-      stub_capture3('', instance_double(Process::Status, success?: true))
+      stub_capture3('', succeeded)
       usage = { 'input' => 5, 'output' => 6 }
       allow(pi_harness).to receive_messages(error_message: nil, final_response: 'answer',
         usage: usage)
@@ -418,7 +415,7 @@ RSpec.describe AgentCouncil do
     end
 
     it 'fails rather than replace an existing report' do
-      stub_capture3('', instance_double(Process::Status, success?: true))
+      stub_capture3('', succeeded)
       allow(pi_harness).to receive_messages(error_message: nil, final_response: 'answer')
       File.write(File.join(run_dir, 'taken.md'), 'earlier')
 
@@ -430,7 +427,7 @@ RSpec.describe AgentCouncil do
     end
 
     it 'returns the harness usage' do
-      stub_capture3('', instance_double(Process::Status, success?: true))
+      stub_capture3('', succeeded)
       usage = { 'input' => 5, 'output' => 6, 'cache_read' => 0, 'cache_write' => 0 }
       allow(pi_harness).to receive_messages(error_message: nil, final_response: 'answer',
         usage: usage)
@@ -442,7 +439,7 @@ RSpec.describe AgentCouncil do
     end
 
     it 'returns the usage of a failed agent too' do
-      stub_capture3('', instance_double(Process::Status, success?: false, signaled?: false, exitstatus: 1))
+      stub_capture3('', exited1)
       allow(pi_harness).to receive(:usage).and_return({ 'input' => 5, 'output' => 6 })
 
       _label, ok, _detail, usage = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
@@ -452,9 +449,8 @@ RSpec.describe AgentCouncil do
     end
 
     it "cuts a failure's reason to 300 characters, and gives one when cleanup leaves none" do
-      status = instance_double(Process::Status, success?: false, signaled?: false, exitstatus: 1)
       detail_for = ->(stderr) {
-        allow(Open3).to receive(:capture3).and_return(['', stderr, status])
+        allow(Open3).to receive(:capture3).and_return(['', stderr, exited1])
         described_class.run_agent(agent, 'prompt', run_dir, 'prefix')[2]
       }
       expect(detail_for.call("#{'e' * 500}\n")).to eq("pi exited 1: #{'e' * 300}...")
@@ -462,9 +458,7 @@ RSpec.describe AgentCouncil do
     end
 
     it 'explains a failure whose stderr has an invalid byte' do
-      allow(Open3).to receive(:capture3)
-        .and_return(['', "boom \xFF\n".b,
-          instance_double(Process::Status, success?: false, signaled?: false, exitstatus: 1)])
+      allow(Open3).to receive(:capture3).and_return(['', "boom \xFF\n".b, exited1])
       _label, ok, detail = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
       expect(ok).to be(false)
       expect(detail).to eq("pi exited 1: boom \uFFFD")
@@ -484,7 +478,7 @@ RSpec.describe AgentCouncil do
     end
 
     it 'deletes the scratch dir after a failed agent' do
-      stub_capture3('', instance_double(Process::Status, success?: false, signaled?: false, exitstatus: 1))
+      stub_capture3('', exited1)
 
       _label, ok, detail = described_class.run_agent(agent, 'prompt', run_dir, 'prefix')
 
@@ -528,7 +522,7 @@ RSpec.describe AgentCouncil do
         locked = File.join(env.fetch('TMPDIR'), 'locked')
         FileUtils.mkdir_p(File.join(locked, 'sub'))
         File.chmod(0o500, locked)
-        ['', '', instance_double(Process::Status, success?: true)]
+        ['', '', succeeded]
       end
       allow(pi_harness).to receive_messages(error_message: nil, final_response: 'answer')
 
@@ -579,33 +573,27 @@ RSpec.describe AgentCouncil do
     it 'aborts on native Windows, pointing to WSL' do
       allow(described_class).to receive(:windows?).and_return(true)
       expect { described_class.main(['-h']) }
-        .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+        .to exit_with(1)
         .and output(/does not support native Windows; please run it inside WSL\.\n.*README\.md/).to_stderr
     end
 
     %w[-v --version].each do |flag|
       it "prints the version and exits 0 for #{flag}, without a prompt or config" do
         expect { described_class.main([flag]) }
-          .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
+          .to exit_with(0)
           .and output("agent-council #{described_class::VERSION}\n").to_stdout
       end
     end
 
     it 'prints the gem directory and exits 0 for --gem-dir, without a prompt or config' do
       expect { described_class.main(['--gem-dir']) }
-        .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
+        .to exit_with(0)
         .and output("#{described_class::PROJECT_ROOT}\n").to_stdout
-    end
-
-    it 'lists --gem-dir in the -h options' do
-      expect { described_class.main(['-h']) }
-        .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
-        .and output(/^\s+--gem-dir\s+Show the root directory of the agent-council application/).to_stdout
     end
 
     it 'prints the project URL and exits 0 for --project-url, without a prompt or config' do
       expect { described_class.main(['--project-url']) }
-        .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
+        .to exit_with(0)
         .and output("#{described_class::PROJECT_URL}\n").to_stdout
     end
 
@@ -614,40 +602,30 @@ RSpec.describe AgentCouncil do
       expect(described_class::PROJECT_URL).to eq(gemspec.homepage)
     end
 
-    it 'lists --project-url in the -h options' do
-      expect { described_class.main(['-h']) }
-        .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
-        .and output(/^\s+--project-url\s+Show the project's GitHub URL and exit$/).to_stdout
-    end
-
-    it 'lists --version in the -h options' do
-      expect { described_class.main(['-h']) }
-        .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
-        .and output(/^\s+-v, --version\s+Show the version and exit$/).to_stdout
-    end
-
-    it 'lists --consolidate in the -h options' do
-      expect { described_class.main(['-h']) }
-        .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
-        .and output(/^\s+--consolidate RUN_DIR\s+\S/).to_stdout
-    end
-
-    it 'lists --output-dir in the -h options' do
-      expect { described_class.main(['-h']) }
-        .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
-        .and output(/^\s+-o, --output-dir DIR\s+\S/).to_stdout
+    {
+      '--gem-dir'     => /^\s+--gem-dir\s+Show the root directory of the agent-council application/,
+      '--project-url' => /^\s+--project-url\s+Show the project's GitHub URL and exit$/,
+      '--version'     => /^\s+-v, --version\s+Show the version and exit$/,
+      '--consolidate' => /^\s+--consolidate RUN_DIR\s+\S/,
+      '--output-dir'  => /^\s+-o, --output-dir DIR\s+\S/,
+    }.each do |option, line|
+      it "lists #{option} in the -h options" do
+        expect { described_class.main(['-h']) }
+          .to exit_with(0)
+          .and output(line).to_stdout
+      end
     end
 
     it 'documents AGENT_COUNCIL_OPTS in the help output' do
       expect { described_class.main(['-h']) }
-        .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
+        .to exit_with(0)
         .and output(/AGENT_COUNCIL_OPTS holds arguments inserted before the command-line ones/).to_stdout
     end
 
     it 'shows the current AGENT_COUNCIL_OPTS value in the help output' do
       ENV[described_class::ENV_OPTS_VAR] = '--output-dir from-env'
       expect { described_class.main(['-h']) }
-        .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
+        .to exit_with(0)
         .and output(/Currently set to: "--output-dir from-env"/).to_stdout
     end
 
@@ -660,7 +638,7 @@ RSpec.describe AgentCouncil do
       allow(described_class).to receive(:puts_consolidation_status)
 
       expect { described_class.main(['p_prompt.md', 'config.yml']) }
-        .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
+        .to exit_with(0)
         .and output.to_stdout
 
       expect(File).to exist(File.join('from-env', Dir.children('from-env').first))
@@ -675,7 +653,7 @@ RSpec.describe AgentCouncil do
       allow(described_class).to receive(:puts_consolidation_status)
 
       expect { described_class.main(['--output-dir', 'from-cli', 'p_prompt.md', 'config.yml']) }
-        .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
+        .to exit_with(0)
         .and output.to_stdout
 
       expect(File).to exist(File.join('from-cli', Dir.children('from-cli').first))
@@ -685,7 +663,7 @@ RSpec.describe AgentCouncil do
     it 'aborts cleanly when AGENT_COUNCIL_OPTS cannot be parsed' do
       ENV[described_class::ENV_OPTS_VAR] = '--output-dir "'
       expect { described_class.main(['p_prompt.md']) }
-        .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+        .to exit_with(1)
         .and output(/Invalid AGENT_COUNCIL_OPTS value/).to_stderr
     end
 
@@ -693,7 +671,7 @@ RSpec.describe AgentCouncil do
       it "aborts #{flag} too when AGENT_COUNCIL_OPTS is bad" do
         ENV[described_class::ENV_OPTS_VAR] = '--output-dir "'
         expect { described_class.main([flag]) }
-          .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+          .to exit_with(1)
           .and output(/Invalid AGENT_COUNCIL_OPTS value/).to_stderr
       end
     end
@@ -701,7 +679,7 @@ RSpec.describe AgentCouncil do
     it 'shows a multi-line AGENT_COUNCIL_OPTS on one line in -h' do
       ENV[described_class::ENV_OPTS_VAR] = "--output-dir a\nx"
       expect { described_class.main(['-h']) }
-        .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
+        .to exit_with(0)
         .and output(/^  Currently set to: "--output-dir a\\nx"$/).to_stdout
     end
 
@@ -709,7 +687,7 @@ RSpec.describe AgentCouncil do
       allow(described_class).to receive(:consolidate_run)
       ENV[described_class::ENV_OPTS_VAR] = '--output-dir "'
       expect { described_class.main(['--consolidate', 'some-run']) }
-        .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+        .to exit_with(1)
         .and output(/Invalid AGENT_COUNCIL_OPTS value/).to_stderr
       expect(described_class).not_to have_received(:consolidate_run)
     end
@@ -717,7 +695,7 @@ RSpec.describe AgentCouncil do
     ['', ' '].each do |blank|
       it "aborts on a blank --output-dir (#{blank.inspect}) instead of writing into the cwd" do
         expect { described_class.main(['-o', blank, 'p_prompt.md']) }
-          .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+          .to exit_with(1)
           .and output(/--output-dir needs a directory; got an empty value/).to_stderr
       end
     end
@@ -729,14 +707,14 @@ RSpec.describe AgentCouncil do
       it "aborts before checking the prompt when --output-dir #{situation}" do
         File.write('afile', '')
         expect { described_class.main(['-o', dir, 'missing_prompt.md']) }
-          .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+          .to exit_with(1)
           .and output("Output dir #{dir} can't be created: afile is not a directory\n").to_stderr
       end
     end
 
     it 'aborts when --output-dir names an unknown user home' do
       expect { described_class.main(['-o', '~no-such-user-agent-council/x', 'p_prompt.md']) }
-        .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+        .to exit_with(1)
         .and output(/Invalid --output-dir ~no-such-user-agent-council\/x: /).to_stderr
     end
 
@@ -746,7 +724,7 @@ RSpec.describe AgentCouncil do
       allow(described_class).to receive(:abort_unless_harnesses_installed)
       allow(described_class).to receive(:claim_run_dir).and_raise(Errno::EACCES, 'out')
       expect { described_class.main(['-o', 'out', 'p_prompt.md', 'config.yml']) }
-        .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+        .to exit_with(1)
         .and output("Cannot create a run dir under out: Permission denied - out\n").to_stderr
     end
 
@@ -754,7 +732,7 @@ RSpec.describe AgentCouncil do
       File.write('p_prompt.md', 'hi')
       samples = File.join(described_class::EXAMPLES_DIR, 'configs')
       expect { described_class.main(['p_prompt.md']) }
-        .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+        .to exit_with(1)
         .and output(a_string_starting_with(
           "No config file given, and neither ./agent-council.yml nor ~/.agent-council.yml exists.\n"
         ).and(including("Sample configs: #{samples}\n",
@@ -925,7 +903,7 @@ RSpec.describe AgentCouncil do
 
     def expect_abort(message)
       expect { described_class.main(['--consolidate', run_dir]) }
-        .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+        .to exit_with(1)
         .and output(message).to_stderr
     end
 
@@ -1094,7 +1072,7 @@ RSpec.describe AgentCouncil do
     it 'prints usage and exits 1 when given positional arguments too' do
       write_run
       expect { described_class.main(['--consolidate', run_dir, 'prompt.md']) }
-        .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+        .to exit_with(1)
         .and output(/Usage:/).to_stderr
     end
 
@@ -1109,7 +1087,7 @@ RSpec.describe AgentCouncil do
       it "aborts when given #{output_dir_args.join(' ')} too, since it writes into the run dir" do
         write_run
         expect { described_class.main(['--consolidate', run_dir, *output_dir_args]) }
-          .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+          .to exit_with(1)
           .and output(/--output-dir .*cannot be used with --consolidate/).to_stderr
         expect(File).not_to exist('elsewhere')
       end
@@ -1119,7 +1097,7 @@ RSpec.describe AgentCouncil do
       allow(described_class).to receive(:consolidate_run) { raise SystemExit, 0 }
 
       expect { described_class.main(['--consolidate', '-oldrun']) }
-        .to raise_error(SystemExit) { |e| expect(e.status).to eq(0) }
+        .to exit_with(0)
 
       expect(described_class).to have_received(:consolidate_run).with('-oldrun')
     end
@@ -1128,7 +1106,7 @@ RSpec.describe AgentCouncil do
       write_run
       ENV[described_class::ENV_OPTS_VAR] = '--output-dir from-env'
       expect { described_class.main(['--consolidate', run_dir]) }
-        .to raise_error(SystemExit) { |e| expect(e.status).to eq(1) }
+        .to exit_with(1)
         .and output(/--output-dir \(given directly or in AGENT_COUNCIL_OPTS\) cannot be used/).to_stderr
       expect(File).not_to exist('from-env')
     end
