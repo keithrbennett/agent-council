@@ -74,11 +74,16 @@ RSpec.describe 'agent-council end to end' do
     { type: 'message_end', message: { role: 'assistant', content: content, usage: usage } }
   end
 
+  # Writes bin_dir/name, executable: a fake harness, as a bash script.
+  def write_executable(name, script)
+    path = File.join(bin_dir, name)
+    File.write(path, "#!/usr/bin/env bash\n#{script}")
+    File.chmod(0o755, path)
+  end
+
   def write_fake_pi
     dying_writes = 'sleep 0.1; mkdir -p "$TMPDIR/c/d"; echo >"$TMPDIR/c/d/f"'
-    fake_pi = File.join(bin_dir, 'pi')
-    File.write(fake_pi, <<~SH)
-      #!/usr/bin/env bash
+    write_executable('pi', <<~SH)
       case " $* " in
         *" --provider capture "*) cat >"#{captured_path}"; echo '#{JSON.generate(report_event('Answer.'))}'; exit 0 ;;
       esac
@@ -98,7 +103,6 @@ RSpec.describe 'agent-council end to end' do
       # agent-council's pipes open.
       while :; do sleep 0.1; done
     SH
-    File.chmod(0o755, fake_pi)
   end
 
   def write_config(providers, consolidator: nil)
@@ -463,9 +467,7 @@ RSpec.describe 'agent-council end to end' do
         usage: { input_tokens: 1000, output_tokens: 200, cache_read_input_tokens: 200,
                  cache_creation_input_tokens: 0 })
     end
-    fake_claude = File.join(bin_dir, 'claude')
-    File.write(fake_claude, <<~SH)
-      #!/usr/bin/env bash
+    write_executable('claude', <<~SH)
       case " $* " in
         *" --model denied "*) cat >/dev/null; echo '#{result.call('Claude answer.', [denial])}'; exit 0 ;;
         *" --model split "*)
@@ -475,7 +477,6 @@ RSpec.describe 'agent-council end to end' do
       cat >/dev/null
       exit 1
     SH
-    File.chmod(0o755, fake_claude)
   end
 
   it 'runs a config mixing harnesses, each entry under its own' do
@@ -548,9 +549,7 @@ RSpec.describe 'agent-council end to end' do
         { type: 'item.completed', item: { id: 'item_1', type: 'agent_message', text: text } }]
         .map { |event| JSON.generate(event) }.push(turn).join("\n")
     end
-    fake_codex = File.join(bin_dir, 'codex')
-    File.write(fake_codex, <<~SH)
-      #!/usr/bin/env bash
+    write_executable('codex', <<~SH)
       model=; prev=
       for arg in "$@"; do [ "$prev" = --model ] && model=$arg; prev=$arg; done
       printf '%s\\n' "$@" >"#{bin_dir}/codex_argv_$model"
@@ -560,7 +559,6 @@ RSpec.describe 'agent-council end to end' do
         *) echo '#{stream.call('Codex answer.')}' ;;
       esac
     SH
-    File.chmod(0o755, fake_codex)
   end
 
   it 'runs codex agents, the consolidator included' do
@@ -602,9 +600,7 @@ RSpec.describe 'agent-council end to end' do
                                                   cache: { read: 200, write: 0 } } } }]
         .map { |event| JSON.generate(event) }.join("\n")
     end
-    fake_opencode = File.join(bin_dir, 'opencode')
-    File.write(fake_opencode, <<~SH)
-      #!/usr/bin/env bash
+    write_executable('opencode', <<~SH)
       model=; prev=
       for arg in "$@"; do [ "$prev" = --model ] && model=${arg#*/}; prev=$arg; done
       printf '%s\\n' "$@" >"#{bin_dir}/opencode_argv_$model"
@@ -616,7 +612,6 @@ RSpec.describe 'agent-council end to end' do
         *) echo '#{stream.call('OpenCode answer.')}' ;;
       esac
     SH
-    File.chmod(0o755, fake_opencode)
   end
 
   it 'runs opencode agents, the consolidator included' do

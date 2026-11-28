@@ -52,10 +52,13 @@ RSpec.describe AgentCouncil::Ps do
     described_class.report(processes, cwd: ->(_pid) { '/proj' }, **options)
   end
 
-  # Whether an Entry with these ps args and, as on Linux, /proc argv (or
-  # none, as on macOS) is a run, in dir.
+  # An Entry, pid 1, with these ps args and, as on Linux, /proc argv (or
+  # none, as on macOS).
+  def entry(args, argv = nil) = described_class::Entry.new(1, 0, 1, 0, 0, 0, args, argv)
+
+  # Whether an entry with these args and argv is a run, in dir.
   def council?(args, argv = nil, cwd: ->(_pid) { dir })
-    described_class.agent_council?(described_class::Entry.new(1, 0, 1, 0, 0, 0, args, argv), cwd: cwd)
+    described_class.agent_council?(entry(args, argv), cwd: cwd)
   end
 
   it 'parses ps durations, with days and macOS fractions' do
@@ -78,19 +81,18 @@ RSpec.describe AgentCouncil::Ps do
   end
 
   it "skips Ruby options' arguments to find the script" do
-    council = ->(args) { described_class.agent_council?(described_class::Entry.new(1, 0, 1, 0, 0, 0, args)) }
-    expect(['ruby -I lib exe/agent-council p.md', 'ruby -E UTF-8 -Ilib /g/agent-council',
+    run_args = ['ruby -I lib exe/agent-council p.md', 'ruby -E UTF-8 -Ilib /g/agent-council',
       'ruby -- agent-council', 'java -cp : org.jruby.Main -I lib /g/bin/agent-council',
       'ruby --backtrace-limit 20 ./agent-council p.md',
       'ruby --disable gems --parser prism exe/agent-council',
       'ruby3.4 --enable frozen-string-literal exe/agent-council',
       'java org.jruby.main.Main --disable gems exe/agent-council',
-      'ruby -- -x/agent-council'].map(&council)) # after --, even a word starting with - is the script
-      .to all(be(true))
-    expect(['ruby -r agent-council -e sleep', 'ruby -e agent-council', 'ruby -I agent-council x.rb',
+      'ruby -- -x/agent-council'] # after --, even a word starting with - is the script
+    other_args = ['ruby -r agent-council -e sleep', 'ruby -e agent-council', 'ruby -I agent-council x.rb',
       'ruby', 'ruby --crash-report /tmp/agent-council other.rb', 'ruby /x/my-agent-council',
-      'ruby-lsp /x/agent-council', 'java org.jruby.ext.Tool /g/bin/agent-council'].map(&council))
-      .to all(be(false))
+      'ruby-lsp /x/agent-council', 'java org.jruby.ext.Tool /g/bin/agent-council']
+    expect(run_args.map { |args| council?(args) }).to all(be(true))
+    expect(other_args.map { |args| council?(args) }).to all(be(false))
   end
 
   it 'finds a run under bundle exec: retitled, under MRI, or run by bundle, under JRuby' do
@@ -180,8 +182,7 @@ RSpec.describe AgentCouncil::Ps do
 
   it "finds JRuby runs by either of JRuby's main classes" do
     %w[org.jruby.Main org.jruby.main.Main].each do |main|
-      entry = described_class::Entry.new(1, 0, 1, 0, 0, 0, "java -Xss2048k #{main} /g/bin/agent-council p.md")
-      expect(described_class.agent_council?(entry)).to be(true)
+      expect(council?("java -Xss2048k #{main} /g/bin/agent-council p.md")).to be(true)
     end
   end
 
@@ -216,10 +217,10 @@ RSpec.describe AgentCouncil::Ps do
   end
 
   it 'uses the exact arguments, where /proc gives them, so a path with a space is found' do
-    entry = described_class::Entry.new(1, 0, 1, 0, 0, 0, 'ruby /my gems/bin/agent-council p.md')
-    expect(described_class.agent_council?(entry)).to be(false)
-    entry.argv = ['ruby', '/my gems/bin/agent-council', 'p.md']
-    expect(described_class.agent_council?(entry)).to be(true)
+    process = entry('ruby /my gems/bin/agent-council p.md')
+    expect(described_class.agent_council?(process)).to be(false)
+    process.argv = ['ruby', '/my gems/bin/agent-council', 'p.md']
+    expect(described_class.agent_council?(process)).to be(true)
   end
 
   it 'reads exact arguments from /proc/PID/cmdline' do
@@ -261,20 +262,18 @@ RSpec.describe AgentCouncil::Ps do
   end
 
   it "reads a model with a \"/\" whole for a harness whose --model isn't provider/model" do
-    claude = described_class::Entry.new(1, 0, 1, 0, 0, 0, 'claude -p --model anthropic/claude-x')
-    expect(described_class.model_label(claude)).to eq('anthropic/claude-x')
+    expect(described_class.model_label(entry('claude -p --model anthropic/claude-x')))
+      .to eq('anthropic/claude-x')
   end
 
   it 'reads --provider and --model from a command line that names no harness' do
-    agent = described_class::Entry.new(1, 0, 1, 0, 0, 0, 'node cli.js -p --model m')
-    expect(described_class.model_label(agent)).to eq('m')
+    expect(described_class.model_label(entry('node cli.js -p --model m'))).to eq('m')
   end
 
   # Its exact arguments, where /proc gives them, keep a word with a space whole.
   it "reads an agent's model from its exact arguments where it has them" do
     argv = ['claude', '-p', '--model', 'my model']
-    agent = described_class::Entry.new(1, 0, 1, 0, 0, 0, argv.join(' '), argv)
-    expect(described_class.model_label(agent)).to eq('my model')
+    expect(described_class.model_label(entry(argv.join(' '), argv))).to eq('my model')
   end
 
   it "names an agent by its command when it isn't a harness's" do
