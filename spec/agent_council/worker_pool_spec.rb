@@ -175,7 +175,9 @@ RSpec.describe AgentCouncil::WorkerPool do
 
       it 'kills them once the grace period expires' do
         wait_for(start_child("trap '' TERM"))
-        expect(timed_shutdown).to be_between(grace, grace + 2)
+        # JRuby's Thread#join truncates its timeout to whole milliseconds,
+        # so the wait can end up to 1ms short of the grace period.
+        expect(timed_shutdown).to be_between(grace - 0.01, grace + 2)
         expect(termsigs).to eq([Signal.list['KILL']])
       end
     end
